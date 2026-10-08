@@ -11,6 +11,9 @@ public static class AccessRight
     public const int MembershipAdjustment = 2;
     public const int MembershipEnquiry = 3;
 
+    /// <summary>Maintenance > Plan uses the same position as Registration in the desktop menu.</summary>
+    public const int PlanMaintenance = 1;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

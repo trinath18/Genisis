@@ -221,7 +221,7 @@ public class RegistrationService(DbConnections db)
             };
 
             if (Flag(p.PRMInd) == "Y" && await PremiumFor(person.AgeCode) is { } row
-                && Charged(Flag(row.SuppPrmStatus, "A"), coverId, null))
+                && PremiumCharged(Flag(row.SuppPrmStatus, "A"), coverId))
             {
                 person.BasicPremium = LegacyRules.Money((genderRates && c.Sex == "F" ? row.PRMAmountFemale : row.SuppPrmAmt) ?? 0);
                 person.Premium = LegacyRules.Money(LegacyRules.ProRate(eff, exp, person.BasicPremium));
@@ -240,6 +240,9 @@ public class RegistrationService(DbConnections db)
     }
 
     /// <summary>Legacy supplementary status: A = principal only, B = first covered person only, C = everyone, D = from CovIDChrg onwards.</summary>
+    /// <summary>Supplementary premium is only charged for status C, or B on the first covered person (no D rule, unlike MCO).</summary>
+    internal static bool PremiumCharged(string status, string coverId) => status == "C" || (status == "B" && coverId == "01");
+
     internal static bool Charged(string status, string coverId, string? chargeFrom) => status switch
     {
         "A" => false,

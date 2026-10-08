@@ -47,7 +47,7 @@ public static class RegistrationValidator
             if (c.DateOfBirth is null) return row + "please enter a valid Birthdate.";
             if (c.DateOfBirth.Value.Date > DateTime.Today) return row + "Birthdate cannot be in the future.";
             if (c.Sex is not (null or "" or "M" or "F")) return row + "Sex must be M or F.";
-            if ((TooLong(c.Name, 60, "Name") ?? TooLong(c.IcBcPp, 30, "IC/BC/PP")) is { } covTooLong) return row + covTooLong;
+            if ((TooLong(c.Name, 60, "Name") ?? TooLong(c.Relationship, 2, "Relationship") ?? TooLong(c.IcBcPp, 30, "IC/BC/PP")) is { } covTooLong) return row + covTooLong;
             if (c.EffectiveDate is { } eff && (eff < r.PayorEffectiveDate || eff > r.PayorExpiryDate))
                 return row + "Effective Date must be within the payor period.";
             if (c.ExpiryDate is { } exp && (exp < (c.EffectiveDate ?? r.PayorEffectiveDate) || exp > r.PayorExpiryDate))

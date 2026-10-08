@@ -416,6 +416,12 @@ public class RegistrationService(DbConnections db)
                     today, eff = person.Effective, exp = person.Expiry,
                 }, tx);
 
+            // Upload_MBMCovPersonsNew takes a char(1) relationship, which would store SP (spouse) as S (son).
+            if (cr.Relationship!.Length > 1)
+                await conn.ExecuteAsync(
+                    "UPDATE dbo.MBMCoveredPersons SET MBMCRELCode = @rel WHERE MBMCNumber = @number AND MBMCCoverID = @coverId",
+                    new { rel = cr.Relationship, number, coverId = person.CoverId }, tx);
+
             await conn.ExecuteAsync(
                 """
                 EXEC dbo.Upload_MBMCovPersonsTwo @number, @coverId, @salutation, @occupation, '', '', @allergic, '', '', '', '', '',

@@ -147,6 +147,7 @@ public class MembershipController(DbConnections db) : ControllerBase
         await using var conn = db.MainDb();
         var ic = await GetIc(conn, mbmNumber);
         if (ic is null) return NotFound(new { message = "Membership not found." });
+        var maintenanceDb = await db.MaintenanceDbNameAsync();
 
         var principal = await conn.QueryAsync(
             $"""
@@ -155,7 +156,7 @@ public class MembershipController(DbConnections db) : ControllerBase
                    CASE WHEN m.MBMStatus = 'C' AND m.MBMPayorEffDate > CAST(GETDATE() AS date) AND t.MBMCancelDate IS NULL
                         THEN 'A' ELSE m.MBMStatus END AS MBMStatus,
                    x.MBMBordxDate, p.ProductName
-            FROM {db.MaintenanceDbName}.dbo.MBMCrossReference x
+            FROM {maintenanceDb}.dbo.MBMCrossReference x
             INNER JOIN dbo.MBM m ON x.MBMNumber = m.MBMNumber
             INNER JOIN dbo.MBMTwo t ON x.MBMNumber = t.MBMNumber
             LEFT JOIN dbo.PLN p ON p.PLNCode = x.PLNCode
@@ -173,7 +174,7 @@ public class MembershipController(DbConnections db) : ControllerBase
                    CASE WHEN c.MBMCStatus = 'C' AND c.MBMCEffDate > CAST(GETDATE() AS date) AND c.MBMCCancelDate IS NULL
                         THEN 'A' ELSE c.MBMCStatus END AS MBMStatus
             FROM dbo.MBMCoveredPersons c
-            INNER JOIN {db.MaintenanceDbName}.dbo.MBMCrossReference x ON x.MBMNumber = c.MBMCNumber
+            INNER JOIN {maintenanceDb}.dbo.MBMCrossReference x ON x.MBMNumber = c.MBMCNumber
             WHERE REPLACE(c.MBMCICBCPPNo, '-', '') = REPLACE(@ic, '-', '')
             ORDER BY MBMPayorEffDate DESC
             """,

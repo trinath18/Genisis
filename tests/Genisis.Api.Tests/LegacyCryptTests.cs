@@ -36,3 +36,12 @@ public class AccessRightTests
     public void Has_reads_position(string? access, int position, bool expected) =>
         Assert.Equal(expected, AccessRight.Has(access, position));
 }
+
+public class DbConnectionsTests
+{
+    [Theory]
+    [InlineData("MaintDb", "[MaintDb]")]
+    [InlineData("odd]name", "[odd]]name]")]
+    public void QuoteName_brackets_and_escapes(string name, string expected) =>
+        Assert.Equal(expected, Genisis.Api.Data.DbConnections.QuoteName(name));
+}

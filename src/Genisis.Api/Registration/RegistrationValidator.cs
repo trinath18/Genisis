@@ -22,7 +22,7 @@ public static class RegistrationValidator
         if (Blank(r.PostCode)) return "Please enter Post Code.";
         if (Blank(r.State)) return "Please enter State.";
         if (r.DateOfBirth is null) return "Please enter a valid Birthdate.";
-        if (r.DateOfBirth > DateTime.Today) return "Birthdate cannot be in the future.";
+        if (r.DateOfBirth?.Date > DateTime.Today) return "Birthdate cannot be in the future.";
         if (Blank(r.PlanCode)) return "Please enter Plan Code.";
         if (Blank(r.PolicyNo)) return "Please enter Policy No.";
         if (r.PayorEffectiveDate is null) return "Please enter Payor Effective Date.";
@@ -45,7 +45,7 @@ public static class RegistrationValidator
             if (Blank(c.Name)) return row + "please enter Name.";
             if (Blank(c.Relationship)) return row + "please enter Relationship.";
             if (c.DateOfBirth is null) return row + "please enter a valid Birthdate.";
-            if (c.DateOfBirth > DateTime.Today) return row + "Birthdate cannot be in the future.";
+            if (c.DateOfBirth.Value.Date > DateTime.Today) return row + "Birthdate cannot be in the future.";
             if (c.Sex is not (null or "" or "M" or "F")) return row + "Sex must be M or F.";
             if ((TooLong(c.Name, 60, "Name") ?? TooLong(c.IcBcPp, 30, "IC/BC/PP")) is { } covTooLong) return row + covTooLong;
             if (c.EffectiveDate is { } eff && (eff < r.PayorEffectiveDate || eff > r.PayorExpiryDate))

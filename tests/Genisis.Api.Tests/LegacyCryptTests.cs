@@ -6,7 +6,7 @@ public class LegacyCryptTests
 {
     [Theory]
     [InlineData("abc", "bfl")]
-    [InlineData("medix", "nimy\u2018")]
+    [InlineData("genis", "hiwy\u0152")]
     public void Encrypt_matches_vb6_crypt(string plain, string expected) =>
         Assert.Equal(expected, LegacyCrypt.Encrypt(plain));
 
@@ -19,11 +19,11 @@ public class LegacyCryptTests
 
     [Fact]
     public void Matches_is_case_insensitive_and_ignores_padding() =>
-        Assert.True(LegacyCrypt.Matches("medix", "NIMY\u2018   "));
+        Assert.True(LegacyCrypt.Matches("genis", "HIWY\u0152   "));
 
     [Fact]
     public void Matches_rejects_wrong_password() =>
-        Assert.False(LegacyCrypt.Matches("medix1", "NIMY\u2018"));
+        Assert.False(LegacyCrypt.Matches("genis1", "HIWY\u0152"));
 }
 
 public class AccessRightTests

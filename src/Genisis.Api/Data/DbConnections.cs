@@ -4,10 +4,16 @@ namespace Genisis.Api.Data;
 
 public class DbConnections(IConfiguration configuration)
 {
-    public SqlConnection Hisdb() => Open("HISDB");
-    public SqlConnection HisMaintenance() => Open("HISMaintenance");
+    public SqlConnection MainDb() => Open("MainDb");
+    public SqlConnection Maintenance() => Open("Maintenance");
 
-    private SqlConnection Open(string name) =>
-        new(configuration.GetConnectionString(name)
-            ?? throw new InvalidOperationException($"Connection string '{name}' is not configured."));
+    /// <summary>Quoted database name of the Maintenance connection, for cross-database joins from MainDb.</summary>
+    public string MaintenanceDbName =>
+        "[" + new SqlConnectionStringBuilder(ConnectionString("Maintenance")).InitialCatalog.Replace("]", "]]") + "]";
+
+    private SqlConnection Open(string name) => new(ConnectionString(name));
+
+    private string ConnectionString(string name) =>
+        configuration.GetConnectionString(name)
+            ?? throw new InvalidOperationException($"Connection string '{name}' is not configured.");
 }

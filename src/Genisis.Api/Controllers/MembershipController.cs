@@ -42,7 +42,7 @@ public class MembershipController(DbConnections db) : ControllerBase
         };
         if (where is null) return BadRequest(new { message = "by must be one of: number, name, ic, policy." });
 
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var rows = await conn.QueryAsync(
             $"{SearchSelect} WHERE {where} ORDER BY m.MBMNumber",
             new { max = MaxSearchRows, q, prefix = EscapeLike(q) + "%" });
@@ -53,7 +53,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     public async Task<IActionResult> Get(string mbmNumber)
     {
         mbmNumber = mbmNumber.Trim();
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var rows = ToDictionaries(await conn.QueryAsync(
             "SearchMBMCovPersonsProc", new { MBMNumber = mbmNumber }, commandType: CommandType.StoredProcedure));
         if (rows.Count == 0) return NotFound(new { message = "Membership not found." });
@@ -109,7 +109,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/adjustments")]
     public async Task<IActionResult> Adjustments(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var rows = await conn.QueryAsync(
             """
             SELECT MBMAmendID, MBMNumber, MBMCoverID, MBMAmendEdtType, MBMAmendDate, MBMAENDtEffDate,
@@ -124,7 +124,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/cases")]
     public async Task<IActionResult> Cases(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var rows = await conn.QueryAsync(
             "SearchCas", new { MBMNumber = mbmNumber.Trim() }, commandType: CommandType.StoredProcedure);
         return Ok(ToDictionaries(rows));
@@ -133,7 +133,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/case-history")]
     public async Task<IActionResult> CaseHistory(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var ic = await GetIc(conn, mbmNumber);
         if (ic is null) return NotFound(new { message = "Membership not found." });
         var rows = await conn.QueryAsync(
@@ -144,18 +144,18 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/member-history")]
     public async Task<IActionResult> MemberHistory(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var ic = await GetIc(conn, mbmNumber);
         if (ic is null) return NotFound(new { message = "Membership not found." });
 
         var principal = await conn.QueryAsync(
-            """
+            $"""
             SELECT DISTINCT TOP (200) x.MBMNumber, x.MBMPolicyNo, x.MBMIcBcPp, x.MBMName, x.MBMPayorEffDate, x.MBMPayorExpDate,
                    x.INSCode, x.PLNCode, x.PAYCode, x.MBMCOVID, x.MBMDOB, m.MBMDataStatus,
                    CASE WHEN m.MBMStatus = 'C' AND m.MBMPayorEffDate > CAST(GETDATE() AS date) AND t.MBMCancelDate IS NULL
                         THEN 'A' ELSE m.MBMStatus END AS MBMStatus,
                    x.MBMBordxDate, p.ProductName
-            FROM HISMaintenance.dbo.MBMCrossReference x
+            FROM {db.MaintenanceDbName}.dbo.MBMCrossReference x
             INNER JOIN dbo.MBM m ON x.MBMNumber = m.MBMNumber
             INNER JOIN dbo.MBMTwo t ON x.MBMNumber = t.MBMNumber
             LEFT JOIN dbo.PLN p ON p.PLNCode = x.PLNCode
@@ -165,7 +165,7 @@ public class MembershipController(DbConnections db) : ControllerBase
             new { ic });
 
         var supplementary = await conn.QueryAsync(
-            """
+            $"""
             SELECT DISTINCT TOP (100) c.MBMCName, c.MBMCICBCPPNo, c.MBMCCoverID AS MBMCOVID, c.MBMCDOB AS MBMDOB,
                    COALESCE(c.MBMCEffDate, x.MBMPayorEffDate) AS MBMPayorEffDate,
                    COALESCE(c.MBMCExpDate, x.MBMPayorExpDate) AS MBMPayorExpDate,
@@ -173,7 +173,7 @@ public class MembershipController(DbConnections db) : ControllerBase
                    CASE WHEN c.MBMCStatus = 'C' AND c.MBMCEffDate > CAST(GETDATE() AS date) AND c.MBMCCancelDate IS NULL
                         THEN 'A' ELSE c.MBMCStatus END AS MBMStatus
             FROM dbo.MBMCoveredPersons c
-            INNER JOIN HISMaintenance.dbo.MBMCrossReference x ON x.MBMNumber = c.MBMCNumber
+            INNER JOIN {db.MaintenanceDbName}.dbo.MBMCrossReference x ON x.MBMNumber = c.MBMCNumber
             WHERE REPLACE(c.MBMCICBCPPNo, '-', '') = REPLACE(@ic, '-', '')
             ORDER BY MBMPayorEffDate DESC
             """,
@@ -185,7 +185,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/account")]
     public async Task<IActionResult> Account(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var rows = await conn.QueryAsync(
             "SELECT * FROM VIEW_MBMTotal_Summary WHERE MBMNumber = @mbmNumber ORDER BY MBMPatientCovID",
             new { mbmNumber = mbmNumber.Trim() });
@@ -195,7 +195,7 @@ public class MembershipController(DbConnections db) : ControllerBase
     [HttpGet("{mbmNumber}/notes")]
     public async Task<IActionResult> Notes(string mbmNumber)
     {
-        await using var conn = db.Hisdb();
+        await using var conn = db.MainDb();
         var ic = await GetIc(conn, mbmNumber);
         if (ic is null) return NotFound(new { message = "Membership not found." });
         var exclusions = await conn.QueryAsync(

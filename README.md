@@ -1,12 +1,12 @@
 # Genisis API
 
-ASP.NET Core 8 Web API replacing the MedixHIS VB6 desktop app, module by module. It reads and writes the existing
-MedixHIS SQL Server databases (`HISDB`, `HISMaintenance`) unchanged, so the old desktop app can keep running alongside it.
+ASP.NET Core 8 Web API replacing the legacy VB6 desktop app, module by module. It reads and writes the existing
+SQL Server databases unchanged (configured as `MainDb` and `Maintenance`), so the old desktop app can keep running alongside it.
 The React front end lives in [GenisisUI](https://github.com/trinath18/GenisisUI).
 
 ## Run locally
 
-Prerequisites: .NET 8 SDK and a SQL Server with the MedixHIS databases restored.
+Prerequisites: .NET 8 SDK and a SQL Server with the main and maintenance databases restored.
 
 ```
 cd src/Genisis.Api
@@ -15,14 +15,14 @@ dotnet run --launch-profile http
 
 Swagger opens at http://localhost:5000/swagger. Connection strings default to `localhost` with Windows authentication
 (`appsettings.json`). To override without editing the file, set environment variables, e.g.
-`ConnectionStrings__HISDB` and `ConnectionStrings__HISMaintenance`.
+`ConnectionStrings__MainDb` and `ConnectionStrings__Maintenance`.
 
 Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when empty a random key is generated at startup.
 
 ## Login
 
-`POST /api/auth/login` checks `HISMaintenance.dbo.USR` (active users only) with the same `Crypt` algorithm as
-`frmLogin.frm`, so existing MedixHIS passwords work. Menu rights come from `USR.USRAccess` exactly like the VB6
+`POST /api/auth/login` checks `USR` in the Maintenance database (active users only) with the same `Crypt` algorithm as
+`frmLogin.frm`, so existing desktop passwords work. Menu rights come from `USR.USRAccess` exactly like the VB6
 `CheckAccess` function (position 1 = Membership Registration, 2 = Adjustment, 3 = Enquiry).
 
 ## Membership Enquiry (read-only)

@@ -45,7 +45,7 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
         if (usr is null || !LegacyCrypt.Matches(request.Password ?? "", usr.USRPassword))
             return Unauthorized(new { message = "Invalid User Name or Password" });
 
-        await using var conn = db.HisMaintenance();
+        await using var conn = db.Maintenance();
         await conn.ExecuteAsync(
             "UPDATE USR SET USRPassword = @pwd, USRLogonCHGStatus = '0' WHERE USRCode = @code",
             new { pwd = LegacyCrypt.Encrypt(request.NewPassword).ToUpperInvariant(), code = usr.USRCode });
@@ -64,7 +64,7 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
 
     private async Task<UsrRow?> FindActiveUser(string userCode)
     {
-        await using var conn = db.HisMaintenance();
+        await using var conn = db.Maintenance();
         return await conn.QuerySingleOrDefaultAsync<UsrRow>(
             "SELECT USRCode, USRName, USRPassword, USRAccess, USRLogonCHGStatus FROM USR WHERE USRCode = @code AND USRStatus = 'A'",
             new { code = userCode.Trim() });

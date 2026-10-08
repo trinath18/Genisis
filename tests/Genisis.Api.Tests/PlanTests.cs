@@ -50,6 +50,9 @@ public class PlanValidatorTests
     }
 
     [Fact]
+    public void Like_wildcards_are_literal() => Assert.Equal("A[_]0[%]1[[]", SqlText.EscapeLike("A_0%1["));
+
+    [Fact]
     public void Client_plans_follow_payor()
     {
         Assert.Equal(12, PlanValidator.ClientPlans("AX").Count);
@@ -82,6 +85,7 @@ public class PlanDatabaseTests
             var r = PlanValidatorTests.Valid();
             r.PayorCode = "ET";
             r.ClientPlan = "PLAN2";
+            r.GroupCompany = "  genisis test co";
             var created = await PlanService.SaveAsync(conn, tx, maintenanceDb, r, "TEST");
             var n = int.Parse(before!);
             Assert.Equal([$"G{n + 1:000}", $"G{n + 2:000}"], created.Select(c => c.Code));

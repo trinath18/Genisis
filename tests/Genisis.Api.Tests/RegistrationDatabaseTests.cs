@@ -32,7 +32,7 @@ public class RegistrationDatabaseTests
         r.InsuredType = "H";
         r.Name = "GENISIS TEST " + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
         r.Email = "test@example.com";
-        r.CoveredPersons.Add(new CoveredPersonRequest { Relationship = "S", Name = "TEST SPOUSE", DateOfBirth = new DateTime(1982, 5, 5), Sex = "F" });
+        r.CoveredPersons.Add(new CoveredPersonRequest { Relationship = "SP", Name = "TEST SPOUSE", DateOfBirth = new DateTime(1982, 5, 5), Sex = "F" });
         r.CoveredPersons.Add(new CoveredPersonRequest { Relationship = "C", Name = "TEST CHILD", DateOfBirth = new DateTime(2015, 3, 3), Sex = "M" });
         return r;
     }
@@ -81,6 +81,7 @@ public class RegistrationDatabaseTests
             Assert.Equal(1, await Count($"SELECT COUNT(*) FROM {maintenanceDb}.dbo.MBMCrossReference WHERE MBMNumber = @n"));
             Assert.Equal(2, await Count("SELECT COUNT(*) FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @n"));
             Assert.Equal(2, await Count("SELECT COUNT(*) FROM dbo.MBMCoveredPersonsTwo WHERE MBMCNumber = @n"));
+            Assert.Equal(1, await Count("SELECT COUNT(*) FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @n AND MBMCCoverID = '01' AND MBMCRELCode = 'SP'"));
             Assert.Equal(1, await Count("SELECT COUNT(*) FROM dbo.MBMSCSecurity WHERE MBMNumber = @b"));
             Assert.Equal(1, await Count("SELECT COUNT(*) FROM dbo.BAT WHERE PAYCode = 'WG' AND BATBordxDate = '2021-08-06' AND BordxType = 'N'"));
             Assert.Equal(2, result.Quote.CoveredPersons.Count);

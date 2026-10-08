@@ -118,6 +118,7 @@ public class RegistrationValidatorTests
         { r => { r.InsuredType = "I"; r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", Relationship = "C", DateOfBirth = DateTime.Today.AddYears(-5) }); }, "family" },
         { r => r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", DateOfBirth = DateTime.Today.AddYears(-5) }), "Relationship" },
         { r => r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", Relationship = "C", DateOfBirth = DateTime.Today.AddDays(1) }), "future" },
+        { r => r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", Relationship = "SPX", DateOfBirth = DateTime.Today.AddYears(-5) }), "Relationship" },
     };
 
     [Theory]

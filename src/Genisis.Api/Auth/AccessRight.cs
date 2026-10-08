@@ -21,6 +21,8 @@ public static class AccessRight
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequireAccessAttribute(int position) : Attribute, IAuthorizationFilter
 {
+    public int Position => position;
+
     public void OnAuthorization(AuthorizationFilterContext context)
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true) return;

@@ -117,6 +117,7 @@ public class RegistrationValidatorTests
         { r => r.InsuredType = "", "Insured Code" },
         { r => { r.InsuredType = "I"; r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", Relationship = "C", DateOfBirth = DateTime.Today.AddYears(-5) }); }, "family" },
         { r => r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", DateOfBirth = DateTime.Today.AddYears(-5) }), "Relationship" },
+        { r => r.CoveredPersons.Add(new CoveredPersonRequest { Name = "A", Relationship = "C", DateOfBirth = DateTime.Today.AddDays(1) }), "future" },
     };
 
     [Theory]
@@ -179,4 +180,13 @@ public class RegistrationAccessTests
     [InlineData("D", "02", "02", true)]
     public void Supplementary_status_controls_covered_person_charges(string status, string coverId, string? from, bool expected) =>
         Assert.Equal(expected, RegistrationService.Charged(status, coverId, from));
+
+    [Theory]
+    [InlineData("A", "01", false)]
+    [InlineData("B", "01", true)]
+    [InlineData("B", "02", false)]
+    [InlineData("C", "03", true)]
+    [InlineData("D", "02", false)]
+    public void Supplementary_premium_ignores_the_D_rule(string status, string coverId, bool expected) =>
+        Assert.Equal(expected, RegistrationService.PremiumCharged(status, coverId));
 }

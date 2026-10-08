@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Genisis.Api.Auth;
 
-/// <summary>Menu access positions in USR.USRAccess (VB6 Medix.bas CheckAccess).</summary>
+/// <summary>Menu access positions in USR.USRAccess (legacy VB6 CheckAccess).</summary>
 public static class AccessRight
 {
     public const int MembershipRegistration = 1;

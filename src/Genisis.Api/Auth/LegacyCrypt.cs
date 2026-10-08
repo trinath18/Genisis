@@ -4,7 +4,7 @@ namespace Genisis.Api.Auth;
 
 /// <summary>
 /// Port of the VB6 frmLogin.Crypt function: each character code (Windows-1252) is shifted by position^2
-/// and wrapped at 255. Stored values in HISMaintenance.USR.USRPassword are the uppercased result.
+/// and wrapped at 255. Stored values in USR.USRPassword are the uppercased result.
 /// </summary>
 public static class LegacyCrypt
 {

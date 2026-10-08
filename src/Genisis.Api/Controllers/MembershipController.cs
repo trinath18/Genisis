@@ -45,7 +45,7 @@ public class MembershipController(DbConnections db) : ControllerBase
         await using var conn = db.MainDb();
         var rows = await conn.QueryAsync(
             $"{SearchSelect} WHERE {where} ORDER BY m.MBMNumber",
-            new { max = MaxSearchRows, q, prefix = EscapeLike(q) + "%" });
+            new { max = MaxSearchRows, q, prefix = SqlText.EscapeLike(q) + "%" });
         return Ok(ToDictionaries(rows));
     }
 
@@ -215,6 +215,4 @@ public class MembershipController(DbConnections db) : ControllerBase
     private static string? Str(Dictionary<string, object?> row, string key) =>
         row.TryGetValue(key, out var v) ? v?.ToString() : null;
 
-    private static string EscapeLike(string value) =>
-        value.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]");
 }

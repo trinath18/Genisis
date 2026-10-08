@@ -45,7 +45,7 @@ public class PlanService(DbConnections db)
         var created = new List<CreatedPlan>();
         foreach (var line in lines)
         {
-            var code = line.Code ?? await NextPlanCodeAsync(conn, tx, (r.GroupCompany ?? "")[..1].Trim().ToUpperInvariant());
+            var code = line.Code ?? await NextPlanCodeAsync(conn, tx, U(r.GroupCompany)![..1]);
             var description = U(line.Description);
             var index = await conn.ExecuteScalarAsync<int>(
                 """
@@ -102,6 +102,7 @@ public class PlanService(DbConnections db)
     public async Task<(List<PlanRow> Rows, bool Truncated)> SearchAsync(PlanSearch s)
     {
         static string? V(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim().ToUpperInvariant();
+        static string? Like(string? v) => V(v) is { } x ? SqlText.EscapeLike(x) : null;
         await using var conn = db.MainDb();
         var rows = (await conn.QueryAsync<PlanRow>(
             $"""
@@ -132,7 +133,7 @@ public class PlanService(DbConnections db)
             """,
             new
             {
-                health = V(s.HealthCode), payor = V(s.PayorCode), group = V(s.GroupCompany), plan = V(s.PlanCode),
+                health = V(s.HealthCode), payor = V(s.PayorCode), group = Like(s.GroupCompany), plan = Like(s.PlanCode),
                 productCategory = V(s.ProductCategory), topUp = V(s.TopUpStatus), coPayment = V(s.CoPayment), sof = V(s.Sof),
                 gracePeriod = V(s.SpecialGracePeriod), meal = V(s.Meal), nursing = V(s.Nursing), tax = V(s.Tax), mri = V(s.Mri),
                 disIndicator = V(s.DisIndicator),

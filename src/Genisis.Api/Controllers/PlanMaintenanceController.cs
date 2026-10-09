@@ -47,6 +47,18 @@ public class PlanMaintenanceController(DbConnections db, PlanService plans) : Co
         return await Run(async () => Ok(await plans.CreateAsync(request, User.Identity?.Name ?? "")));
     }
 
+    [HttpPut("{index:int}")]
+    public async Task<IActionResult> Update(int index, PlanUpdateRequest request)
+    {
+        if (request.Plans.Count != 1) return BadRequest(new { message = "An edit changes exactly one plan." });
+        if (PlanValidator.Validate(request) is { } error) return BadRequest(new { message = error });
+        return await Run(async () =>
+        {
+            await plans.UpdateAsync(index, request, User.Identity?.Name ?? "");
+            return NoContent();
+        });
+    }
+
     [HttpDelete("{index:int}")]
     public Task<IActionResult> Delete(int index) => Run(async () =>
     {

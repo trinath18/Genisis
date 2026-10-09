@@ -42,6 +42,9 @@ public class PlanCreateRequest
     public int? CoPayPercent { get; set; }
 }
 
+/// <summary>Plan tab "Edit" of one plan row: the same fields as Add with one plan line. Plan code, health type and payor must match the row.</summary>
+public class PlanUpdateRequest : PlanCreateRequest;
+
 public record CreatedPlan(int Index, string Code, string? Description);
 
 public record PlanRow(

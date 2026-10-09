@@ -11,6 +11,7 @@ builder.Services.AddSingleton<DbConnections>();
 builder.Services.AddScoped<Genisis.Api.Registration.RegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Plans.PlanService>();
 builder.Services.AddScoped<Genisis.Api.Plans.AnnualLimitService>();
+builder.Services.AddScoped<Genisis.Api.Plans.PremiumService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)

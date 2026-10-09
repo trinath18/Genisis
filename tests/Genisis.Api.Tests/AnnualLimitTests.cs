@@ -72,6 +72,15 @@ public class AnnualLimitTests
             Assert.Equal(20000m, (decimal)row.SuppLimit);
             Assert.Equal(0m, (decimal)row.DisabilityLmt);
             Assert.Equal("TEST", (string)row.AnnualLastUpdatedUser);
+
+            var other = Valid(); other.PlanCode = "ZZ8X";
+            var otherIndex = await AnnualLimitService.SaveAsync(conn, tx, other, null, "TEST");
+            ex = await Assert.ThrowsAsync<PlanException>(() => AnnualLimitService.SaveAsync(conn, tx, Valid(), otherIndex, "TEST"));
+            Assert.StartsWith("Record Duplicated!", ex.Message);
+
+            await conn.ExecuteAsync("UPDATE dbo.AnnualLimit SET PLNCode = 'ZZ9X' WHERE AnnualIndex = @otherIndex", new { otherIndex }, tx);
+            var keep = Valid(); keep.AnnualLimit = 70000;
+            Assert.Equal(otherIndex, await AnnualLimitService.SaveAsync(conn, tx, keep, otherIndex, "TEST"));
             await tx.RollbackAsync();
         }
         Assert.Equal(count, await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.AnnualLimit"));

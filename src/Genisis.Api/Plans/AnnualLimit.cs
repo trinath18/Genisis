@@ -82,11 +82,17 @@ public class AnnualLimitService(DbConnections db)
             annual = r.AnnualLimit, lifetime = r.LifetimeLimit, status, supp = r.SuppLimit, suppLifetime = r.SuppLifetimeLimit,
             effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, today = DateTime.Today, disability = r.DisabilityLimit ?? 0,
         };
+        // Edits that keep their own key stay allowed, so rows that are already duplicated can still be maintained.
+        if (await conn.ExecuteScalarAsync<int>(
+                """
+                SELECT COUNT(*) FROM dbo.AnnualLimit WITH (UPDLOCK, HOLDLOCK)
+                WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan
+                  AND (@index IS NULL OR (AnnualIndex <> @index AND NOT EXISTS (
+                      SELECT 1 FROM dbo.AnnualLimit c WHERE c.AnnualIndex = @index AND c.INSCode = @ins AND c.HLTCode = @hlt AND c.PLNCode = @plan)))
+                """, p, tx) > 0)
+            throw new PlanException("Record Duplicated! Please Change The Corresponding Field");
         if (index is null)
         {
-            if (await conn.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(*) FROM dbo.AnnualLimit WITH (UPDLOCK, HOLDLOCK) WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan", p, tx) > 0)
-                throw new PlanException("Record Duplicated! Please Change The Corresponding Field");
             return await conn.ExecuteScalarAsync<int>(
                 """
                 INSERT INTO dbo.AnnualLimit (PLNCode, INSCode, HLTCode, PAYCode, GRPCompany, AnnLimit, LifeTimeLimit, SuppLimitStatus,

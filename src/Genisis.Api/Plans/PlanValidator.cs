@@ -14,7 +14,8 @@ public static class PlanValidator
         _ => [],
     };
 
-    public static string? Validate(PlanCreateRequest r)
+    /// <param name="update">Editing one existing row: No of Plan Code is only used to generate new codes, so it is not checked.</param>
+    public static string? Validate(PlanCreateRequest r, bool update = false)
     {
         static bool Blank(string? s) => string.IsNullOrWhiteSpace(s);
         static bool YesNo(string? s) => s?.Trim().ToUpperInvariant() is "Y" or "N";
@@ -23,7 +24,7 @@ public static class PlanValidator
 
         if (Blank(health)) return "Please Enter Health Type";
         if (health == "N" && Blank(payor)) return "Please Enter Payor Code";
-        if (health == "N" && r.NumberOfPlans is null) return "Please Enter No of Plan Code";
+        if (!update && health == "N" && r.NumberOfPlans is null) return "Please Enter No of Plan Code";
         if (!YesNo(r.AnnualLimitInd)) return "Please Enter Annual Limit Ind.";
         if (!YesNo(r.LifetimeStatus)) return "Please Enter Life Limit Ind.";
         if (Blank(r.GroupCompany)) return "Please Enter Group Company";
@@ -50,7 +51,7 @@ public static class PlanValidator
         if (payor.StartsWith("AX") && Blank(r.ClientPolicyNo)) return "Please Enter Client Policy Number";
 
         if (health is not ("N" or "S")) return "Health Type must be N or S.";
-        if (health == "N" && r.NumberOfPlans is < 1 or > MaxPlans) return $"No of Plan Code must be 1 to {MaxPlans}.";
+        if (!update && health == "N" && r.NumberOfPlans is < 1 or > MaxPlans) return $"No of Plan Code must be 1 to {MaxPlans}.";
         if (r.Plans.Count > MaxPlans) return $"At most {MaxPlans} plans can be added at once.";
         if (r.SmPlan is not (null or "") && !YesNo(r.SmPlan)) return "SM Plan must be Y or N.";
         if (r.Sof is not (null or "") && !YesNo(r.Sof)) return "SOF must be Y or N.";

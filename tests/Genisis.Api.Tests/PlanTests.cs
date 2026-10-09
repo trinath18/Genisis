@@ -149,4 +149,40 @@ public class PlanUpdateTests
         Assert.Equal("Record not found", missing.Message);
         await tx.RollbackAsync();
     }
+
+    [Fact]
+    public void Update_of_an_N_plan_does_not_need_number_of_plans()
+    {
+        var r = PlanValidatorTests.Valid();
+        r.NumberOfPlans = null;
+        r.Plans = [new() { Description = "REVISED" }];
+        Assert.Null(PlanValidator.Validate(r, update: true));
+        Assert.Equal("Please Enter No of Plan Code", PlanValidator.Validate(r));
+    }
+
+    [Fact]
+    public async Task Update_of_an_N_plan_checks_a_supplied_code()
+    {
+        if (MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(MainDb);
+        await conn.OpenAsync();
+        await using var tx = conn.BeginTransaction();
+        var r = PlanValidatorTests.Valid();
+        r.NumberOfPlans = 1;
+        r.Plans = [new() { Description = "BEFORE" }];
+        var plan = (await PlanService.SaveAsync(conn, tx, r, "TEST")).Single();
+
+        r.NumberOfPlans = null;
+        r.Plans = [new() { Code = "ZZ99", Description = "STALE" }];
+        var stale = await Assert.ThrowsAsync<PlanException>(() => PlanService.UpdateAsync(conn, tx, plan.Index, r, "TEST"));
+        Assert.Contains("cannot be changed", stale.Message);
+        r.Plans = [new() { Description = "NO CODE" }];
+        await PlanService.UpdateAsync(conn, tx, plan.Index, r, "TEST");
+        r.Plans = [new() { Code = plan.Code.ToLowerInvariant(), Description = "WITH CODE" }];
+        await PlanService.UpdateAsync(conn, tx, plan.Index, r, "TEST");
+        Assert.Equal("WITH CODE", await conn.ExecuteScalarAsync<string>(
+            "SELECT PLNDescription FROM dbo.PLN WHERE PLNIndex = @i", new { i = plan.Index }, tx));
+        await tx.RollbackAsync();
+    }
 }

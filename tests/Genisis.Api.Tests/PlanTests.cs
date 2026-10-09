@@ -105,3 +105,48 @@ public class PlanDatabaseTests
         Assert.Equal(before, await conn.ExecuteScalarAsync<string>("SELECT PLNNoSeq FROM dbo.PLNSeq WHERE PLNSeqCode = 'G'"));
     }
 }
+
+public class PlanUpdateTests
+{
+    private static readonly string? MainDb = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINDB");
+
+    [Fact]
+    public async Task Update_edits_the_row_but_not_its_identity()
+    {
+        if (MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(MainDb);
+        await conn.OpenAsync();
+        await using var tx = conn.BeginTransaction();
+        var r = PlanValidatorTests.Valid();
+        r.HealthCode = "S";
+        r.NumberOfPlans = null;
+        r.Plans = [new() { Code = "ZQ9", Description = "BEFORE" }];
+        var index = (await PlanService.SaveAsync(conn, tx, r, "TEST")).Single().Index;
+
+        r.Plans = [new() { Code = "ZQ9", Description = "after edit" }];
+        r.GroupCompany = "EDITED CO";
+        r.EndAge = 70;
+        r.CoPayPercent = 15;
+        await PlanService.UpdateAsync(conn, tx, index, r, "TEST2");
+        var row = await conn.QuerySingleAsync(
+            "SELECT RTRIM(PLNCode) AS PLNCode, PLNDescription, GRPCompany, PLNEndAge, PLNCoPayPerc, PLNLastUpdateUser FROM dbo.PLN WHERE PLNIndex = @index",
+            new { index }, tx);
+        Assert.Equal("ZQ9", (string)row.PLNCode);
+        Assert.Equal("AFTER EDIT", (string)row.PLNDescription);
+        Assert.Equal("EDITED CO", (string)row.GRPCompany);
+        Assert.Equal(70, (int)row.PLNEndAge);
+        Assert.Equal(15, (int)row.PLNCoPayPerc);
+        Assert.Equal("TEST2", (string)row.PLNLastUpdateUser);
+
+        r.Plans = [new() { Code = "ZQ8", Description = "x" }];
+        var changedCode = await Assert.ThrowsAsync<PlanException>(() => PlanService.UpdateAsync(conn, tx, index, r, "TEST"));
+        Assert.Contains("cannot be changed", changedCode.Message);
+        r.Plans = [new() { Code = "ZQ9", Description = "x" }];
+        r.PayorCode = "ET";
+        await Assert.ThrowsAsync<PlanException>(() => PlanService.UpdateAsync(conn, tx, index, r, "TEST"));
+        var missing = await Assert.ThrowsAsync<PlanException>(() => PlanService.UpdateAsync(conn, tx, -1, r, "TEST"));
+        Assert.Equal("Record not found", missing.Message);
+        await tx.RollbackAsync();
+    }
+}

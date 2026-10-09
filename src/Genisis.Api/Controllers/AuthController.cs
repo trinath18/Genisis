@@ -46,8 +46,7 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
             return Unauthorized(new { message = "Invalid User Name or Password" });
 
         await using var conn = db.Maintenance();
-        await conn.ExecuteAsync(
-            "UPDATE USR SET USRPassword = @pwd, USRLogonCHGStatus = '0' WHERE USRCode = @code",
+        await conn.ProcScalarAsync<int>("genisis.User_ChangePassword",
             new { pwd = LegacyCrypt.Encrypt(request.NewPassword).ToUpperInvariant(), code = usr.USRCode });
 
         return Ok(CreateSession(usr));
@@ -65,9 +64,8 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
     private async Task<UsrRow?> FindActiveUser(string userCode)
     {
         await using var conn = db.Maintenance();
-        return await conn.QuerySingleOrDefaultAsync<UsrRow>(
-            "SELECT USRCode, USRName, USRPassword, USRAccess, USRLogonCHGStatus FROM USR WHERE USRCode = @code AND USRStatus = 'A'",
-            new { code = userCode.Trim() });
+        return await conn.QuerySingleOrDefaultAsync<UsrRow>("genisis.User_GetActive", new { code = userCode.Trim() },
+            commandType: System.Data.CommandType.StoredProcedure);
     }
 
     private object CreateSession(UsrRow usr)

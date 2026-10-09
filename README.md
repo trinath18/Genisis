@@ -44,7 +44,7 @@ All SQL is parameterised. Stored procedures that build dynamic SQL from a string
 ## Database procedures
 
 The API uses stored procedures in a `genisis` schema. Before starting a new version, run `sql/genisis-main.sql` on the
-main database in SSMS. See [sql/README.md](sql/README.md).
+main database and `sql/genisis-maintenance.sql` on the maintenance database in SSMS. See [sql/README.md](sql/README.md).
 
 ## Single Windows exe (API + UI)
 

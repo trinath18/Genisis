@@ -11,6 +11,7 @@ against the same database.
 | `main/020_annual_limit.sql` | Maintenance > Plan, Annual Limit tab |
 | `main/030_premium.sql` | Maintenance > Plan, Premium tab |
 | `main/040_membership.sql` | Membership > Enquiry |
+| `main/050_registration_numbers.sql` … `main/080_registration_save.sql` | Membership > Registration |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |
@@ -26,7 +27,8 @@ Run both combined files: `genisis-maintenance.sql` on the maintenance database, 
 5. Open `genisis-maintenance.sql`, pick the **maintenance** database (the one with `dbo.USR`), and press **F5**.
 
 Run it again after every API update that changes this folder. It is safe to run more than once. If it is run on the
-wrong database or an old SQL Server (it needs SQL Server 2016 SP1 or later), it stops with a message saying what to change.
+wrong database or an old SQL Server (it needs SQL Server 2016 SP1 or later), it stops with a message saying what to change
+and does not print `Done.`.
 If an API version is started before the script has been run, it answers with
 "The database is missing the stored procedures this version needs".
 

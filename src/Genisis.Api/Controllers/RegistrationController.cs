@@ -20,20 +20,19 @@ public class RegistrationController(DbConnections db, RegistrationService regist
     public async Task<IActionResult> Lookups()
     {
         await using var conn = db.MainDb();
-        var maintenanceDb = await db.MaintenanceDbNameAsync();
-        async Task<List<Option>> Options(string sql) => (await conn.QueryAsync<Option>(sql)).ToList();
+        using var grid = await conn.ProcMultipleAsync("genisis.Registration_Lookups");
+        async Task<List<Option>> Options() => (await grid.ReadAsync<Option>()).ToList();
 
         return Ok(new
         {
-            healthCodes = await Options("SELECT RTRIM(HLTCode) AS Code, RTRIM(HLTDescription) AS Name FROM dbo.HLT ORDER BY HLTCode"),
-            payors = (await conn.QueryAsync<PayorOption>(
-                "SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name, RTRIM(HLTCode) AS HealthCode FROM dbo.PAY ORDER BY PAYCode")).ToList(),
-            insuredTypes = await Options("SELECT RTRIM(INSCode) AS Code, RTRIM(INSDescription) AS Name FROM dbo.INS ORDER BY INSCode"),
-            races = await Options("SELECT RTRIM(RACCode) AS Code, RTRIM(RACName) AS Name FROM dbo.RAC WHERE RACCode IS NOT NULL ORDER BY RACCode"),
-            nationalities = await Options("SELECT RTRIM(NATCode) AS Code, RTRIM(NATName) AS Name FROM dbo.NAT WHERE NATCode IS NOT NULL ORDER BY NATName"),
-            relationships = await Options("SELECT RTRIM(RELCode) AS Code, RTRIM(RELDescription) AS Name FROM dbo.REL WHERE RELCode IS NOT NULL ORDER BY RELCode"),
-            states = await Options("SELECT RTRIM(STACode) AS Code, RTRIM(STADescription) AS Name FROM dbo.STA WHERE STACode IS NOT NULL ORDER BY STADescription"),
-            cities = await Options($"SELECT RTRIM(CTYCode) AS Code, RTRIM(CTYDescription) AS Name FROM {maintenanceDb}.dbo.CTY WHERE CTYCode IS NOT NULL ORDER BY CTYDescription"),
+            healthCodes = await Options(),
+            payors = (await grid.ReadAsync<PayorOption>()).ToList(),
+            insuredTypes = await Options(),
+            races = await Options(),
+            nationalities = await Options(),
+            relationships = await Options(),
+            states = await Options(),
+            cities = await Options(),
         });
     }
 
@@ -43,15 +42,7 @@ public class RegistrationController(DbConnections db, RegistrationService regist
         healthCode = (healthCode ?? "").Trim();
         payorCode = (payorCode ?? "").Trim();
         await using var conn = db.MainDb();
-        var plans = await conn.QueryAsync<Option>(
-            """
-            SELECT RTRIM(PLNCode) AS Code, MAX(RTRIM(PLNDescription)) AS Name
-            FROM dbo.PLN
-            WHERE HLTCode = @healthCode AND (@healthCode = 'S' OR PAYCode = @payorCode)
-            GROUP BY PLNCode
-            ORDER BY PLNCode
-            """,
-            new { healthCode, payorCode });
+        var plans = await conn.ProcQueryAsync<Option>("genisis.Registration_Plans", new { healthCode, payorCode });
         return Ok(plans);
     }
 

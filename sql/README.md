@@ -10,14 +10,20 @@ against the same database.
 | `main/010_plan.sql` | Maintenance > Plan, Plan tab |
 | `main/020_annual_limit.sql` | Maintenance > Plan, Annual Limit tab |
 | `main/030_premium.sql` | Maintenance > Plan, Premium tab |
-| `genisis-main.sql` | All of the above in one file (generated; this is the one you run) |
+| `main/040_membership.sql` | Membership > Enquiry |
+| `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
+| `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
+| `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |
 
 ## Install or update (local, test or production)
+
+Run both combined files: `genisis-maintenance.sql` on the maintenance database, and `genisis-main.sql` on the main database.
 
 1. Open `genisis-main.sql` in SSMS.
 2. In the toolbar's **Available Databases** box, pick the **main** database (the one with `dbo.PLN` and `dbo.MBM`).
 3. If your maintenance database is not called `HISMaintenance`, change `@MaintenanceDb` near the top of the file.
 4. Press **F5**. The Messages tab ends with `Done.`
+5. Open `genisis-maintenance.sql`, pick the **maintenance** database (the one with `dbo.USR`), and press **F5**.
 
 Run it again after every API update that changes this folder. It is safe to run more than once. If it is run on the
 wrong database or an old SQL Server (it needs SQL Server 2016 SP1 or later), it stops with a message saying what to change.

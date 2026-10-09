@@ -1,5 +1,5 @@
 -- GENERATED FILE: built from sql/main/*.sql. Edit those files, then rebuild this one with
---     GENISIS_WRITE_SQL=1 dotnet test --filter Combined_main_script_is_up_to_date
+--     GENISIS_WRITE_SQL=1 dotnet test --filter Combined_scripts_are_up_to_date
 -- How to run: open this file in SSMS, pick the main database in the "Available Databases" box,
 -- check @MaintenanceDb in the first section, then press F5 (Execute).
 -- Safe to run again: it only creates or replaces genisis.* procedures and synonyms; tables and data are not changed.
@@ -38,7 +38,10 @@ DECLARE @sql nvarchar(max) = N'';
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@MaintenanceDb) + N'.dbo.' + t + N';
 '
-FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory')) v (s, t);
+FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory'),
+    (N'Maint_MBMCrossReference', N'MBMCrossReference'), (N'Maint_MBMSEQ05', N'MBMSEQ05'),
+    (N'Maint_MBMSEQRenew05', N'MBMSEQRenew05'), (N'Maint_MBMSEQRenewPol', N'MBMSEQRenewPol'),
+    (N'Maint_MBMSEQRenewHistory', N'MBMSEQRenewHistory'), (N'Maint_CTY', N'CTY')) v (s, t);
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N').';
 GO
@@ -345,6 +348,530 @@ BEGIN
       AND (@age IS NULL OR AGECode = @age) AND (@plan IS NULL OR PLNCode = @plan)
     ORDER BY PRMCode DESC
     OPTION (RECOMPILE);
+END
+GO
+
+-- ===== main/040_membership.sql =====
+-- Membership > Enquiry (read-only). SearchMBMCovPersonsProc, SearchCas and SearchCasHistory are existing procedures and are called as they are.
+
+-- @by: number | name | ic | policy. @prefix is an escaped LIKE prefix ending in %.
+CREATE OR ALTER PROCEDURE genisis.Membership_Search
+    @max int, @by nvarchar(4000), @q nvarchar(4000), @prefix nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) m.MBMNumber, m.MBMPolicyNo, m.MBMCOVID, m.MBMIcBcPp, m.MBMName,
+           m.MBMPayorEffDate, m.MBMPayorExpDate, m.MBMValueDate, m.MBMBordxDate, m.MBMDataStatus,
+           CASE WHEN m.MBMStatus = 'C' AND m.MBMPayorEffDate > CAST(GETDATE() AS date) AND t.MBMCancelDate IS NULL
+                THEN 'A' ELSE m.MBMStatus END AS MBMStatus,
+           t.MBMRegUser, o.MBMGroupCompany, m.HSCLNInd
+    FROM dbo.MBM m
+    INNER JOIN dbo.MBMOthers o ON m.MBMNumber = o.MBMNumber
+    INNER JOIN dbo.MBMTwo t ON m.MBMNumber = t.MBMNumber
+    WHERE (@by = N'number' AND m.MBMNumber LIKE @prefix)
+       OR (@by = N'name' AND m.MBMName LIKE @prefix)
+       OR (@by = N'ic' AND (m.MBMIcBcPp = @q OR REPLACE(m.MBMIcBcPp, '-', '') = REPLACE(@q, '-', '')))
+       OR (@by = N'policy' AND m.MBMPolicyNo LIKE @prefix)
+    ORDER BY m.MBMNumber
+    OPTION (RECOMPILE);
+END
+GO
+
+-- Result sets: plan, annual limit in force on @effDate, clinic, benefit limits.
+CREATE OR ALTER PROCEDURE genisis.Membership_Details
+    @mbmNumber nvarchar(4000), @plnCode nvarchar(4000), @insCode nvarchar(4000), @hltCode nvarchar(4000), @effDate datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT PLNCode, PLNDescription, ProductName, PLNRBType, MessagePromt, PLNPolicyWording FROM dbo.PLN WHERE PLNCode = @plnCode;
+    SELECT TOP (1) AnnLimit, DisabilityLmt, SuppLimitStatus, MajorMedicalLmt, AnnualEffDate
+    FROM dbo.AnnualLimit
+    WHERE PLNCode = @plnCode AND INSCode = @insCode AND HLTCode = @hltCode AND AnnualEffDate <= @effDate
+    ORDER BY AnnualEffDate DESC;
+    SELECT PLNType, INSType, MBMPolEffDate, MBMPolExpDate FROM dbo.MBMCLNOthers WHERE MBMNumber = @mbmNumber;
+    SELECT MBMCoveredID, MBMCancerAnnLmt, MBMCancerBalLmt, MBMKidneyAnnLmt, MBMKidneyBalLmt, MBMHomeNCAnnLmt, MBMHomeNCBalLmt
+    FROM dbo.MBMBnfLmt WHERE MBMNumber = @mbmNumber;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Membership_Adjustments
+    @mbmNumber nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT MBMAmendID, MBMNumber, MBMCoverID, MBMAmendEdtType, MBMAmendDate, MBMAENDtEffDate,
+           MBMAEndtBordxDate, MBMAEndtBatchNo, MBMAmendUser
+    FROM dbo.MBMAmendHistory WHERE MBMNumber = @mbmNumber
+    ORDER BY MBMAmendDate DESC, MBMAmendID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Membership_GetIc
+    @mbmNumber nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT LTRIM(RTRIM(MBMIcBcPp)) AS IcNumber FROM dbo.MBM WHERE MBMNumber = @mbmNumber;
+END
+GO
+
+-- Result sets: principal and supplementary memberships for the IC (dashes ignored).
+CREATE OR ALTER PROCEDURE genisis.Membership_History
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT TOP (200) x.MBMNumber, x.MBMPolicyNo, x.MBMIcBcPp, x.MBMName, x.MBMPayorEffDate, x.MBMPayorExpDate,
+           x.INSCode, x.PLNCode, x.PAYCode, x.MBMCOVID, x.MBMDOB, m.MBMDataStatus,
+           CASE WHEN m.MBMStatus = 'C' AND m.MBMPayorEffDate > CAST(GETDATE() AS date) AND t.MBMCancelDate IS NULL
+                THEN 'A' ELSE m.MBMStatus END AS MBMStatus,
+           x.MBMBordxDate, p.ProductName
+    FROM genisis.Maint_MBMCrossReference x
+    INNER JOIN dbo.MBM m ON x.MBMNumber = m.MBMNumber
+    INNER JOIN dbo.MBMTwo t ON x.MBMNumber = t.MBMNumber
+    LEFT JOIN dbo.PLN p ON p.PLNCode = x.PLNCode
+    WHERE REPLACE(x.MBMIcBcPp, '-', '') = REPLACE(@ic, '-', '')
+    ORDER BY x.MBMPayorEffDate DESC;
+
+    SELECT DISTINCT TOP (100) c.MBMCName, c.MBMCICBCPPNo, c.MBMCCoverID AS MBMCOVID, c.MBMCDOB AS MBMDOB,
+           COALESCE(c.MBMCEffDate, x.MBMPayorEffDate) AS MBMPayorEffDate,
+           COALESCE(c.MBMCExpDate, x.MBMPayorExpDate) AS MBMPayorExpDate,
+           x.MBMNumber, x.MBMPolicyNo, x.MBMName AS PrincipalName,
+           CASE WHEN c.MBMCStatus = 'C' AND c.MBMCEffDate > CAST(GETDATE() AS date) AND c.MBMCCancelDate IS NULL
+                THEN 'A' ELSE c.MBMCStatus END AS MBMStatus
+    FROM dbo.MBMCoveredPersons c
+    INNER JOIN genisis.Maint_MBMCrossReference x ON x.MBMNumber = c.MBMCNumber
+    WHERE REPLACE(c.MBMCICBCPPNo, '-', '') = REPLACE(@ic, '-', '')
+    ORDER BY MBMPayorEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Membership_Account
+    @mbmNumber nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM dbo.VIEW_MBMTotal_Summary WHERE MBMNumber = @mbmNumber ORDER BY MBMPatientCovID;
+END
+GO
+
+-- Result sets: exclusions, remarks.
+CREATE OR ALTER PROCEDURE genisis.Membership_Notes
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT MBMNumber, MBMName, MBMPolicyNo, INSCode, PAYCode, MBMExclusion FROM dbo.View_Get_MemberExclusion WHERE MBMIcBcPp = @ic;
+    SELECT MBMNumber, MBMName, INSCode, PAYCode, MBMTakeover, TakeOvermessageInd, MBMRemarks FROM dbo.View_Get_MemberRemarks WHERE MBMIcBcPp = @ic;
+END
+GO
+
+-- ===== main/050_registration_numbers.sql =====
+-- Membership > Registration: the counters behind membership numbers, check digits and security codes.
+-- The API works out the next value (same rules as the desktop); these procedures read under lock and store it.
+-- Call them inside the registration transaction so the UPDLOCK/HOLDLOCK read lock lasts until commit.
+
+CREATE OR ALTER PROCEDURE genisis.Seq_PayorGet
+    @payorCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT SEQNumber AS Text FROM genisis.Maint_MBMSEQ05 WITH (UPDLOCK, HOLDLOCK) WHERE PAYCode = @payorCode;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_PayorSet
+    @payorCode nvarchar(4000), @next nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_MBMSEQ05 SET SEQNumber = @next WHERE PAYCode = @payorCode;
+    IF @@ROWCOUNT = 0 INSERT INTO genisis.Maint_MBMSEQ05 (PAYCode, SEQNumber) VALUES (@payorCode, @next);
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_CheckDigitsGet
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMChkDigits AS Text FROM dbo.MBMCheckDigits WITH (UPDLOCK, HOLDLOCK);
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_CheckDigitsSet
+    @next nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMCheckDigits SET MBMChkDigits = @next;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_SecurityGet
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMSecurityCode AS Text FROM dbo.MBMSecurityDigits WITH (UPDLOCK, HOLDLOCK);
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_SecuritySet
+    @next nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMSecurityDigits SET MBMSecurityCode = @next;
+END
+GO
+
+-- @byPolicy = 1 uses MBMSEQRenewPol (key payor*policy), otherwise MBMSEQRenew05 (key payor*insured*dob*name).
+CREATE OR ALTER PROCEDURE genisis.Seq_RenewGet
+    @byPolicy bit, @key nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @byPolicy = 1
+        SELECT INSCode, RewSeqNo, RewSeqID FROM genisis.Maint_MBMSEQRenewPol WITH (UPDLOCK, HOLDLOCK) WHERE RewMBMSeqKey = @key;
+    ELSE
+        SELECT INSCode, RewSeqNo, RewSeqID FROM genisis.Maint_MBMSEQRenew05 WITH (UPDLOCK, HOLDLOCK) WHERE RewMBMSeqKey = @key;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_RenewInsert
+    @byPolicy bit, @key nvarchar(4000), @insCode nvarchar(4000), @sequence nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @byPolicy = 1
+        INSERT INTO genisis.Maint_MBMSEQRenewPol (RewMBMSeqKey, INSCode, RewSeqNo, RewSeqID) VALUES (@key, @insCode, @sequence, '01');
+    ELSE
+        INSERT INTO genisis.Maint_MBMSEQRenew05 (RewMBMSeqKey, INSCode, RewSeqNo, RewSeqID) VALUES (@key, @insCode, @sequence, '01');
+END
+GO
+
+-- @insCode NULL keeps the stored insured type.
+CREATE OR ALTER PROCEDURE genisis.Seq_RenewUpdate
+    @byPolicy bit, @key nvarchar(4000), @insCode nvarchar(4000) = NULL, @sequence nvarchar(4000), @seqId nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @byPolicy = 1
+        UPDATE genisis.Maint_MBMSEQRenewPol SET RewSeqID = @seqId, RewSeqNo = @sequence, INSCode = COALESCE(@insCode, INSCode) WHERE RewMBMSeqKey = @key;
+    ELSE
+        UPDATE genisis.Maint_MBMSEQRenew05 SET RewSeqID = @seqId, RewSeqNo = @sequence, INSCode = COALESCE(@insCode, INSCode) WHERE RewMBMSeqKey = @key;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Seq_RenewHistoryAppend
+    @key nvarchar(4000), @entry nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_MBMSEQRenewHistory WITH (UPDLOCK, HOLDLOCK) SET SEQNo = SEQNo + '~' + @entry WHERE MBMKey = @key;
+    IF @@ROWCOUNT = 0 INSERT INTO genisis.Maint_MBMSEQRenewHistory (MBMKey, SEQNo) VALUES (@key, @entry);
+END
+GO
+
+-- ===== main/060_registration_lookups.sql =====
+-- Membership > Registration: drop-down lists.
+
+-- Result sets in order: health types, payors, insured types, races, nationalities, relationships, states, cities.
+CREATE OR ALTER PROCEDURE genisis.Registration_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(HLTCode) AS Code, RTRIM(HLTDescription) AS Name FROM dbo.HLT ORDER BY HLTCode;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name, RTRIM(HLTCode) AS HealthCode FROM dbo.PAY ORDER BY PAYCode;
+    SELECT RTRIM(INSCode) AS Code, RTRIM(INSDescription) AS Name FROM dbo.INS ORDER BY INSCode;
+    SELECT RTRIM(RACCode) AS Code, RTRIM(RACName) AS Name FROM dbo.RAC WHERE RACCode IS NOT NULL ORDER BY RACCode;
+    SELECT RTRIM(NATCode) AS Code, RTRIM(NATName) AS Name FROM dbo.NAT WHERE NATCode IS NOT NULL ORDER BY NATName;
+    SELECT RTRIM(RELCode) AS Code, RTRIM(RELDescription) AS Name FROM dbo.REL WHERE RELCode IS NOT NULL ORDER BY RELCode;
+    SELECT RTRIM(STACode) AS Code, RTRIM(STADescription) AS Name FROM dbo.STA WHERE STACode IS NOT NULL ORDER BY STADescription;
+    SELECT RTRIM(CTYCode) AS Code, RTRIM(CTYDescription) AS Name FROM genisis.Maint_CTY WHERE CTYCode IS NOT NULL ORDER BY CTYDescription;
+END
+GO
+
+-- Health type S plans are shared by all payors.
+CREATE OR ALTER PROCEDURE genisis.Registration_Plans
+    @healthCode nvarchar(4000), @payorCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PLNCode) AS Code, MAX(RTRIM(PLNDescription)) AS Name
+    FROM dbo.PLN
+    WHERE HLTCode = @healthCode AND (@healthCode = 'S' OR PAYCode = @payorCode)
+    GROUP BY PLNCode
+    ORDER BY PLNCode;
+END
+GO
+
+-- ===== main/070_registration_quote.sql =====
+-- Membership > Registration: reads behind the premium / limit / MCO calculation (used by Quote and Save).
+
+CREATE OR ALTER PROCEDURE genisis.Registration_Payor
+    @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PAYMBMRegStatus) AS RegStatus FROM dbo.PAY WHERE PAYCode = @pay;
+END
+GO
+
+-- Latest plan row; health type S plans are shared by all payors.
+CREATE OR ALTER PROCEDURE genisis.Registration_Plan
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) GRPCompany, PRMInd, MCOInd, AnnLmtIND, PLNLifeTimeStatus, PLNProRate, PLNRoundUpStatus, PLNPremGenderStatus
+    FROM dbo.PLN WHERE PLNCode = @plan AND HLTCode = @hlt AND (@hlt = 'S' OR PAYCode = @pay)
+    ORDER BY PLNEffDate DESC;
+END
+GO
+
+-- Plan-specific age bands plus the shared ones (PLNCode NULL).
+CREATE OR ALTER PROCEDURE genisis.Registration_AgeBands
+    @plan nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(AGECode) AS AgeCode, RTRIM(AGEDescription) AS Description, RTRIM(AGEFrom) AS AgeFrom, RTRIM(AGETo) AS AgeTo, RTRIM(PLNCode) AS PlanCode
+    FROM dbo.AGE WHERE PLNCode = @plan OR PLNCode IS NULL;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_AnnualLimit
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) SuppLimitStatus, AnnLimit, SuppLimit, LifeTimeLimit, SuppLifeTimeLimit FROM dbo.AnnualLimit
+    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND AnnualEffDate <= @eff ORDER BY AnnualEffDate DESC;
+END
+GO
+
+-- MCO fee in force on @eff for the plan; falls back to the default row (PLNCode NULL) for the insured/health type.
+CREATE OR ALTER PROCEDURE genisis.Registration_Mco
+    @ins nvarchar(4000), @hlt nvarchar(4000), @plan nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM dbo.MCO WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND MCOEffDate <= @eff)
+        SELECT TOP (1) SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO
+        WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC;
+    ELSE
+        SELECT TOP (1) SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO
+        WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode IS NULL AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_Premium
+    @ins nvarchar(4000), @hlt nvarchar(4000), @plan nvarchar(4000), @ageCode nvarchar(4000), @eff datetime, @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) SuppPrmStatus, PRMAmount, PRMAmountFemale, SuppPrmAmt FROM dbo.PRM
+    WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND AGECode = @ageCode AND PRMEffDate <= @eff
+      AND (@hlt = 'S' OR PAYCode = @pay)
+    ORDER BY PRMEffDate DESC;
+END
+GO
+
+-- ===== main/080_registration_save.sql =====
+-- Membership > Registration: writes for one registration. All run inside the API's transaction.
+-- The Upload_* procedures are the desktop's own and are called unchanged, with the same fixed values the desktop passes.
+
+CREATE OR ALTER PROCEDURE genisis.Server_Today
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CAST(GETDATE() AS date) AS Today;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_BenefitLimit
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppALBStatus) AS SuppBnfStatus, KidDialysisLmt, CancerLmt, HomeNursLmt FROM dbo.BnfAnnLmt
+    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND ALBEffDate <= @eff ORDER BY ALBEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertBenefitLimit
+    @number nvarchar(4000), @coverId nvarchar(4000), @kidney decimal(19, 4), @cancer decimal(19, 4), @homeNursing decimal(19, 4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMBnfLmt (MBMNumber, MBMCoveredID, MBMKidneyAnnLmt, MBMKidneyBalLmt, MBMCancerAnnLmt, MBMCancerBalLmt,
+        MBMHomeNCAnnLmt, MBMHomeNCBalLmt)
+    VALUES (@number, @coverId, @kidney, @kidney, @cancer, @cancer, @homeNursing, @homeNursing);
+END
+GO
+
+-- Latest active membership on the same policy / payor / insured type (lifetime plans carry its balance forward).
+CREATE OR ALTER PROCEDURE genisis.Registration_PreviousLifetime
+    @policy nvarchar(4000), @pay nvarchar(4000), @ins nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMNumber, MBMTopupNumber, MBMAvailableLimit FROM dbo.MBM
+    WHERE MBMPolicyNo = @policy AND MBMStatus = 'A' AND PAYCode = @pay AND INSCode = @ins ORDER BY MBMPayorEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_CarriedLimit
+    @previousNo nvarchar(4000), @coverId nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMCAvailableLimit AS Value FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @previousNo AND MBMCCoverID = @coverId;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_LifetimeBalance
+    @topupNo nvarchar(4000), @coverId nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMLifeTimeLmt AS Value FROM dbo.MBMLifeTime WHERE MBMNumber = @topupNo AND MBMCovID = @coverId;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertLifetime
+    @topupNo nvarchar(4000), @coverId nvarchar(4000), @balance decimal(19, 4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMLifeTime (MBMNumber, MBMCovID, MBMLifeTimeLmt) VALUES (@topupNo, @coverId, @balance);
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertPrincipal
+    @pay nvarchar(4000), @hlt nvarchar(4000), @number nvarchar(4000), @policy nvarchar(4000), @ic nvarchar(4000),
+    @name nvarchar(4000), @dob datetime, @sex nvarchar(4000), @race nvarchar(4000), @memberType nvarchar(4000),
+    @add1 nvarchar(4000), @add2 nvarchar(4000), @add3 nvarchar(4000), @city nvarchar(4000), @postCode nvarchar(4000),
+    @state nvarchar(4000), @today datetime, @eff datetime, @exp datetime, @takeOver nvarchar(4000), @renewal nvarchar(4000),
+    @bordx datetime, @batch nvarchar(4000), @plan nvarchar(4000), @ins nvarchar(4000), @ageCode nvarchar(4000),
+    @adultChild nvarchar(4000), @available decimal(19, 4), @topupNo nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBM_HIS @pay, @hlt, @number, @policy, '00', @ic, @name, @dob, @sex, @race, 'A', 'A', @memberType,
+        @add1, @add2, @add3, @city, @postCode, @state, 'N', @today, @eff, @exp, @takeOver, @renewal, @bordx, @batch,
+        @plan, @ins, @ageCode, @adultChild, @available, 'H', @topupNo, 'N';
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertMBMTwo
+    @number nvarchar(4000), @salutation nvarchar(4000), @telHome nvarchar(4000), @telMobile nvarchar(4000),
+    @telOffice nvarchar(4000), @email nvarchar(4000), @otherIc nvarchar(4000), @nat nvarchar(4000), @user nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMTwo (MBMNumber, MBMSalutation, MBMTelnoH, MBMTelNoM, MBMTelNoO, MBMEmail, MBMIcBcPp2nd,
+        NATCode, SRVCodeList, LGNCode, MBMRegUser, MBMLastUpdateUser, MBMUploadStatus)
+    VALUES (@number, @salutation, @telHome, @telMobile, @telOffice, @email, @otherIc, @nat, 'ME', '', @user, @user, 'M');
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertXref
+    @number nvarchar(4000), @policy nvarchar(4000), @ic nvarchar(4000), @name nvarchar(4000), @eff datetime, @exp datetime,
+    @ageCode nvarchar(4000), @ins nvarchar(4000), @plan nvarchar(4000), @bordx datetime, @topupNo nvarchar(4000),
+    @topupInd nvarchar(4000), @dob datetime, @hlt nvarchar(4000), @pay nvarchar(4000), @batch nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBMXref_HIS @number, '00', @policy, @ic, @name, @eff, @exp, @ageCode, @ins, @plan, @bordx,
+        @topupNo, @topupInd, 'A', 'A', @dob, @hlt, @pay, @batch;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertOthers
+    @number nvarchar(4000), @groupCompany nvarchar(4000), @employeeNo nvarchar(4000), @agentCode nvarchar(4000),
+    @branch nvarchar(4000), @premium decimal(19, 4), @mco decimal(19, 4), @basicMco decimal(19, 4), @basicPremium decimal(19, 4),
+    @department nvarchar(4000), @installment nvarchar(4000), @prevPolicy nvarchar(4000), @prevMember nvarchar(4000),
+    @joined datetime = NULL, @guarantee nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMOthers (MBMNumber, RELCode, MBMGroupCompany, MBMEmployeeNo, MBMAgentCode, MBMPOLSubNo1, MBMBranch,
+        MBMPremium, MBMMCOFee, MBMBasicMCO, MBMBasicPrem, MBMDepartment, MBMInstallment, MBMUndExcess,
+        MBMFirstMemNo, MBMFirstPolNo, MBMPrevPolNo, MBMPrevMemNo, MBMFirstJoinedDate, MBMPolicyDisc, MBMRenewalDisc,
+        MBMPolCondition, MBMGuaRenewal, MBMENDtRefNo, MCOVoidStatus, MBMInvoiceNo, MBMPosition, MBMGroupCategory,
+        MBMDivision, MBMSubDivision, MBMCostCenter)
+    VALUES (@number, 'P', @groupCompany, @employeeNo, @agentCode, '', @branch,
+        @premium, @mco, @basicMco, @basicPremium, @department, @installment, 0,
+        '', '', @prevPolicy, @prevMember, @joined, 0, 0,
+        '', @guarantee, '', '', '', '', '', '', '', '');
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertOthersTwo
+    @number nvarchar(4000), @marital nvarchar(4000), @exclusion nvarchar(4000), @allergic nvarchar(4000), @remarks nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMOthersTwo (MBMNumber, MBMWeight, MBMHeight, MBMOccupation, MBMWorkNature, MBMBlood, MBMSmoking, MBMAlcohol,
+        MBMPrevPLNCode, MBMPAYRemarks, MBMPrevInsCom, MBMMaritalStatus, MBMCoPayRB, MBMStaffDec,
+        MBMPayorPremGross, MBMPayorPremNet, MBMPayorMCOGross, MBMPayorMCONet, MBMRBAmt, MBMFamDiscAmt, MBMRenewDiscAmt,
+        MBMLoadingPrem, MBMExclusion, MBMBankACNo, MBMAllergic, MBMRemarks)
+    VALUES (@number, '', '', '', '', '', '', '', '', '', '', @marital, '', '', 0, 0, 0, 0, 0, 0, 0, 0,
+        @exclusion, '', @allergic, @remarks);
+END
+GO
+
+-- Keeps an existing card security code for the base membership number; otherwise stores @generatedCode. Returns the code in use.
+CREATE OR ALTER PROCEDURE genisis.Registration_SecurityCode
+    @baseNumber nvarchar(4000), @generatedCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBMSCSecurity WITH (UPDLOCK, HOLDLOCK) WHERE MBMNumber = @baseNumber)
+        INSERT INTO dbo.MBMSCSecurity (MBMNumber, MBMSecurityCode, MBMCardType, MBMClientType) VALUES (@baseNumber, @generatedCode, 'M', 'MED');
+    SELECT TOP (1) RTRIM(MBMSecurityCode) AS SecurityCode FROM dbo.MBMSCSecurity WHERE MBMNumber = @baseNumber;
+END
+GO
+
+-- Upload_MBMCovPersonsNew takes a char(1) relationship, which would store SP (spouse) as S (son), so the full code is written afterwards.
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertCoveredPerson
+    @rel nvarchar(4000), @number nvarchar(4000), @coverId nvarchar(4000), @dob datetime, @name nvarchar(4000),
+    @bordx datetime, @batch nvarchar(4000), @ic nvarchar(4000), @sex nvarchar(4000), @plan nvarchar(4000),
+    @ageCode nvarchar(4000), @adultChild nvarchar(4000), @annual decimal(19, 4), @available decimal(19, 4),
+    @basicMco decimal(19, 4), @mco decimal(19, 4), @basicPremium decimal(19, 4), @premium decimal(19, 4),
+    @today datetime, @eff datetime, @exp datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBMCovPersonsNew @rel, @number, @coverId, @dob, 'C', @name, 'A', @bordx, @batch, @ic, @sex,
+        @plan, @ageCode, @adultChild, @annual, @available, @basicMco, @mco, @basicPremium, @premium, @today, @eff, @exp;
+    IF LEN(@rel) > 1
+        UPDATE dbo.MBMCoveredPersons SET MBMCRELCode = @rel WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Registration_InsertCoveredPersonTwo
+    @number nvarchar(4000), @coverId nvarchar(4000), @salutation nvarchar(4000), @occupation nvarchar(4000),
+    @allergic nvarchar(4000), @exclusion nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBMCovPersonsTwo @number, @coverId, @salutation, @occupation, '', '', @allergic, '', '', '', '', '',
+        @exclusion, '', '', '', '', 0, 0, 0, 0, '', 0, 0, 0, 0, 0, NULL, NULL, 0, 0;
+END
+GO
+
+-- Last batch number used for the payor's bordereaux date (new registrations, type N).
+CREATE OR ALTER PROCEDURE genisis.Registration_SaveBatch
+    @pay nvarchar(4000), @bordx datetime, @batch nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.BAT WITH (UPDLOCK, HOLDLOCK) SET BATSequence = @batch
+    WHERE PAYCode = @pay AND BATBordxDate = @bordx AND BordxType = 'N';
+    IF @@ROWCOUNT = 0
+        INSERT INTO dbo.BAT (PAYCode, BATBordxDate, BATSequence, BordxType) VALUES (@pay, @bordx, @batch, 'N');
 END
 GO
 

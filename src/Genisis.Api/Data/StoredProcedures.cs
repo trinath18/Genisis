@@ -12,6 +12,12 @@ public static class StoredProcedures
     /// <summary>SQL Server error 2812: the procedure has not been deployed to this database.</summary>
     public const int MissingProcedure = 2812;
 
+    public static Task<int> ProcExecAsync(this SqlConnection conn, string name, object? p = null, SqlTransaction? tx = null) =>
+        conn.ExecuteAsync(name, p, tx, commandType: CommandType.StoredProcedure);
+
+    public static Task<T?> ProcFirstOrDefaultAsync<T>(this SqlConnection conn, string name, object? p = null, SqlTransaction? tx = null) =>
+        conn.QueryFirstOrDefaultAsync<T>(name, p, tx, commandType: CommandType.StoredProcedure);
+
     public static Task<T?> ProcScalarAsync<T>(this SqlConnection conn, string name, object? p = null, SqlTransaction? tx = null) =>
         conn.ExecuteScalarAsync<T>(name, p, tx, commandType: CommandType.StoredProcedure);
 

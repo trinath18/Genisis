@@ -68,13 +68,12 @@ public class RegistrationService(DbConnections db)
     public async Task<RegistrationResult> RegisterAsync(RegistrationRequest request, string userCode)
     {
         Normalize(request);
-        var maintenanceDb = await db.MaintenanceDbNameAsync();
         await using var conn = db.MainDb();
         await conn.OpenAsync();
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted);
         try
         {
-            var result = await SaveAsync(conn, tx, maintenanceDb, request, userCode);
+            var result = await SaveAsync(conn, tx, request, userCode);
             await tx.CommitAsync();
             return result;
         }
@@ -117,49 +116,24 @@ public class RegistrationService(DbConnections db)
         var hlt = r.HealthCode!; var pay = r.PayorCode!; var plan = r.PlanCode!; var ins = r.InsuredType!;
         var eff = r.PayorEffectiveDate!.Value.Date; var exp = r.PayorExpiryDate!.Value.Date;
 
-        var payor = await conn.QueryFirstOrDefaultAsync<Payor>(
-            "SELECT TOP 1 RTRIM(PAYMBMRegStatus) AS RegStatus FROM dbo.PAY WHERE PAYCode = @pay", new { pay }, tx)
+        var payor = await conn.ProcFirstOrDefaultAsync<Payor>("genisis.Registration_Payor", new { pay }, tx)
             ?? throw new RegistrationException($"Payor {pay} was not found.");
 
-        var p = await conn.QueryFirstOrDefaultAsync<Plan>(
-            """
-            SELECT TOP 1 GRPCompany, PRMInd, MCOInd, AnnLmtIND, PLNLifeTimeStatus, PLNProRate, PLNRoundUpStatus, PLNPremGenderStatus
-            FROM dbo.PLN WHERE PLNCode = @plan AND HLTCode = @hlt AND (@hlt = 'S' OR PAYCode = @pay)
-            ORDER BY PLNEffDate DESC
-            """, new { plan, hlt, pay }, tx)
+        var p = await conn.ProcFirstOrDefaultAsync<Plan>("genisis.Registration_Plan", new { plan, hlt, pay }, tx)
             ?? throw new RegistrationException($"Plan {plan} is not set up for payor {pay} and health code {hlt}.");
 
         var lifetime = Flag(p.PLNLifeTimeStatus) == "Y";
         if (lifetime && r.GuaranteeRenewal is null)
             throw new RegistrationException($"Plan {plan} is a lifetime plan. Please select Guarantee Renewal.");
 
-        var bands = (await conn.QueryAsync<LegacyRules.AgeBand>(
-            """
-            SELECT RTRIM(AGECode) AS AgeCode, RTRIM(AGEDescription) AS Description, RTRIM(AGEFrom) AS AgeFrom, RTRIM(AGETo) AS AgeTo, RTRIM(PLNCode) AS PlanCode
-            FROM dbo.AGE WHERE PLNCode = @plan OR PLNCode IS NULL
-            """, new { plan }, tx)).ToList();
+        var bands = await conn.ProcQueryAsync<LegacyRules.AgeBand>("genisis.Registration_AgeBands", new { plan }, tx);
 
-        var limit = await conn.QueryFirstOrDefaultAsync<Limit>(
-            """
-            SELECT TOP 1 SuppLimitStatus, AnnLimit, SuppLimit, LifeTimeLimit, SuppLifeTimeLimit FROM dbo.AnnualLimit
-            WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND AnnualEffDate <= @eff ORDER BY AnnualEffDate DESC
-            """, new { ins, plan, hlt, eff }, tx);
+        var limit = await conn.ProcFirstOrDefaultAsync<Limit>("genisis.Registration_AnnualLimit", new { ins, plan, hlt, eff }, tx);
 
-        const string mcoColumns = "SELECT TOP 1 SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO";
-        var mco = await conn.QueryFirstOrDefaultAsync<Mco>(
-                      $"{mcoColumns} WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC",
-                      new { ins, hlt, plan, eff }, tx)
-                  ?? await conn.QueryFirstOrDefaultAsync<Mco>(
-                      $"{mcoColumns} WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode IS NULL AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC",
-                      new { ins, hlt, eff }, tx);
+        var mco = await conn.ProcFirstOrDefaultAsync<Mco>("genisis.Registration_Mco", new { ins, hlt, plan, eff }, tx);
 
-        Task<Premium?> PremiumFor(string ageCode) => conn.QueryFirstOrDefaultAsync<Premium>(
-            """
-            SELECT TOP 1 SuppPrmStatus, PRMAmount, PRMAmountFemale, SuppPrmAmt FROM dbo.PRM
-            WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND AGECode = @ageCode AND PRMEffDate <= @eff
-              AND (@hlt = 'S' OR PAYCode = @pay)
-            ORDER BY PRMEffDate DESC
-            """, new { ins, hlt, plan, ageCode, eff, pay }, tx);
+        Task<Premium?> PremiumFor(string ageCode) =>
+            conn.ProcFirstOrDefaultAsync<Premium>("genisis.Registration_Premium", new { ins, hlt, plan, ageCode, eff, pay }, tx);
 
         var proRate = Flag(p.PLNProRate, "Y") != "N";
         var roundUp = Flag(p.PLNRoundUpStatus, "Y") != "N";
@@ -257,7 +231,7 @@ public class RegistrationService(DbConnections db)
             p.BasicPremium, p.Premium, p.BasicMco, p.Mco, p.AnnualLimit)).ToList(),
         c.Warnings);
 
-    internal static async Task<RegistrationResult> SaveAsync(SqlConnection conn, SqlTransaction tx, string maintenanceDb,
+    internal static async Task<RegistrationResult> SaveAsync(SqlConnection conn, SqlTransaction tx,
         RegistrationRequest r, string userCode)
     {
         var c = await ComputeAsync(conn, tx, r);
@@ -265,9 +239,9 @@ public class RegistrationService(DbConnections db)
         var eff = r.PayorEffectiveDate!.Value.Date; var exp = r.PayorExpiryDate!.Value.Date;
         var guarantee3 = r.GuaranteeRenewal?.StartsWith('3') == true;
 
-        var number = await MembershipNumbers.GenerateAsync(conn, tx, maintenanceDb, pay, ins, r.DateOfBirth!.Value.Date,
+        var number = await MembershipNumbers.GenerateAsync(conn, tx, pay, ins, r.DateOfBirth!.Value.Date,
             r.Name!, r.PolicyNo!, r.Renewal!, byPolicy: c.PayorRegStatus == "P");
-        var today = await conn.ExecuteScalarAsync<DateTime>("SELECT CAST(GETDATE() AS date)", transaction: tx);
+        var today = await conn.ProcSingleAsync<DateTime>("genisis.Server_Today", tx: tx);
 
         // Lifetime plans carry the limit forward from the member's previous active policy (PrincipalLifeTimeChecking).
         var topupNo = ""; var topupInd = "N"; var previousNo = "";
@@ -275,19 +249,12 @@ public class RegistrationService(DbConnections db)
         Benefit? benefit = null;
         if (c.Lifetime)
         {
-            benefit = await conn.QueryFirstOrDefaultAsync<Benefit>(
-                """
-                SELECT TOP 1 RTRIM(SuppALBStatus) AS SuppBnfStatus, KidDialysisLmt, CancerLmt, HomeNursLmt FROM dbo.BnfAnnLmt
-                WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND ALBEffDate <= @eff ORDER BY ALBEffDate DESC
-                """, new { ins, plan, hlt, eff }, tx);
+            benefit = await conn.ProcFirstOrDefaultAsync<Benefit>("genisis.Registration_BenefitLimit", new { ins, plan, hlt, eff }, tx);
             await InsertBenefitLimitAsync(conn, tx, number, "00", benefit);
 
             topupNo = previousNo = number;
-            var previous = await conn.QueryFirstOrDefaultAsync<PreviousLifetime>(
-                """
-                SELECT TOP 1 MBMNumber, MBMTopupNumber, MBMAvailableLimit FROM dbo.MBM
-                WHERE MBMPolicyNo = @policy AND MBMStatus = 'A' AND PAYCode = @pay AND INSCode = @ins ORDER BY MBMPayorEffDate DESC
-                """, new { policy = r.PolicyNo, pay, ins }, tx);
+            var previous = await conn.ProcFirstOrDefaultAsync<PreviousLifetime>("genisis.Registration_PreviousLifetime",
+                new { policy = r.PolicyNo, pay, ins }, tx);
             if (previous is not null)
             {
                 topupNo = previous.MBMTopupNumber?.Trim() ?? "";
@@ -299,12 +266,7 @@ public class RegistrationService(DbConnections db)
             (_, available) = await SaveLifetimeAsync(conn, tx, c, topupNo, "00", principal: true, c.AnnualLimit, available, guarantee3);
         }
 
-        await conn.ExecuteAsync(
-            """
-            EXEC dbo.Upload_MBM_HIS @pay, @hlt, @number, @policy, '00', @ic, @name, @dob, @sex, @race, 'A', 'A', @memberType,
-                @add1, @add2, @add3, @city, @postCode, @state, 'N', @today, @eff, @exp, @takeOver, @renewal, @bordx, @batch,
-                @plan, @ins, @ageCode, @adultChild, @available, 'H', @topupNo, 'N'
-            """,
+        await conn.ProcExecAsync("genisis.Registration_InsertPrincipal",
             new
             {
                 pay, hlt, number, policy = r.PolicyNo, ic = r.IcBcPp, name = r.Name, dob = r.DateOfBirth!.Value.Date, sex = S(r.Sex),
@@ -314,41 +276,21 @@ public class RegistrationService(DbConnections db)
                 available, topupNo,
             }, tx);
 
-        await conn.ExecuteAsync(
-            """
-            INSERT INTO dbo.MBMTwo (MBMNumber, MBMSalutation, MBMTelnoH, MBMTelNoM, MBMTelNoO, MBMEmail, MBMIcBcPp2nd,
-                NATCode, SRVCodeList, LGNCode, MBMRegUser, MBMLastUpdateUser, MBMUploadStatus)
-            VALUES (@number, @salutation, @telHome, @telMobile, @telOffice, @email, @otherIc, @nat, 'ME', '', @user, @user, 'M')
-            """,
+        await conn.ProcExecAsync("genisis.Registration_InsertMBMTwo",
             new
             {
                 number, salutation = S(r.Salutation), telHome = S(r.TelHome), telMobile = S(r.TelMobile), telOffice = S(r.TelOffice),
                 email = S(r.Email), otherIc = r.OtherIc, nat = S(r.NationalityCode), user = userCode,
             }, tx);
 
-        await conn.ExecuteAsync(
-            """
-            EXEC dbo.Upload_MBMXref_HIS @number, '00', @policy, @ic, @name, @eff, @exp, @ageCode, @ins, @plan, @bordx,
-                @topupNo, @topupInd, 'A', 'A', @dob, @hlt, @pay, @batch
-            """,
+        await conn.ProcExecAsync("genisis.Registration_InsertXref",
             new
             {
                 number, policy = r.PolicyNo, ic = r.IcBcPp, name = r.Name, eff, exp, ageCode = c.AgeCode, ins, plan,
                 bordx = r.BordxDate!.Value.Date, topupNo, topupInd, dob = r.DateOfBirth!.Value.Date, hlt, pay, batch = r.BatchNo,
             }, tx);
 
-        await conn.ExecuteAsync(
-            """
-            INSERT INTO dbo.MBMOthers (MBMNumber, RELCode, MBMGroupCompany, MBMEmployeeNo, MBMAgentCode, MBMPOLSubNo1, MBMBranch,
-                MBMPremium, MBMMCOFee, MBMBasicMCO, MBMBasicPrem, MBMDepartment, MBMInstallment, MBMUndExcess,
-                MBMFirstMemNo, MBMFirstPolNo, MBMPrevPolNo, MBMPrevMemNo, MBMFirstJoinedDate, MBMPolicyDisc, MBMRenewalDisc,
-                MBMPolCondition, MBMGuaRenewal, MBMENDtRefNo, MCOVoidStatus, MBMInvoiceNo, MBMPosition, MBMGroupCategory,
-                MBMDivision, MBMSubDivision, MBMCostCenter)
-            VALUES (@number, 'P', @groupCompany, @employeeNo, @agentCode, '', @branch,
-                @premium, @mco, @basicMco, @basicPremium, @department, @installment, 0,
-                '', '', @prevPolicy, @prevMember, @joined, 0, 0,
-                '', @guarantee, '', '', '', '', '', '', '', '')
-            """,
+        await conn.ProcExecAsync("genisis.Registration_InsertOthers",
             new
             {
                 number, groupCompany = r.GroupCompany ?? c.Plan.GRPCompany?.Trim() ?? "", employeeNo = S(r.EmployeeNo),
@@ -358,25 +300,12 @@ public class RegistrationService(DbConnections db)
                 guarantee = S(r.GuaranteeRenewal),
             }, tx);
 
-        await conn.ExecuteAsync(
-            """
-            INSERT INTO dbo.MBMOthersTwo (MBMNumber, MBMWeight, MBMHeight, MBMOccupation, MBMWorkNature, MBMBlood, MBMSmoking, MBMAlcohol,
-                MBMPrevPLNCode, MBMPAYRemarks, MBMPrevInsCom, MBMMaritalStatus, MBMCoPayRB, MBMStaffDec,
-                MBMPayorPremGross, MBMPayorPremNet, MBMPayorMCOGross, MBMPayorMCONet, MBMRBAmt, MBMFamDiscAmt, MBMRenewDiscAmt,
-                MBMLoadingPrem, MBMExclusion, MBMBankACNo, MBMAllergic, MBMRemarks)
-            VALUES (@number, '', '', '', '', '', '', '', '', '', '', @marital, '', '', 0, 0, 0, 0, 0, 0, 0, 0,
-                @exclusion, '', @allergic, @remarks)
-            """,
+        await conn.ProcExecAsync("genisis.Registration_InsertOthersTwo",
             new { number, marital = S(r.MaritalStatus), exclusion = S(r.Exclusion), allergic = S(r.Allergic), remarks = S(r.Remarks) }, tx);
 
         var generatedCode = await MembershipNumbers.NextSecurityCodeAsync(conn, tx);
         var baseNumber = number.Split('*')[0];
-        var securityCode = await conn.ExecuteScalarAsync<string>(
-            """
-            IF NOT EXISTS (SELECT 1 FROM dbo.MBMSCSecurity WITH (UPDLOCK, HOLDLOCK) WHERE MBMNumber = @baseNumber)
-                INSERT INTO dbo.MBMSCSecurity (MBMNumber, MBMSecurityCode, MBMCardType, MBMClientType) VALUES (@baseNumber, @generatedCode, 'M', 'MED');
-            SELECT TOP 1 RTRIM(MBMSecurityCode) FROM dbo.MBMSCSecurity WHERE MBMNumber = @baseNumber;
-            """, new { baseNumber, generatedCode }, tx);
+        var securityCode = await conn.ProcScalarAsync<string>("genisis.Registration_SecurityCode", new { baseNumber, generatedCode }, tx);
 
         foreach (var person in c.Covered)
         {
@@ -387,8 +316,7 @@ public class RegistrationService(DbConnections db)
                 if ((status == "B" && person.CoverId == "01") || status == "C")
                 {
                     await InsertBenefitLimitAsync(conn, tx, number, person.CoverId, benefit);
-                    var carried = await conn.QueryFirstOrDefaultAsync<Amount>(
-                        "SELECT TOP 1 MBMCAvailableLimit AS Value FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @previousNo AND MBMCCoverID = @coverId",
+                    var carried = await conn.ProcFirstOrDefaultAsync<Amount>("genisis.Registration_CarriedLimit",
                         new { previousNo, coverId = person.CoverId }, tx);
                     var next = 0m;
                     if (carried is not null)
@@ -402,11 +330,7 @@ public class RegistrationService(DbConnections db)
                 }
             }
 
-            await conn.ExecuteAsync(
-                """
-                EXEC dbo.Upload_MBMCovPersonsNew @rel, @number, @coverId, @dob, 'C', @name, 'A', @bordx, @batch, @ic, @sex,
-                    @plan, @ageCode, @adultChild, @annual, @available, @basicMco, @mco, @basicPremium, @premium, @today, @eff, @exp
-                """,
+            await conn.ProcExecAsync("genisis.Registration_InsertCoveredPerson",
                 new
                 {
                     rel = cr.Relationship, number, coverId = person.CoverId, dob = cr.DateOfBirth!.Value.Date, name = cr.Name,
@@ -416,17 +340,7 @@ public class RegistrationService(DbConnections db)
                     today, eff = person.Effective, exp = person.Expiry,
                 }, tx);
 
-            // Upload_MBMCovPersonsNew takes a char(1) relationship, which would store SP (spouse) as S (son).
-            if (cr.Relationship!.Length > 1)
-                await conn.ExecuteAsync(
-                    "UPDATE dbo.MBMCoveredPersons SET MBMCRELCode = @rel WHERE MBMCNumber = @number AND MBMCCoverID = @coverId",
-                    new { rel = cr.Relationship, number, coverId = person.CoverId }, tx);
-
-            await conn.ExecuteAsync(
-                """
-                EXEC dbo.Upload_MBMCovPersonsTwo @number, @coverId, @salutation, @occupation, '', '', @allergic, '', '', '', '', '',
-                    @exclusion, '', '', '', '', 0, 0, 0, 0, '', 0, 0, 0, 0, 0, NULL, NULL, 0, 0
-                """,
+            await conn.ProcExecAsync("genisis.Registration_InsertCoveredPersonTwo",
                 new
                 {
                     number, coverId = person.CoverId, salutation = S(cr.Salutation), occupation = S(cr.Occupation),
@@ -434,33 +348,20 @@ public class RegistrationService(DbConnections db)
                 }, tx);
         }
 
-        await conn.ExecuteAsync(
-            """
-            UPDATE dbo.BAT WITH (UPDLOCK, HOLDLOCK) SET BATSequence = @batch
-            WHERE PAYCode = @pay AND BATBordxDate = @bordx AND BordxType = 'N';
-            IF @@ROWCOUNT = 0
-                INSERT INTO dbo.BAT (PAYCode, BATBordxDate, BATSequence, BordxType) VALUES (@pay, @bordx, @batch, 'N');
-            """, new { pay, bordx = r.BordxDate!.Value.Date, batch = r.BatchNo }, tx);
+        await conn.ProcExecAsync("genisis.Registration_SaveBatch", new { pay, bordx = r.BordxDate!.Value.Date, batch = r.BatchNo }, tx);
 
         return new RegistrationResult(number, securityCode ?? generatedCode, ToQuote(c));
     }
 
     private static Task InsertBenefitLimitAsync(SqlConnection conn, SqlTransaction tx, string number, string coverId, Benefit? b) =>
-        conn.ExecuteAsync(
-            """
-            INSERT INTO dbo.MBMBnfLmt (MBMNumber, MBMCoveredID, MBMKidneyAnnLmt, MBMKidneyBalLmt, MBMCancerAnnLmt, MBMCancerBalLmt,
-                MBMHomeNCAnnLmt, MBMHomeNCBalLmt)
-            VALUES (@number, @coverId, @kidney, @kidney, @cancer, @cancer, @homeNursing, @homeNursing)
-            """,
+        conn.ProcExecAsync("genisis.Registration_InsertBenefitLimit",
             new { number, coverId, kidney = b?.KidDialysisLmt ?? 0, cancer = b?.CancerLmt ?? 0, homeNursing = b?.HomeNursLmt ?? 0 }, tx);
 
     /// <summary>SaveMBMLifeTimeLmt: caps the limit by the remaining lifetime balance, or opens a new lifetime balance.</summary>
     private static async Task<(decimal Actual, decimal Next)> SaveLifetimeAsync(SqlConnection conn, SqlTransaction tx, Computation c,
         string topupNo, string coverId, bool principal, decimal actual, decimal next, bool guarantee3)
     {
-        var existing = await conn.QueryFirstOrDefaultAsync<Amount>(
-            "SELECT TOP 1 MBMLifeTimeLmt AS Value FROM dbo.MBMLifeTime WHERE MBMNumber = @topupNo AND MBMCovID = @coverId",
-            new { topupNo, coverId }, tx);
+        var existing = await conn.ProcFirstOrDefaultAsync<Amount>("genisis.Registration_LifetimeBalance", new { topupNo, coverId }, tx);
         if (existing is null)
         {
             if (guarantee3) c.WriteLifetime = true;
@@ -474,8 +375,7 @@ public class RegistrationService(DbConnections db)
         if (c.WriteLifetime && existing is null)
         {
             var lifetimeLimit = (principal ? c.Limit?.LifeTimeLimit : c.Limit?.SuppLifeTimeLimit) ?? 0;
-            await conn.ExecuteAsync(
-                "INSERT INTO dbo.MBMLifeTime (MBMNumber, MBMCovID, MBMLifeTimeLmt) VALUES (@topupNo, @coverId, @balance)",
+            await conn.ProcExecAsync("genisis.Registration_InsertLifetime",
                 new { topupNo, coverId, balance = lifetimeLimit - (actual - next) }, tx);
             next = c.AnnualLimit;
         }

@@ -48,6 +48,7 @@ public class RegistrationDatabaseTests
     public async Task Save_writes_every_table_with_legacy_numbers()
     {
         if (MainDb is null || Maintenance is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
         var db = Db();
         var request = Fixture();
         Assert.Null(RegistrationValidator.Validate(request));
@@ -65,7 +66,7 @@ public class RegistrationDatabaseTests
                     DISABLE TRIGGER trgICEncrypt ON dbo.MBM; DISABLE TRIGGER trgMbmContactEncrypt ON dbo.MBMTwo;
                     DISABLE TRIGGER trgBankAcEncrypt ON dbo.MBMOthersTwo; DISABLE TRIGGER trgCICEncrypt ON dbo.MBMCoveredPersons;
                     """, transaction: tx);
-            var result = await RegistrationService.SaveAsync(conn, tx, maintenanceDb, request, "TEST");
+            var result = await RegistrationService.SaveAsync(conn, tx, request, "TEST");
             var n = result.MembershipNo;
             var expectedSeq = LegacyRules.NextPayorSequence(before.Payor);
             var expectedCheck = LegacyRules.NextCheckDigits(before.Check);
@@ -109,6 +110,7 @@ public class RegistrationDatabaseTests
     public async Task Failed_save_rolls_back_every_write()
     {
         if (MainDb is null || Maintenance is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
         var db = Db();
         var request = Fixture();
         request.Email = new string('x', 90) + "@example.com";
@@ -127,6 +129,7 @@ public class RegistrationDatabaseTests
     public async Task Quote_prices_the_fixture_plan()
     {
         if (MainDb is null || Maintenance is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
         var quote = await new RegistrationService(Db()).QuoteAsync(Fixture());
         Assert.Equal("A", quote.AdultChild);
         Assert.Equal(["A", "C"], quote.CoveredPersons.Select(c => c.AdultChild));

@@ -48,12 +48,9 @@ CREATE OR ALTER PROCEDURE genisis.Registration_Mco
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF EXISTS (SELECT 1 FROM dbo.MCO WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND MCOEffDate <= @eff)
-        SELECT TOP (1) SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO
-        WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC;
-    ELSE
-        SELECT TOP (1) SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO
-        WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode IS NULL AND MCOEffDate <= @eff ORDER BY MCOEffDate DESC;
+    SELECT TOP (1) SuppMcoStatus, CovIDChrg, MCOAmountAdult, MCOAmountChild, MCOSuppAdultAmt, MCOSuppChildAmt FROM dbo.MCO
+    WHERE INSCode = @ins AND HLTCode = @hlt AND (PLNCode = @plan OR PLNCode IS NULL) AND MCOEffDate <= @eff
+    ORDER BY CASE WHEN PLNCode IS NULL THEN 1 ELSE 0 END, MCOEffDate DESC, MCOCode DESC;
 END
 GO
 

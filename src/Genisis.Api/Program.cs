@@ -51,7 +51,7 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     await context.Response.WriteAsJsonAsync(new
     {
         message = error is Microsoft.Data.SqlClient.SqlException { Number: StoredProcedures.MissingProcedure }
-            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql on the main database (see sql/README.md)."
+            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql and sql/genisis-maintenance.sql (see sql/README.md)."
             : "Server error. Check the API log for details.",
     });
 }));

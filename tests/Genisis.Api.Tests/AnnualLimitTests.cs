@@ -78,6 +78,9 @@ public class AnnualLimitTests
             ex = await Assert.ThrowsAsync<PlanException>(() => AnnualLimitService.SaveAsync(conn, tx, Valid(), otherIndex, "TEST"));
             Assert.StartsWith("Record Duplicated!", ex.Message);
 
+            ex = await Assert.ThrowsAsync<PlanException>(() => AnnualLimitService.SaveAsync(conn, tx, Valid(), int.MaxValue, "TEST"));
+            Assert.Equal("Record not found", ex.Message);
+
             await conn.ExecuteAsync("UPDATE dbo.AnnualLimit SET PLNCode = 'ZZ9X' WHERE AnnualIndex = @otherIndex", new { otherIndex }, tx);
             var keep = Valid(); keep.AnnualLimit = 70000;
             Assert.Equal(otherIndex, await AnnualLimitService.SaveAsync(conn, tx, keep, otherIndex, "TEST"));

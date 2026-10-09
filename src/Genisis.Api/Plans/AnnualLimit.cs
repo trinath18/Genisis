@@ -82,6 +82,9 @@ public class AnnualLimitService(DbConnections db)
             annual = r.AnnualLimit, lifetime = r.LifetimeLimit, status, supp = r.SuppLimit, suppLifetime = r.SuppLifetimeLimit,
             effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, today = DateTime.Today, disability = r.DisabilityLimit ?? 0,
         };
+        if (index is not null && await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM dbo.AnnualLimit WITH (UPDLOCK, HOLDLOCK) WHERE AnnualIndex = @index", p, tx) == 0)
+            throw new PlanException("Record not found");
         // Edits that keep their own key stay allowed, so rows that are already duplicated can still be maintained.
         if (await conn.ExecuteScalarAsync<int>(
                 """

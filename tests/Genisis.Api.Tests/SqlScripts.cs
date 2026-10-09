@@ -11,24 +11,25 @@ public static class SqlScripts
 {
     public const string DefaultMaintenanceDb = "DECLARE @MaintenanceDb sysname = N'HISMaintenance';";
     public static readonly string Root = FindRoot();
-    public static string CombinedPath => Path.Combine(Root, "sql", "genisis-main.sql");
+    public static readonly string[] Parts = ["main", "maintenance"];
+    public static string CombinedPath(string part) => Path.Combine(Root, "sql", $"genisis-{part}.sql");
 
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static bool _deployed;
 
-    public static string BuildCombined()
+    public static string BuildCombined(string part)
     {
         var sb = new StringBuilder();
-        sb.Append("""
-            -- GENERATED FILE: built from sql/main/*.sql. Edit those files, then rebuild this one with
-            --     GENISIS_WRITE_SQL=1 dotnet test --filter Combined_main_script_is_up_to_date
-            -- How to run: open this file in SSMS, pick the main database in the "Available Databases" box,
-            -- check @MaintenanceDb in the first section, then press F5 (Execute).
+        sb.Append($"""
+            -- GENERATED FILE: built from sql/{part}/*.sql. Edit those files, then rebuild this one with
+            --     GENISIS_WRITE_SQL=1 dotnet test --filter Combined_scripts_are_up_to_date
+            -- How to run: open this file in SSMS, pick the {part} database in the "Available Databases" box,
+            -- {(part == "main" ? "check @MaintenanceDb in the first section, then " : "")}press F5 (Execute).
             -- Safe to run again: it only creates or replaces genisis.* procedures and synonyms; tables and data are not changed.
 
             """);
-        foreach (var file in Directory.GetFiles(Path.Combine(Root, "sql", "main"), "*.sql").Order(StringComparer.Ordinal))
-            sb.Append($"\n-- ===== main/{Path.GetFileName(file)} =====\n").Append(Normalize(File.ReadAllText(file)).TrimEnd('\n')).Append('\n');
+        foreach (var file in Directory.GetFiles(Path.Combine(Root, "sql", part), "*.sql").Order(StringComparer.Ordinal))
+            sb.Append($"\n-- ===== {part}/{Path.GetFileName(file)} =====\n").Append(Normalize(File.ReadAllText(file)).TrimEnd('\n')).Append('\n');
         sb.Append("\nSET NOEXEC OFF;\nPRINT N'Done.';\nGO\n");
         return sb.ToString();
     }
@@ -42,21 +43,27 @@ public static class SqlScripts
         try
         {
             if (_deployed) return;
-            var maintenance = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINTENANCE") is { } m
-                ? new SqlConnectionStringBuilder(m).InitialCatalog : "";
-            var script = File.ReadAllText(CombinedPath);
+            var maintenanceCs = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINTENANCE");
+            var maintenance = maintenanceCs is null ? "" : new SqlConnectionStringBuilder(maintenanceCs).InitialCatalog;
+            var main = File.ReadAllText(CombinedPath("main"));
             if (maintenance != "")
-                script = script.Replace(DefaultMaintenanceDb, $"DECLARE @MaintenanceDb sysname = N'{maintenance.Replace("'", "''")}';");
-            await using var conn = new SqlConnection(mainConnectionString);
-            await conn.OpenAsync();
-            foreach (var batch in Regex.Split(script, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
-                if (!string.IsNullOrWhiteSpace(batch)) await conn.ExecuteAsync(batch);
+                main = main.Replace(DefaultMaintenanceDb, $"DECLARE @MaintenanceDb sysname = N'{maintenance.Replace("'", "''")}';");
+            await RunAsync(mainConnectionString, main);
+            if (maintenanceCs is not null) await RunAsync(maintenanceCs, File.ReadAllText(CombinedPath("maintenance")));
             _deployed = true;
         }
         finally
         {
             Gate.Release();
         }
+    }
+
+    private static async Task RunAsync(string connectionString, string script)
+    {
+        await using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+        foreach (var batch in Regex.Split(script, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await conn.ExecuteAsync(batch);
     }
 
     private static string FindRoot()
@@ -70,19 +77,22 @@ public static class SqlScripts
 public class SqlScriptTests
 {
     [Fact]
-    public void Combined_main_script_is_up_to_date()
+    public void Combined_scripts_are_up_to_date()
     {
-        var expected = SqlScripts.BuildCombined();
-        if (Environment.GetEnvironmentVariable("GENISIS_WRITE_SQL") == "1") File.WriteAllText(SqlScripts.CombinedPath, expected);
-        Assert.True(File.Exists(SqlScripts.CombinedPath), "sql/genisis-main.sql is missing; rebuild it with GENISIS_WRITE_SQL=1 dotnet test");
-        Assert.True(expected == SqlScripts.Normalize(File.ReadAllText(SqlScripts.CombinedPath)),
-            "sql/genisis-main.sql is out of date; rebuild it with GENISIS_WRITE_SQL=1 dotnet test");
+        foreach (var part in SqlScripts.Parts)
+        {
+            var expected = SqlScripts.BuildCombined(part);
+            var path = SqlScripts.CombinedPath(part);
+            if (Environment.GetEnvironmentVariable("GENISIS_WRITE_SQL") == "1") File.WriteAllText(path, expected);
+            Assert.True(File.Exists(path) && expected == SqlScripts.Normalize(File.ReadAllText(path)),
+                $"sql/genisis-{part}.sql is missing or out of date; rebuild it with GENISIS_WRITE_SQL=1 dotnet test");
+        }
     }
 
     [Fact]
     public void Setup_script_keeps_the_maintenance_db_variable_the_tests_replace()
     {
-        Assert.Contains(SqlScripts.DefaultMaintenanceDb, File.ReadAllText(SqlScripts.CombinedPath));
+        Assert.Contains(SqlScripts.DefaultMaintenanceDb, File.ReadAllText(SqlScripts.CombinedPath("main")));
     }
 }
 
@@ -115,5 +125,30 @@ public class ReadProcedureTests
         var (premiums, premiumsTruncated) = await new Genisis.Api.Plans.PremiumService(db).SearchAsync(null, null, "N", "01", null);
         Assert.True(premiumsTruncated);
         Assert.All(premiums, p => Assert.Equal(("N", "01"), (p.HealthCode, p.AgeCode)));
+    }
+
+    [Fact]
+    public async Task Login_and_enquiry_procedures_run()
+    {
+        var maintenance = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINTENANCE");
+        if (MainDb is null || maintenance is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
+        await using (var m = new SqlConnection(maintenance))
+        {
+            var code = await m.ExecuteScalarAsync<string>("SELECT TOP 1 USRCode FROM dbo.USR WHERE USRStatus = 'A'");
+            var user = await m.QuerySingleAsync("genisis.User_GetActive", new { code }, commandType: System.Data.CommandType.StoredProcedure);
+            Assert.Equal(code, (string)user.USRCode);
+        }
+        var db = new Genisis.Api.Data.DbConnections(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MainDb"] = MainDb, ["ConnectionStrings:Maintenance"] = maintenance }).Build());
+        var c = new Genisis.Api.Controllers.MembershipController(db);
+        object? Value(Microsoft.AspNetCore.Mvc.IActionResult r) => Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(r).Value;
+        var found = Assert.IsAssignableFrom<System.Collections.IList>(Value(await c.Search("UBHA0077475", "number")));
+        Assert.NotEmpty(found);
+        const string member = "UBHA0077475*05";
+        foreach (var r in new[] { await c.Get(member), await c.Adjustments(member), await c.MemberHistory(member), await c.Account(member), await c.Notes(member) })
+            Assert.NotNull(Value(r));
+        var history = Value(await c.MemberHistory(member))!;
+        Assert.NotEmpty((System.Collections.IEnumerable)history.GetType().GetProperty("principal")!.GetValue(history)!);
     }
 }

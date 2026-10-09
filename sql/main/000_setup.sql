@@ -31,7 +31,8 @@ DECLARE @sql nvarchar(max) = N'';
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@MaintenanceDb) + N'.dbo.' + t + N';
 '
-FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory')) v (s, t);
+FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory'),
+    (N'Maint_MBMCrossReference', N'MBMCrossReference')) v (s, t);
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N').';
 GO

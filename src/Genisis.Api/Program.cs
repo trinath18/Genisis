@@ -46,8 +46,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
+    var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-    await context.Response.WriteAsJsonAsync(new { message = "Server error. Check the API log for details." });
+    await context.Response.WriteAsJsonAsync(new
+    {
+        message = error is Microsoft.Data.SqlClient.SqlException { Number: StoredProcedures.MissingProcedure }
+            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql on the main database (see sql/README.md)."
+            : "Server error. Check the API log for details.",
+    });
 }));
 
 app.UseDefaultFiles();

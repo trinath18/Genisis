@@ -71,6 +71,7 @@ public class PlanDatabaseTests
     public async Task Create_uses_plan_sequence_and_payor_defaults()
     {
         if (MainDb is null || Maintenance is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
         var db = new DbConnections(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:MainDb"] = MainDb, ["ConnectionStrings:Maintenance"] = Maintenance,
@@ -86,7 +87,7 @@ public class PlanDatabaseTests
             r.PayorCode = "ET";
             r.ClientPlan = "PLAN2";
             r.GroupCompany = "  genisis test co";
-            var created = await PlanService.SaveAsync(conn, tx, maintenanceDb, r, "TEST");
+            var created = await PlanService.SaveAsync(conn, tx, r, "TEST");
             var n = int.Parse(before!);
             Assert.Equal([$"G{n + 1:000}", $"G{n + 2:000}"], created.Select(c => c.Code));
             Assert.Equal((n + 2).ToString("000"), await conn.ExecuteScalarAsync<string>("SELECT PLNNoSeq FROM dbo.PLNSeq WHERE PLNSeqCode = 'G'", transaction: tx));

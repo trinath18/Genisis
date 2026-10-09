@@ -108,22 +108,11 @@ public class PremiumService(DbConnections db)
             {
                 ins = U(r.InsuredCode), hlt = U(r.HealthCode), pay = U(r.PayorCode), plan = U(r.PlanCode), age = band.AgeCode!.Trim(),
                 amount = band.Amount, supp = status is "B" or "C" ? band.SuppAmount : null, status,
-                effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, today = DateTime.Today,
+                effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode,
             };
-            if (await conn.ExecuteScalarAsync<int>(
-                    """
-                    SELECT COUNT(*) FROM dbo.PRM WITH (UPDLOCK, HOLDLOCK)
-                    WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND AGECode = @age AND PRMEffDate = @effective
-                      AND (@hlt = 'S' OR ISNULL(PAYCode, '') = ISNULL(@pay, ''))
-                    """, p, tx) > 0)
-                throw new PlanException($"{Duplicated} (age band {p.age})");
-            codes.Add(await conn.ExecuteScalarAsync<int>(
-                """
-                INSERT INTO dbo.PRM (INSCode, PAYCode, HLTCode, AGECode, PLNCode, SuppPrmStatus, PRMAmount, SuppPrmAmt, PRMEffDate, PRMVersion,
-                    PRMLastUpdateUser, PRMLastUpdateDate)
-                VALUES (@ins, @pay, @hlt, @age, @plan, @status, @amount, @supp, @effective, @version, @userCode, @today);
-                SELECT CAST(SCOPE_IDENTITY() AS int);
-                """, p, tx));
+            var (result, code) = await conn.ProcSingleAsync<(int Result, int? PremiumCode)>("genisis.Premium_Insert", p, tx);
+            if (result == StoredProcedures.Conflict) throw new PlanException($"{Duplicated} (age band {p.age})");
+            codes.Add(code!.Value);
         }
         return codes;
     }
@@ -133,54 +122,29 @@ public class PremiumService(DbConnections db)
     internal static async Task UpdateAsync(SqlConnection conn, SqlTransaction tx, int code, PremiumUpdateRequest r, string userCode)
     {
         if (PremiumValidator.Validate(r) is { } error) throw new PlanException(error);
-        var p = new { code, amount = r.Amount, supp = r.SuppAmount, effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, today = DateTime.Today };
-        if (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.PRM WITH (UPDLOCK, HOLDLOCK) WHERE PRMCode = @code", p, tx) == 0)
-            throw new PlanException("Record not found");
-        if (await conn.ExecuteScalarAsync<int>(
-                """
-                SELECT COUNT(*) FROM dbo.PRM o WITH (UPDLOCK, HOLDLOCK) JOIN dbo.PRM t ON t.PRMCode = @code
-                WHERE o.PRMCode <> @code AND o.INSCode = t.INSCode AND o.HLTCode = t.HLTCode AND o.PLNCode = t.PLNCode AND o.AGECode = t.AGECode
-                  AND o.PRMEffDate = @effective AND (t.HLTCode = 'S' OR ISNULL(o.PAYCode, '') = ISNULL(t.PAYCode, ''))
-                  AND (t.PRMEffDate IS NULL OR t.PRMEffDate <> @effective)
-                """, p, tx) > 0)
-            throw new PlanException(Duplicated);
-        await conn.ExecuteAsync(
-            """
-            UPDATE dbo.PRM SET PRMAmount = @amount, SuppPrmAmt = CASE WHEN SuppPrmStatus IN ('B','C') THEN @supp ELSE SuppPrmAmt END,
-                PRMEffDate = @effective, PRMVersion = @version, PRMLastUpdateUser = @userCode, PRMLastUpdateDate = @today
-            WHERE PRMCode = @code
-            """, p, tx);
+        var p = new { code, amount = r.Amount, supp = r.SuppAmount, effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode };
+        switch (await conn.ProcScalarAsync<int>("genisis.Premium_Update", p, tx))
+        {
+            case StoredProcedures.NotFound: throw new PlanException("Record not found");
+            case StoredProcedures.Conflict: throw new PlanException(Duplicated);
+        }
     }
 
     /// <summary>Desktop DeletePRM: refused while a member is on the row's insured/health/plan/age band (and payor unless health type S).</summary>
     internal static async Task DeleteAsync(SqlConnection conn, SqlTransaction tx, int code)
     {
-        if (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.PRM WITH (UPDLOCK, HOLDLOCK) WHERE PRMCode = @code", new { code }, tx) == 0)
-            throw new PlanException("Record not found");
-        if (await conn.ExecuteScalarAsync<int>(
-                """
-                SELECT COUNT(*) FROM (SELECT TOP 1 1 AS x FROM dbo.MBM m JOIN dbo.PRM t ON t.PRMCode = @code
-                    WHERE m.INSCode = t.INSCode AND m.HLTCode = t.HLTCode AND m.PLNCode = t.PLNCode AND m.AGECode = t.AGECode
-                      AND (t.HLTCode = 'S' OR m.PAYCode = t.PAYCode)) u
-                """, new { code }, tx) > 0)
-            throw new PlanException("This record cannot be deleted because it is used in Membership table!");
-        await conn.ExecuteAsync("DELETE FROM dbo.PRM WHERE PRMCode = @code", new { code }, tx);
+        switch (await conn.ProcScalarAsync<int>("genisis.Premium_Delete", new { code }, tx))
+        {
+            case StoredProcedures.NotFound: throw new PlanException("Record not found");
+            case StoredProcedures.Conflict: throw new PlanException("This record cannot be deleted because it is used in Membership table!");
+        }
     }
 
     public async Task<(List<PremiumRow> Rows, bool Truncated)> SearchAsync(string? insured, string? payor, string? health, string? age, string? plan)
     {
         await using var conn = db.MainDb();
-        var rows = (await conn.QueryAsync<PremiumRow>(
-            $"""
-            SELECT TOP ({SearchLimit + 1}) PRMCode AS Code, RTRIM(INSCode) AS InsuredCode, RTRIM(PAYCode) AS PayorCode, RTRIM(HLTCode) AS HealthCode,
-                RTRIM(AGECode) AS AgeCode, RTRIM(PLNCode) AS PlanCode, PRMAmount AS Amount, SuppPrmAmt AS SuppAmount, PRMEffDate AS EffectiveDate,
-                PRMVersion AS Version, SuppPrmStatus AS SuppStatus
-            FROM dbo.PRM
-            WHERE (@insured IS NULL OR INSCode = @insured) AND (@payor IS NULL OR PAYCode = @payor) AND (@health IS NULL OR HLTCode = @health)
-              AND (@age IS NULL OR AGECode = @age) AND (@plan IS NULL OR PLNCode = @plan)
-            ORDER BY PRMCode DESC
-            """,
-            new { insured = U(insured), payor = U(payor), health = U(health), age = U(age), plan = U(plan) })).ToList();
+        var rows = await conn.ProcQueryAsync<PremiumRow>("genisis.Premium_Search",
+            new { top = SearchLimit + 1, insured = U(insured), payor = U(payor), health = U(health), age = U(age), plan = U(plan) });
         var truncated = rows.Count > SearchLimit;
         return (truncated ? rows[..SearchLimit] : rows, truncated);
     }

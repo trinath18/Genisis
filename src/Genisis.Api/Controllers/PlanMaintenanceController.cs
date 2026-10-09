@@ -19,14 +19,13 @@ public class PlanMaintenanceController(DbConnections db, PlanService plans) : Co
     public async Task<IActionResult> Lookups()
     {
         await using var conn = db.MainDb();
-        var maintenanceDb = await db.MaintenanceDbNameAsync();
-        async Task<List<Option>> Options(string sql) => (await conn.QueryAsync<Option>(sql)).ToList();
+        using var grid = await conn.ProcMultipleAsync("genisis.PlanMaintenance_Lookups");
         return Ok(new
         {
-            healthCodes = await Options("SELECT RTRIM(HLTCode) AS Code, RTRIM(HLTDescription) AS Name FROM dbo.HLT ORDER BY HLTCode"),
-            payors = await Options("SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY WHERE PAYCode IS NOT NULL ORDER BY PAYCode"),
-            productCategories = await Options($"SELECT RTRIM(ProductCode) AS Code, RTRIM(ProductName) AS Name FROM {maintenanceDb}.dbo.ProductCategory ORDER BY ProductCode"),
-            policyWordings = (await conn.QueryAsync<string>($"SELECT RTRIM(PolicyWording) FROM {maintenanceDb}.dbo.PolicyCategory ORDER BY PolicyWording")).ToList(),
+            healthCodes = (await grid.ReadAsync<Option>()).ToList(),
+            payors = (await grid.ReadAsync<Option>()).ToList(),
+            productCategories = (await grid.ReadAsync<Option>()).ToList(),
+            policyWordings = (await grid.ReadAsync<string>()).ToList(),
             maxPlans = PlanValidator.MaxPlans,
         });
     }

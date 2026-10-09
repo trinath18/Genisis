@@ -16,7 +16,7 @@ public class AnnualLimitController(DbConnections db, AnnualLimitService limits) 
     public async Task<IActionResult> InsuredTypes()
     {
         await using var conn = db.MainDb();
-        return Ok(await conn.QueryAsync<PlanMaintenanceController.Option>("SELECT RTRIM(INSCode) AS Code, RTRIM(INSDescription) AS Name FROM dbo.INS ORDER BY INSCode"));
+        return Ok(await conn.ProcQueryAsync<PlanMaintenanceController.Option>("genisis.Lookup_InsuredTypes"));
     }
 
     [HttpGet]

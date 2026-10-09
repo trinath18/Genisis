@@ -70,8 +70,7 @@ public class AnnualLimitService(DbConnections db)
     internal static async Task<int> SaveAsync(SqlConnection conn, SqlTransaction tx, AnnualLimitRequest r, int? index, string userCode)
     {
         var plan = U(r.PlanCode);
-        var lifetimePlan = plan is not null && await conn.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM dbo.PLN WHERE PLNCode = @plan AND PLNLifeTimeStatus = 'Y'", new { plan }, tx) > 0;
+        var lifetimePlan = plan is not null && await conn.ProcScalarAsync<bool>("genisis.Plan_IsLifetime", new { plan }, tx);
         if (AnnualLimitValidator.Validate(r, lifetimePlan) is { } error) throw new PlanException(error);
 
         var status = U(r.SuppLimitStatus);
@@ -80,61 +79,22 @@ public class AnnualLimitService(DbConnections db)
             index, plan, ins = U(r.InsuredCode), hlt = U(r.HealthCode), pay = U(r.PayorCode),
             grp = string.IsNullOrWhiteSpace(r.GroupCompany) ? null : r.GroupCompany.Trim(),
             annual = r.AnnualLimit, lifetime = r.LifetimeLimit, status, supp = r.SuppLimit, suppLifetime = r.SuppLifetimeLimit,
-            effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, today = DateTime.Today, disability = r.DisabilityLimit ?? 0,
+            effective = r.EffectiveDate!.Value.Date, version = r.Version, userCode, disability = r.DisabilityLimit ?? 0,
         };
-        if (index is not null && await conn.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM dbo.AnnualLimit WITH (UPDLOCK, HOLDLOCK) WHERE AnnualIndex = @index", p, tx) == 0)
-            throw new PlanException("Record not found");
-        // Edits that keep their own key stay allowed, so rows that are already duplicated can still be maintained.
-        if (await conn.ExecuteScalarAsync<int>(
-                """
-                SELECT COUNT(*) FROM dbo.AnnualLimit WITH (UPDLOCK, HOLDLOCK)
-                WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan
-                  AND (@index IS NULL OR (AnnualIndex <> @index AND NOT EXISTS (
-                      SELECT 1 FROM dbo.AnnualLimit c WHERE c.AnnualIndex = @index AND c.INSCode = @ins AND c.HLTCode = @hlt AND c.PLNCode = @plan)))
-                """, p, tx) > 0)
-            throw new PlanException("Record Duplicated! Please Change The Corresponding Field");
-        if (index is null)
+        var (result, saved) = await conn.ProcSingleAsync<(int Result, int? AnnualIndex)>("genisis.AnnualLimit_Save", p, tx);
+        return result switch
         {
-            return await conn.ExecuteScalarAsync<int>(
-                """
-                INSERT INTO dbo.AnnualLimit (PLNCode, INSCode, HLTCode, PAYCode, GRPCompany, AnnLimit, LifeTimeLimit, SuppLimitStatus,
-                    SuppLimit, SuppLifeTimeLimit, AnnualEffDate, AnnualLimitVersion, AnnualLastUpdatedUser, AnnualLastUpdatedDate, DisabilityLmt)
-                VALUES (@plan, @ins, @hlt, @pay, @grp, @annual, @lifetime, @status,
-                    CASE WHEN @status IN ('B','C') THEN @supp END, CASE WHEN @status IN ('B','C') THEN @suppLifetime END,
-                    @effective, @version, @userCode, @today, @disability);
-                SELECT CAST(SCOPE_IDENTITY() AS int);
-                """, p, tx);
-        }
-        // Like the desktop, status A leaves any existing supplementary limits untouched.
-        var updated = await conn.ExecuteAsync(
-            """
-            UPDATE dbo.AnnualLimit SET PLNCode = @plan, INSCode = @ins, HLTCode = @hlt, PAYCode = @pay, GRPCompany = @grp, AnnLimit = @annual,
-                LifeTimeLimit = @lifetime, SuppLimitStatus = @status,
-                SuppLimit = CASE WHEN @status IN ('B','C') THEN @supp ELSE SuppLimit END,
-                SuppLifeTimeLimit = CASE WHEN @status IN ('B','C') THEN @suppLifetime ELSE SuppLifeTimeLimit END,
-                AnnualEffDate = @effective, AnnualLimitVersion = @version, AnnualLastUpdatedUser = @userCode,
-                AnnualLastUpdatedDate = @today, DisabilityLmt = @disability
-            WHERE AnnualIndex = @index
-            """, p, tx);
-        return updated == 0 ? throw new PlanException("Record not found") : index.Value;
+            StoredProcedures.NotFound => throw new PlanException("Record not found"),
+            StoredProcedures.Conflict => throw new PlanException("Record Duplicated! Please Change The Corresponding Field"),
+            _ => saved!.Value,
+        };
     }
 
     public async Task<(List<AnnualLimitRow> Rows, bool Truncated)> SearchAsync(string? plan, string? health, string? insured, string? payor, string? group)
     {
         await using var conn = db.MainDb();
-        var rows = (await conn.QueryAsync<AnnualLimitRow>(
-            $"""
-            SELECT TOP ({SearchLimit + 1}) AnnualIndex AS [Index], RTRIM(PLNCode) AS PlanCode, RTRIM(INSCode) AS InsuredCode, RTRIM(HLTCode) AS HealthCode,
-                RTRIM(PAYCode) AS PayorCode, GRPCompany AS GroupCompany, AnnLimit AS AnnualLimit, SuppLimit, AnnualEffDate AS EffectiveDate,
-                SuppLimitStatus, AnnualLimitVersion AS Version, LifeTimeLimit AS LifetimeLimit, SuppLifeTimeLimit AS SuppLifetimeLimit,
-                DisabilityLmt AS DisabilityLimit
-            FROM dbo.AnnualLimit
-            WHERE (@plan IS NULL OR PLNCode = @plan) AND (@health IS NULL OR HLTCode = @health) AND (@insured IS NULL OR INSCode = @insured)
-              AND (@payor IS NULL OR PAYCode = @payor) AND (@group IS NULL OR GRPCompany LIKE @group + '%')
-            ORDER BY AnnualIndex DESC
-            """,
-            new { plan = U(plan), health = U(health), insured = U(insured), payor = U(payor), group = U(group) is { } g ? SqlText.EscapeLike(g) : null })).ToList();
+        var rows = await conn.ProcQueryAsync<AnnualLimitRow>("genisis.AnnualLimit_Search",
+            new { top = SearchLimit + 1, plan = U(plan), health = U(health), insured = U(insured), payor = U(payor), group = U(group) is { } g ? SqlText.EscapeLike(g) : null });
         var truncated = rows.Count > SearchLimit;
         return (truncated ? rows[..SearchLimit] : rows, truncated);
     }
@@ -145,11 +105,11 @@ public class AnnualLimitService(DbConnections db)
         await using var conn = db.MainDb();
         await conn.OpenAsync();
         await using var tx = conn.BeginTransaction();
-        var plan = await conn.ExecuteScalarAsync<string?>("SELECT PLNCode FROM dbo.AnnualLimit WITH (UPDLOCK) WHERE AnnualIndex = @index", new { index }, tx)
-            ?? throw new PlanException("Record not found");
-        if (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM (SELECT TOP 1 1 AS x FROM dbo.MBM WHERE PLNCode = @plan) m", new { plan }, tx) > 0)
-            throw new PlanException("This record cannot be deleted because it is used in Member Table!");
-        await conn.ExecuteAsync("DELETE FROM dbo.AnnualLimit WHERE AnnualIndex = @index", new { index }, tx);
+        switch (await conn.ProcScalarAsync<int>("genisis.AnnualLimit_Delete", new { index }, tx))
+        {
+            case StoredProcedures.NotFound: throw new PlanException("Record not found");
+            case StoredProcedures.Conflict: throw new PlanException("This record cannot be deleted because it is used in Member Table!");
+        }
         await tx.CommitAsync();
     }
 }

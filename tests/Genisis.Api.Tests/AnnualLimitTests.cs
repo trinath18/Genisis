@@ -41,6 +41,7 @@ public class AnnualLimitTests
     public async Task Save_duplicate_update_round_trip_is_rolled_back()
     {
         if (MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
         var db = new DbConnections(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:MainDb"] = MainDb, ["ConnectionStrings:Maintenance"] = MainDb,

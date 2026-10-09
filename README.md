@@ -41,6 +41,11 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 All SQL is parameterised. Stored procedures that build dynamic SQL from a string argument (`SearchMBMHistory06`,
 `MBM_GetExcRemarks`) are not called; their queries are reproduced with parameters instead.
 
+## Database procedures
+
+The API uses stored procedures in a `genisis` schema. Before starting a new version, run `sql/genisis-main.sql` on the
+main database in SSMS. See [sql/README.md](sql/README.md).
+
 ## Single Windows exe (API + UI)
 
 ```

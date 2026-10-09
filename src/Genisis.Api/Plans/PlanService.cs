@@ -74,7 +74,7 @@ public class PlanService(DbConnections db)
         await tx.CommitAsync();
     }
 
-    /// <summary>Edits one plan row; plan code, health type and payor cannot change. ET/EC co-pay defaults still apply.</summary>
+    /// <summary>Edits one plan row; plan code (when supplied), health type and payor must match it. ET/EC co-pay defaults still apply.</summary>
     internal static async Task UpdateAsync(SqlConnection conn, SqlTransaction tx, int index, PlanCreateRequest r, string userCode)
     {
         static string? U(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim().ToUpperInvariant();
@@ -90,7 +90,7 @@ public class PlanService(DbConnections db)
         var result = await conn.ProcScalarAsync<int>("genisis.Plan_Update",
             new
             {
-                index, health, payor, code = health == "S" ? U(line?.Code) : null, description = U(line?.Description),
+                index, health, payor, code = U(line?.Code), description = U(line?.Description),
                 groupCompany = U(r.GroupCompany), topUp = U(r.TopUpStatus), annualLimit = U(r.AnnualLimitInd), premium = U(r.PremiumInd),
                 mco = U(r.McoInd), coPayment = etEc ? "Y" : U(r.CoPayment), meal = U(r.Meal), nursing = U(r.Nursing), tax = U(r.Tax),
                 mri = U(r.Mri), sof = U(r.Sof) ?? "", smPlan = U(r.SmPlan) ?? "", gracePeriod = U(r.SpecialGracePeriod),

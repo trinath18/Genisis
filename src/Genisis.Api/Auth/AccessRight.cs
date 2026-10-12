@@ -14,6 +14,9 @@ public static class AccessRight
     /// <summary>Maintenance > Plan uses the same position as Registration in the desktop menu.</summary>
     public const int PlanMaintenance = 1;
 
+    /// <summary>Maintenance > Benefits also checks position 1 in the desktop menu (mnuBenefits_Click).</summary>
+    public const int BenefitsMaintenance = 1;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

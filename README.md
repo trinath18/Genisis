@@ -41,6 +41,24 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 All SQL is parameterised. Stored procedures that build dynamic SQL from a string argument (`SearchMBMHistory06`,
 `MBM_GetExcRemarks`) are not called; their queries are reproduced with parameters instead.
 
+## Maintenance > Benefits
+
+`/api/maintenance/benefits` replaces `frmMaintenanceBenefits` (same menu right as Plan, position 1).
+
+| Endpoint | VB6 / table |
+| --- | --- |
+| `GET lookups` | health, insured, category, sub category, payor and group company lists |
+| `GET/POST categories`, `PUT/DELETE categories/{code}` | Category tab, `BNFCategory` |
+| `GET/POST sub-categories`, `PUT/DELETE sub-categories/{code}` | Sub Category tab, `BNFSubCat` |
+| `GET entry`, `POST entry` | Benefit Entry tab: one `BNF` row per sub category line that has an RM per disability |
+| `GET/POST/PUT/DELETE rows` | Benefits Listing tab: one `BNF` row, keyed by sub category / insured / plan / effective date |
+
+Differences from the desktop (desktop bugs): Delete on the listing removes only the selected row (the desktop deleted the
+sub category's rows for every plan) and is refused only while a member is on that row's plan / health / insured; adding a
+row is refused only when that exact key exists (the desktop refused any new row for a plan / insured / date that already had
+one); RM per disability is saved on the listing and is the required amount (the desktop required days and RM / day but
+never saved RM per disability); the effective date version uses the full plan code.
+
 ## Database procedures
 
 The API uses stored procedures in a `genisis` schema. Before starting a new version, run `sql/genisis-main.sql` on the

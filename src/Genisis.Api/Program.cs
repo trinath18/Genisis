@@ -17,6 +17,7 @@ builder.Services.AddScoped<Genisis.Api.Plans.SpecialNoteService>();
 builder.Services.AddScoped<Genisis.Api.Plans.BenefitLimitService>();
 builder.Services.AddScoped<Genisis.Api.Plans.MgmtFeeService>();
 builder.Services.AddScoped<Genisis.Api.Plans.McoFeeService>();
+builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)

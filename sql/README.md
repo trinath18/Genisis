@@ -15,6 +15,7 @@ against the same database.
 | `main/090_code_lists.sql` | Maintenance > Plan, Health Type, Insured Type, Product Category, Supp. MCO Status and Special Note tabs |
 | `main/100_benefit_mgmt_fee.sql` | Maintenance > Plan, Annual Limit (Benefit) and Case Mgmt. Fee tabs |
 | `main/110_mco_fee.sql` | Maintenance > Plan, MCO Fee tab |
+| `main/120_benefits.sql` | Maintenance > Benefits: Category, Sub Category, Benefit Entry and Benefits Listing tabs |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

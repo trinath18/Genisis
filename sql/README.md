@@ -12,6 +12,7 @@ against the same database.
 | `main/030_premium.sql` | Maintenance > Plan, Premium tab |
 | `main/040_membership.sql` | Membership > Enquiry |
 | `main/050_registration_numbers.sql` … `main/080_registration_save.sql` | Membership > Registration |
+| `main/090_code_lists.sql` | Maintenance > Plan, Health Type, Insured Type, Product Category, Supp. MCO Status and Special Note tabs |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

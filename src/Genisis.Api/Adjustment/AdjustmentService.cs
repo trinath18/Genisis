@@ -1,4 +1,5 @@
 using System.Data;
+using Dapper;
 using Genisis.Api.Data;
 using Genisis.Api.Membership;
 using Genisis.Api.Registration;
@@ -185,6 +186,9 @@ public sealed class AdjustmentService(DbConnections db, ILogger<AdjustmentServic
     /// <summary>The save inside a caller-owned transaction (used by the tests, which roll back).</summary>
     internal static async Task<AdjustmentResult?> SaveAsync(SqlConnection conn, SqlTransaction tx, string membershipNo, AdjustmentRequest request, string userCode)
     {
+        await conn.ExecuteScalarAsync<string>(
+            "SELECT MBMNumber FROM dbo.MBM WITH (UPDLOCK, HOLDLOCK) WHERE MBMNumber = @number",
+            new { number = membershipNo.Trim() }, tx);
         var current = await LoadAsync(conn, tx, membershipNo);
         if (current is null) return null;
         var dates = await conn.ProcFirstOrDefaultAsync<AdjustmentDateRanges>("genisis.Adjustment_ValidDates", tx: tx) ?? AdjustmentDateRanges.Unbounded;

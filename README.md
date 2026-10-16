@@ -23,7 +23,51 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 
 `POST /api/auth/login` checks `USR` in the Maintenance database (active users only) with the same `Crypt` algorithm as
 `frmLogin.frm`, so existing desktop passwords work. Menu rights come from `USR.USRAccess` exactly like the VB6
-`CheckAccess` function (position 1 = Membership Registration, 2 = Adjustment, 3 = Enquiry).
+`CheckAccess` function. Positions used by the web screens (`Auth/AccessRight.cs`):
+
+| Position | Screen |
+| --- | --- |
+| 1 | Membership > Registration; also the Maintenance screens (Plan, Benefits, Entity, Accounts), as in the desktop |
+| 2 | Membership > Adjustment |
+| 3 | Membership > Enquiry |
+
+Every endpoint checks its position on the server (`[RequireAccess]`); hiding a menu item in the UI is not the protection.
+
+## Architecture
+
+The API follows the layering of the existing screens (Plans, Registration), sized to this project rather than split into
+separate projects:
+
+| Layer | Where | Responsibility |
+| --- | --- | --- |
+| HTTP | `Controllers/` | Routing, access check, request validation, status codes. No SQL and no business rules. |
+| Validation | `<Feature>/<Feature>Validator.cs` | Pure required-field / length / format checks, in the desktop's order and with its messages. |
+| Business rules | `<Feature>/*Rules.cs` | Pure calculations (fees, refunds, pro-rating, expiry). Unit tested without a database. |
+| Use cases | `<Feature>/<Feature>Service.cs` behind `I<Feature>Service` | Orchestration and transactions. |
+| Data | `sql/main/*.sql` (`genisis.*` procedures) | All SQL. C# only calls procedures with typed parameters. |
+
+- **Constants:** code values,
+  column sizes and messages (`*Constants.cs`) and SQL error numbers (`Common/Errors/SqlErrorNumbers.cs`)
+  are named; no bare literals in the logic.
+- **Data access:** Dapper and stored procedures, not Entity Framework: the schema, procedures and triggers belong to the
+  desktop application and are shared with it, so the API wraps them rather than owning migrations.
+- **Errors:** one format for every endpoint (below). Expected rule failures throw a `BusinessRuleException` subclass
+  (`BenefitException`, `MmaException`) and become 400; missing records are returned
+  as 404 without exceptions.
+
+## Error responses
+
+Errors are RFC 7807 Problem Details (`application/problem+json`), produced by `Common/Errors/ProblemDetailsExceptionHandler.cs`
+and `Problems.Invalid` (validator failures):
+
+```json
+{ "title": "Request validation failed", "status": 400, "detail": "Please Enter Policy No!", "message": "Please Enter Policy No!", "traceId": "00-…" }
+```
+
+`message` repeats `detail` for the UI. Values longer than a column return 400 with a generic message; a closed database
+encryption key or missing `genisis` procedures return 500 with an instruction for the DBA; a database timeout returns 504;
+anything else returns 500 "Server error. Check the API log for details." and is logged with the trace id. SQL text, stack
+traces and file paths are never returned.
 
 ## Membership Enquiry (read-only)
 
@@ -37,6 +81,8 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 | `GET /api/membership/{mbmNumber}/member-history` | `SearchMBMHistory06` (rewritten with parameters) |
 | `GET /api/membership/{mbmNumber}/account` | `VIEW_MBMTotal_Summary` |
 | `GET /api/membership/{mbmNumber}/notes` | `View_Get_MemberExclusion`, `View_Get_MemberRemarks` |
+
+The desktop's Print MBM / Print Report / Print History buttons (Crystal Reports) are not migrated.
 
 All SQL is parameterised. Stored procedures that build dynamic SQL from a string argument (`SearchMBMHistory06`,
 `MBM_GetExcRemarks`) are not called; their queries are reproduced with parameters instead.
@@ -58,6 +104,22 @@ sub category's rows for every plan) and is refused only while a member is on tha
 row is refused only when that exact key exists (the desktop refused any new row for a plan / insured / date that already had
 one); RM per disability is saved on the listing and is the required amount (the desktop required days and RM / day but
 never saved RM per disability); the effective date version uses the full plan code.
+
+## Maintenance > Entity and Accounts
+
+Both use menu position 1 and the maintenance database tables `MMAProcedures`, `MMAFees` and the view `VIEW_MMA_Schedule`
+(through `genisis.Maint_*` synonyms).
+
+| Endpoint | VB6 |
+| --- | --- |
+| `GET/POST /api/maintenance/entity/procedures`, `PUT/DELETE .../procedures/{index}` | `frmMMA`, Procedures tab |
+| `GET/POST /api/maintenance/entity/fees`, `PUT/DELETE .../fees/{index}` | `frmMMA`, Look Up Table tab |
+| `GET /api/maintenance/accounts/schedule?code=&direction=next\|prev\|find` | `frmMMA13thSchDesc` (Prev / Next; `find` jumps to a code) |
+
+Differences from the desktop: a fee row needs at least one category and cannot be deleted while a procedure uses its surgeon
+or anaesthetist category (the desktop saved empty rows and deleted without a check); OPCS Narrative is limited to the
+table's 400 characters (the desktop box allowed 3000, which the database rejected); the Accounts MMA surgeon fee is the
+`MMAFees` fee for the procedure's category (the desktop showed the view's `SurgeonsFees` column, which is the 14th Schedule fee).
 
 ## Database procedures
 

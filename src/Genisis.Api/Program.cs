@@ -1,4 +1,5 @@
 using Genisis.Api.Auth;
+using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -17,7 +18,8 @@ builder.Services.AddScoped<Genisis.Api.Plans.SpecialNoteService>();
 builder.Services.AddScoped<Genisis.Api.Plans.BenefitLimitService>();
 builder.Services.AddScoped<Genisis.Api.Plans.MgmtFeeService>();
 builder.Services.AddScoped<Genisis.Api.Plans.McoFeeService>();
-builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
+builder.Services.AddScoped<Genisis.Api.Benefits.IBenefitService, Genisis.Api.Benefits.BenefitService>();
+builder.Services.AddScoped<Genisis.Api.Mma.IMmaService, Genisis.Api.Mma.MmaService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
@@ -38,6 +40,8 @@ builder.Services.AddAuthorization(options =>
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -50,17 +54,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
-{
-    var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-    await context.Response.WriteAsJsonAsync(new
-    {
-        message = error is Microsoft.Data.SqlClient.SqlException { Number: StoredProcedures.MissingProcedure }
-            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql and sql/genisis-maintenance.sql (see sql/README.md)."
-            : "Server error. Check the API log for details.",
-    });
-}));
+app.UseExceptionHandler();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

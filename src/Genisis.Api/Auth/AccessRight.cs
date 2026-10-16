@@ -17,6 +17,10 @@ public static class AccessRight
     /// <summary>Maintenance > Benefits also checks position 1 in the desktop menu (mnuBenefits_Click).</summary>
     public const int BenefitsMaintenance = 1;
 
+    /// <summary>Maintenance > Entity (mnuAgent_Click) and Maintenance > Accounts (MaintenanceAccounts_Click) check position 1 too.</summary>
+    public const int EntityMaintenance = 1;
+    public const int AccountsMaintenance = 1;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 
@@ -33,6 +37,6 @@ public class RequireAccessAttribute(int position) : Attribute, IAuthorizationFil
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true) return;
         if (!AccessRight.Has(context.HttpContext.User, position))
-            context.Result = new ObjectResult(new { message = "Access Denied!" }) { StatusCode = StatusCodes.Status403Forbidden };
+            context.Result = new ObjectResult(Genisis.Api.Common.Errors.Problems.Create(context.HttpContext, StatusCodes.Status403Forbidden, "Forbidden", "Access Denied!")) { StatusCode = StatusCodes.Status403Forbidden };
     }
 }

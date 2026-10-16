@@ -313,7 +313,7 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
                 {
                     basicPremium = supplementaryPremium.SuppPrmAmt ?? 0;
                     var rate = await conn.ProcFirstOrDefaultAsync<PremiumRates>("genisis.Registration_Premium",
-                        new { ins = FirstLetter(Stored.InsuredType), hlt = health, plan = Code(Stored.PlanCode), ageCode, eff = effective, pay = payor }, tx);
+                        new { ins = FirstLetter(Stored.InsuredType), hlt = health, plan, ageCode, eff = effective, pay = payor }, tx);
                     premium = FeeRules.ProRateMoney(effective, expiry, LegacyRules.Money(rate?.SuppPrmAmt ?? 0));
                     if (discount is not null)
                     {

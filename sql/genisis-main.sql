@@ -3136,7 +3136,7 @@ CREATE OR ALTER PROCEDURE genisis.CaseAdj_LGList
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(CASENo) AS CaseNo, LGNo, LGDate, LGAmt, RTRIM(LGIssuedBy) AS LGIssuedBy, RTRIM(LGRemark) AS LGRemark,
+    SELECT RTRIM(CASENo) AS CaseNo, CAST(LGNo AS int) AS LGNo, LGDate, LGAmt, RTRIM(LGIssuedBy) AS LGIssuedBy, RTRIM(LGRemark) AS LGRemark,
         RTRIM(LGStatus) AS LGStatus, RTRIM(LGUserTime) AS LGUserTime, RTRIM(LGSystemTime) AS LGSystemTime,
         RTRIM(LGPurpose) AS LGPurpose, RTRIM(LGIndicator) AS LGIndicator
     FROM genisis.Maint_CASLG WHERE CASENo = @cas ORDER BY LGNo;
@@ -3150,7 +3150,7 @@ CREATE OR ALTER PROCEDURE genisis.CaseAdj_GLContext
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT LGNo, RTRIM(LGPurpose) AS LGPurpose, RTRIM(LGIndicator) AS LGIndicator
+    SELECT CAST(LGNo AS int) AS LGNo, RTRIM(LGPurpose) AS LGPurpose, RTRIM(LGIndicator) AS LGIndicator
     FROM genisis.Maint_CASLG WHERE CASENo = @cas ORDER BY LGNo;
 
     SELECT TOP (1) CaseDate, RTRIM(CaseTime) AS CaseTime FROM genisis.Maint_tblRecord WHERE CaseNo = @cas ORDER BY RecId DESC;

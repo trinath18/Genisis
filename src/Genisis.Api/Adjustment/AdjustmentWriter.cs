@@ -95,13 +95,10 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
             var id = AdjustmentRules.CoverId(person.CoverId);
             var personEffective = person.EffectiveDate ?? effective;
             var personExpiry = person.ExpiryDate ?? expiry;
-            if (status == SupplementaryCharge.FirstSupplementaryOnly)
-            {
-                if (id != CoverIds.FirstSupplementary) break;
-                await RefundAsync(id, personEffective, personExpiry, person.Premium ?? 0, FeeRules.VbRound(person.Mco ?? 0), roundUp, shown);
-            }
-            if (status == SupplementaryCharge.Everyone || (status == SupplementaryCharge.FromCoverId && string.CompareOrdinal(id, chargeFrom) >= 0))
-                await RefundAsync(id, personEffective, personExpiry, person.Premium ?? 0, FeeRules.VbRound(person.Mco ?? 0), roundUp, shown);
+            var mcoCharged = RegistrationService.Charged(status, id, chargeFrom);
+            var premium = person.Premium ?? 0;
+            if (mcoCharged || premium != 0)
+                await RefundAsync(id, personEffective, personExpiry, premium, mcoCharged ? FeeRules.VbRound(person.Mco ?? 0) : 0, roundUp, shown);
         }
     }
 
@@ -126,9 +123,11 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
                 var rates = await conn.ProcFirstOrDefaultAsync<McoRates>("genisis.Registration_Mco",
                     new { ins = Code(Stored.InsuredType), hlt = FirstLetter(Stored.HealthCode), plan = Code(plan), eff = from }, tx);
                 var status = Code(rates?.SuppMcoStatus) is { Length: > 0 } s ? s : SupplementaryCharge.PrincipalOnly;
-                if ((status == SupplementaryCharge.FirstSupplementaryOnly && id == CoverIds.FirstSupplementary)
-                    || status is SupplementaryCharge.Everyone or SupplementaryCharge.FromCoverId)
-                    await RefundAsync(id, from, to, person.Premium ?? 0, person.Mco ?? 0, roundUp, Stored);
+                var mcoCharged = (status == SupplementaryCharge.FirstSupplementaryOnly && id == CoverIds.FirstSupplementary)
+                    || status is SupplementaryCharge.Everyone or SupplementaryCharge.FromCoverId;
+                var premium = person.Premium ?? 0;
+                if (mcoCharged || premium != 0)
+                    await RefundAsync(id, from, to, premium, mcoCharged ? person.Mco ?? 0 : 0, roundUp, Stored);
             }
             await SetCoveredAdjustmentAsync(MemberStatus.Cancelled, id, save.EndorsementEffectiveDate);
         }

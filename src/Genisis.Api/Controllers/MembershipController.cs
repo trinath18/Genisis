@@ -1,7 +1,9 @@
 using System.Data;
 using Dapper;
 using Genisis.Api.Auth;
+using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
+using Genisis.Api.Membership;
 using Microsoft.AspNetCore.Mvc;
 using static Genisis.Api.Data.RowMapper;
 
@@ -11,7 +13,7 @@ namespace Genisis.Api.Controllers;
 [ApiController]
 [Route("api/membership")]
 [RequireAccess(AccessRight.MembershipEnquiry)]
-public class MembershipController(DbConnections db) : ControllerBase
+public class MembershipController(DbConnections db, IEnquiryTabsService tabs) : ControllerBase
 {
     private const int MaxSearchRows = 200;
 
@@ -130,6 +132,57 @@ public class MembershipController(DbConnections db) : ControllerBase
         var exclusions = await grid.ReadAsync();
         var remarks = await grid.ReadAsync();
         return Ok(new { exclusions = ToDictionaries(exclusions), remarks = ToDictionaries(remarks) });
+    }
+
+    private ObjectResult MembershipNotFound() =>
+        new(Problems.Create(HttpContext, StatusCodes.Status404NotFound, "Not found", "Membership not found.")) { StatusCode = StatusCodes.Status404NotFound };
+
+    /// <summary>HIS Benefits tab: the principal's schedule, plus the supplementaries' schedule when they are on another plan.</summary>
+    [HttpGet("{mbmNumber}/benefits")]
+    public async Task<ActionResult<BenefitSchedules>> GetBenefits(string mbmNumber, CancellationToken cancellationToken) =>
+        await tabs.GetBenefitsAsync(mbmNumber, cancellationToken) is { } result ? Ok(result) : MembershipNotFound();
+
+    [HttpGet("{mbmNumber}/account-history")]
+    public async Task<IActionResult> GetAccountHistory(string mbmNumber, CancellationToken cancellationToken) =>
+        await tabs.GetAccountHistoryAsync(mbmNumber, cancellationToken) is { } rows ? Ok(rows) : MembershipNotFound();
+
+    [HttpGet("{mbmNumber}/fees")]
+    public async Task<IActionResult> GetFees(string mbmNumber, CancellationToken cancellationToken) =>
+        await tabs.GetFeesAsync(mbmNumber, cancellationToken) is { } row ? Ok(row) : MembershipNotFound();
+
+    [HttpGet("{mbmNumber}/non-disclosure")]
+    public async Task<IActionResult> GetNonDisclosure(string mbmNumber, CancellationToken cancellationToken) =>
+        await tabs.GetNonDisclosureAsync(mbmNumber, cancellationToken) is { } rows ? Ok(rows) : MembershipNotFound();
+
+    [HttpGet("{mbmNumber}/policy-terms")]
+    public async Task<IActionResult> GetPolicyTerms(string mbmNumber, CancellationToken cancellationToken)
+    {
+        var (found, terms) = await tabs.GetPolicyTermsAsync(mbmNumber, cancellationToken);
+        return found ? Ok(terms) : MembershipNotFound();
+    }
+
+    [HttpGet("{mbmNumber}/lifetime-limits")]
+    public async Task<IActionResult> GetLifetimeLimits(string mbmNumber, CancellationToken cancellationToken) =>
+        Ok(await tabs.GetLifetimeLimitsAsync(mbmNumber, cancellationToken));
+
+    [HttpGet("{mbmNumber}/takeover-claims")]
+    public async Task<IActionResult> GetTakeoverClaims(string mbmNumber, CancellationToken cancellationToken) =>
+        await tabs.GetTakeoverClaimsAsync(mbmNumber, cancellationToken) is { } rows ? Ok(rows) : MembershipNotFound();
+
+    [HttpGet("{mbmNumber}/worksheets")]
+    public async Task<IActionResult> GetWorksheets(string mbmNumber, CancellationToken cancellationToken) =>
+        Ok(await tabs.GetWorksheetsAsync(mbmNumber, cancellationToken));
+
+    /// <summary>Policy Wording tab: image / PDF files in Documents:PolicyWordingPath\&lt;plan's policy wording&gt; (desktop addTheFiles).</summary>
+    [HttpGet("{mbmNumber}/policy-wording")]
+    public async Task<ActionResult<PolicyWordingList>> GetPolicyWording(string mbmNumber, CancellationToken cancellationToken) =>
+        Ok(await tabs.GetPolicyWordingAsync(mbmNumber, cancellationToken));
+
+    [HttpGet("{mbmNumber}/policy-wording/{file}")]
+    public async Task<IActionResult> GetPolicyWordingFile(string mbmNumber, string file, CancellationToken cancellationToken)
+    {
+        var found = await tabs.FindPolicyWordingFileAsync(mbmNumber, file, cancellationToken);
+        return found is null ? NotFound() : PhysicalFile(found.Path, found.ContentType, found.FileName);
     }
 
     private static Task<string?> GetIc(Microsoft.Data.SqlClient.SqlConnection conn, string mbmNumber) =>

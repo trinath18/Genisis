@@ -1,4 +1,5 @@
 using Genisis.Api.Auth;
+using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -17,6 +18,8 @@ builder.Services.AddScoped<Genisis.Api.Plans.SpecialNoteService>();
 builder.Services.AddScoped<Genisis.Api.Plans.BenefitLimitService>();
 builder.Services.AddScoped<Genisis.Api.Plans.MgmtFeeService>();
 builder.Services.AddScoped<Genisis.Api.Plans.McoFeeService>();
+builder.Services.AddScoped<Genisis.Api.Benefits.IBenefitService, Genisis.Api.Benefits.BenefitService>();
+builder.Services.AddScoped<Genisis.Api.Mma.IMmaService, Genisis.Api.Mma.MmaService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();
@@ -42,6 +45,8 @@ builder.Services.AddAuthorization(options =>
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

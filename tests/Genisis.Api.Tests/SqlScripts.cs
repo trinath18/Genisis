@@ -31,7 +31,8 @@ public static class SqlScripts
         foreach (var file in Directory.GetFiles(Path.Combine(Root, "sql", part), "*.sql").Order(StringComparer.Ordinal))
             sb.Append($"\n-- ===== {part}/{Path.GetFileName(file)} =====\n").Append(Normalize(File.ReadAllText(file)).TrimEnd('\n')).Append('\n');
         sb.Append("\nPRINT N'Done.';\nGO\nSET NOEXEC OFF;\nGO\n");
-        return sb.ToString();
+        // The header above is a raw string literal, so it takes this source file's line endings (CRLF on Windows checkouts).
+        return Normalize(sb.ToString());
     }
 
     public static string Normalize(string s) => s.Replace("\r\n", "\n");

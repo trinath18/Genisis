@@ -30,6 +30,7 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 | 1 | Membership > Registration; also the Maintenance screens (Plan, Benefits, Entity, Accounts), as in the desktop |
 | 2 | Membership > Adjustment |
 | 3 | Membership > Enquiry |
+| 4 | Membership > Upload Bordx |
 
 Every endpoint checks its position on the server (`[RequireAccess]`); hiding a menu item in the UI is not the protection.
 
@@ -43,16 +44,16 @@ separate projects:
 | HTTP | `Controllers/` | Routing, access check, request validation, status codes. No SQL and no business rules. |
 | Validation | `<Feature>/<Feature>Validator.cs` | Pure required-field / length / format checks, in the desktop's order and with its messages. |
 | Business rules | `<Feature>/*Rules.cs`, `Membership/FeeRules.cs` | Pure calculations (fees, refunds, pro-rating, expiry). Unit tested without a database. |
-| Use cases | `<Feature>/<Feature>Service.cs` behind `I<Feature>Service` | Orchestration and transactions. Larger flows are split (e.g. Adjustment: service, writer, query service). |
+| Use cases | `<Feature>/<Feature>Service.cs` behind `I<Feature>Service` | Orchestration and transactions. Larger flows are split (e.g. Bordx: verifier, uploader, member importer, ASCII exporter; Adjustment: service, writer, query service). |
 | Data | `sql/main/*.sql` (`genisis.*` procedures) | All SQL. C# only calls procedures with typed parameters. |
 
-- **Constants:** code values (`Membership/MembershipCodes.cs`, `Adjustment/AdjustmentConstants.cs`),
-  column sizes and messages (`*Constants.cs`) and SQL error numbers (`Common/Errors/SqlErrorNumbers.cs`)
+- **Constants:** code values (`Membership/MembershipCodes.cs`, `Adjustment/AdjustmentConstants.cs`), the Bordx column layout
+  (`Bordx/BordxLayout.cs`), column sizes and messages (`*Constants.cs`) and SQL error numbers (`Common/Errors/SqlErrorNumbers.cs`)
   are named; no bare literals in the logic.
 - **Data access:** Dapper and stored procedures, not Entity Framework: the schema, procedures and triggers belong to the
   desktop application and are shared with it, so the API wraps them rather than owning migrations.
 - **Errors:** one format for every endpoint (below). Expected rule failures throw a `BusinessRuleException` subclass
-  (`AdjustmentException`, `BenefitException`, `MmaException`) and become 400; missing records are returned
+  (`BordxException`, `AdjustmentException`, `BenefitException`, `MmaException`) and become 400; missing records are returned
   as 404 without exceptions.
 
 ## Error responses
@@ -112,6 +113,23 @@ Differences from the desktop: everything (main, maintenance and clinical writes)
 plan's round-up setting (the desktop only rounded if a fee field had been edited first); a name / date of birth change on a
 renewal renames only the base number and its `*nn` renewals (the desktop matched `LIKE '%base%'`); a supplementary's full
 relationship code is stored (the desktop kept the first letter); Add / Cancel / Delete Supplementary need at least one person.
+
+## Membership > Upload Bordx
+
+`/api/membership/bordx` replaces `FrmNewMBMEndt10` (menu position 4) for the standard layout and its ZURICH / TAK variant;
+payors with an AXA layout (`PAY.BordxFormatType` 4 / 5) are refused. `verify` and `upload` take the file as multipart form
+data; `ascii` returns the Generate ASCII file. Uploads go through the desktop's own UploadDb staging (`TmpUpload_*`,
+then `SaveUploadDate`) inside one transaction with a per-run staging key, so a failure or Stop imports nothing.
+
+Differences from the desktop: one transaction for the whole file (the desktop committed member by member); renewal /
+reinstatement files (header status R / I) are only processed for ZURICH / TAK, as in the desktop, but no batch number is
+consumed for other payors; the reinstatement row is written with its GST columns (the desktop's insert had more values than
+columns and failed); the cancellation history row carries the member's name (the desktop wrote a blank name); a
+supplementary's blank clinical dates fall back to the principal's (the desktop's test was inverted); Generate ASCII
+writes each member's own employee no., group company and dates (the desktop carried them over from the previous member
+when blank) and matches each supplementary's payor numbers by cover ID. The current `TmpUpload_MBM_HIS`,
+`TmpUpload_MBMCovPersonsNew` and `TmpUpload_MBMOthers_2015` have required parameters the desktop does not pass (so the
+desktop upload fails against this database); the API sends them blank.
 
 ## Maintenance > Benefits
 

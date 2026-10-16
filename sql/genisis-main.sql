@@ -56,7 +56,13 @@ FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCate
     (N'Maint_MBMSEQRenewHistory', N'MBMSEQRenewHistory'), (N'Maint_CTY', N'CTY'), (N'Maint_SuppMCOStatus', N'SuppMCOStatus'), (N'Maint_MBMSEQ', N'MBMSEQ'), (N'Maint_CaseMgmtFee', N'CaseMgmtFee'),
     (N'Maint_MMAProcedures', N'MMAProcedures'), (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'),
     (N'Maint_DiscPlan', N'DiscPlan'), (N'Maint_MCOPending', N'MCOPending'), (N'Maint_CASCrossReference', N'CASCrossReference'),
-    (N'Maint_Renewal', N'Renewal')) v (s, t);
+    (N'Maint_Renewal', N'Renewal'),
+    (N'Maint_CAQ2013', N'CAQ2013'), (N'Maint_SpecApprove', N'SpecApprove'), (N'Maint_REPSelection', N'REPSelection'),
+    (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'),
+    (N'Maint_CASLG', N'CASLG'), (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'),
+    (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'), (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'),
+    (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
+    (N'Maint_SearchPendingReason', N'SearchPendingReason')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -65,15 +71,6 @@ FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
 ';
-    (N'Maint_MMAProcedures', N'MMAProcedures'), (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule')) v (s, t);
-    (N'Maint_CAQ2013', N'CAQ2013'), (N'Maint_CASCrossReference', N'CASCrossReference'), (N'Maint_SpecApprove', N'SpecApprove'),
-    (N'Maint_REPSelection', N'REPSelection'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'),
-    (N'Maint_MMAProcedures', N'MMAProcedures'),
-    (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'),
-    (N'Maint_CASLG', N'CASLG'), (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'),
-    (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'), (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'),
-    (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason')) v (s, t);
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + @CisDb
     + N', worksheet database: ' + @WorksheetDb + N').';
@@ -1577,22 +1574,6 @@ BEGIN
 END
 GO
 
--- ===== main/130_mma.sql =====
--- Maintenance > Entity (legacy frmMMA: Procedures and Look Up Table tabs) and Maintenance > Accounts (legacy frmMMA13thSchDesc).
--- The tables live in the maintenance database: genisis.Maint_MMAProcedures, genisis.Maint_MMAFees, genisis.Maint_MMASchedule (view).
--- Text filters are LIKE fragments escaped by the caller. Only the columns the desktop maintains are written.
-
-CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Search
-    @top int, @bodyPart nvarchar(4000) = NULL, @code nvarchar(4000) = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT TOP (@top) ProcIndex AS [Index], RTRIM(ProcMainBPCode) AS BodyPart, RTRIM(OPCSCode) AS Code, OPCSNarrative AS Narrative,
-        RTRIM(ProcSurgCat) AS SurgeonCategory, RTRIM(ProcAnaesCat) AS AnaesthetistCategory, RTRIM(ProcPart) AS Part,
-        RTRIM(PartACost) AS PartACost, RTRIM(ProcPageNo) AS PageNo
-    FROM genisis.Maint_MMAProcedures
-    WHERE (@bodyPart IS NULL OR ProcMainBPCode LIKE N'%' + @bodyPart + N'%') AND (@code IS NULL OR OPCSCode LIKE N'%' + @code + N'%')
-    ORDER BY ProcMainBPCode, OPCSCode, ProcIndex
 -- ===== main/130_case_enquiry.sql =====
 -- Case > Enquiry and Case > Tracking (read-only).
 -- Replaces the legacy Case_Inquiry / CaseTracking dispatchers, which appended a raw @strAppend
@@ -1634,52 +1615,6 @@ BEGIN
 END
 GO
 
--- @index NULL adds a procedure. Result: 0 saved, 1 record not found.
-CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Save
-    @index int = NULL, @bodyPart nvarchar(4000), @code nvarchar(4000), @narrative nvarchar(4000), @surgeonCategory nvarchar(4000),
-    @anaesthetistCategory nvarchar(4000), @pageNo nvarchar(4000), @partACost nvarchar(4000), @part nvarchar(4000), @userCode nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
-    IF @index IS NULL
-    BEGIN
-        INSERT INTO genisis.Maint_MMAProcedures (ProcMainBPCode, OPCSCode, OPCSNarrative, ProcSurgCat, ProcAnaesCat, ProcPageNo, PartACost, ProcPart,
-            ProcLastUpdateUser, ProcLastUpdateDate)
-        OUTPUT 0 AS Result, inserted.ProcIndex AS [Index]
-        VALUES (@bodyPart, @code, @narrative, @surgeonCategory, @anaesthetistCategory, @pageNo, @partACost, @part, @userCode, @today);
-        RETURN;
-    END
-    UPDATE genisis.Maint_MMAProcedures SET ProcMainBPCode = @bodyPart, OPCSCode = @code, OPCSNarrative = @narrative, ProcSurgCat = @surgeonCategory,
-        ProcAnaesCat = @anaesthetistCategory, ProcPageNo = @pageNo, PartACost = @partACost, ProcPart = @part,
-        ProcLastUpdateUser = @userCode, ProcLastUpdateDate = @today
-    WHERE ProcIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
-END
-GO
-
--- Result: 0 deleted, 1 record not found.
-CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Delete
-    @index int
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DELETE FROM genisis.Maint_MMAProcedures WHERE ProcIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
-END
-GO
-
-CREATE OR ALTER PROCEDURE genisis.MmaFee_Search
-    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT FeeIndex AS [Index], RTRIM(SurgeonsCat) AS SurgeonCategory, SurgeonsFees AS SurgeonFee, RTRIM(AnaesthetistsCat) AS AnaesthetistCategory,
-        AnaesthetistsFees AS AnaesthetistFee
-    FROM genisis.Maint_MMAFees
-    WHERE (@surgeonCategory IS NULL OR SurgeonsCat LIKE N'%' + @surgeonCategory + N'%')
-      AND (@anaesthetistCategory IS NULL OR AnaesthetistsCat LIKE N'%' + @anaesthetistCategory + N'%')
-    ORDER BY FeeIndex
 -- Diagnosis / repudiation block of frmCaseInquiry (legacy Case_Inquiry @strAppendCase 2, 5 and 6).
 -- Result sets: first diagnosis, final diagnosis, repudiation codes with descriptions.
 CREATE OR ALTER PROCEDURE genisis.CaseEnquiry_Diagnoses
@@ -1817,66 +1752,6 @@ BEGIN
 END
 GO
 
--- @index NULL adds a fee row. Result: 0 saved, 1 record not found.
-CREATE OR ALTER PROCEDURE genisis.MmaFee_Save
-    @index int = NULL, @surgeonCategory nvarchar(4000), @surgeonFee decimal(19, 4), @anaesthetistCategory nvarchar(4000),
-    @anaesthetistFee decimal(19, 4), @userCode nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
-    IF @index IS NULL
-    BEGIN
-        INSERT INTO genisis.Maint_MMAFees (SurgeonsCat, SurgeonsFees, AnaesthetistsCat, AnaesthetistsFees, FeeLastUpdateUser, FeeLastUpdateDate)
-        OUTPUT 0 AS Result, inserted.FeeIndex AS [Index]
-        VALUES (@surgeonCategory, @surgeonFee, @anaesthetistCategory, @anaesthetistFee, @userCode, @today);
-        RETURN;
-    END
-    UPDATE genisis.Maint_MMAFees SET SurgeonsCat = @surgeonCategory, SurgeonsFees = @surgeonFee, AnaesthetistsCat = @anaesthetistCategory,
-        AnaesthetistsFees = @anaesthetistFee, FeeLastUpdateUser = @userCode, FeeLastUpdateDate = @today
-    WHERE FeeIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
-END
-GO
-
--- The desktop deletes without a check; the web refuses while a procedure uses the row's surgeon or anaesthetist category
--- (the fees reach procedures through those categories). Result: 0 deleted, 1 record not found, 2 still in use.
-CREATE OR ALTER PROCEDURE genisis.MmaFee_Delete
-    @index int
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @surgeon nvarchar(10), @anaesthetist nvarchar(50);
-    SELECT @surgeon = SurgeonsCat, @anaesthetist = AnaesthetistsCat FROM genisis.Maint_MMAFees WITH (UPDLOCK, HOLDLOCK) WHERE FeeIndex = @index;
-    IF @@ROWCOUNT = 0 BEGIN SELECT 1 AS Result; RETURN; END
-    IF EXISTS (SELECT 1 FROM genisis.Maint_MMAProcedures WHERE ProcSurgCat = @surgeon OR ProcAnaesCat = @anaesthetist)
-    BEGIN SELECT 2 AS Result; RETURN; END
-    DELETE FROM genisis.Maint_MMAFees WHERE FeeIndex = @index;
-    SELECT 0 AS Result;
-END
-GO
-
--- Accounts screen: one OPCS code of VIEW_MMA_Schedule, MMA beside 13th Schedule (desktop cmdNext / cmdPrev).
--- @direction 1 = next code after @code (first when NULL), -1 = previous code before @code (last when NULL), 0 = first code >= @code.
--- No row means there is no such code. The MMA surgeon fee is the MMAFees fee for the procedure's surgeon category (view column [1]);
--- the desktop read the view's SurgeonsFees column, which is the 14th Schedule surgeon fee.
-CREATE OR ALTER PROCEDURE genisis.MmaSchedule_Move
-    @code nvarchar(4000) = NULL, @direction int
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT TOP 1 RTRIM(OPCSCode) AS Code, OPCSNarrative AS MmaDescription, ProcedureDescription AS ScheduleDescription,
-        RTRIM(ProcMainBPCode) AS MmaBodyPart, BodyParts AS ScheduleBodyPart, RTRIM(ProcPageNo) AS MmaPage, RTRIM(Page) AS SchedulePage,
-        CAST([1] AS decimal(19, 4)) AS MmaSurgeonFee, CAST(AnaesthetistsFees AS decimal(19, 4)) AS MmaAnaesthetistFee,
-        CAST(Surgeon13thMin AS decimal(19, 4)) AS ScheduleSurgeonFeeMin, CAST(Surgeon13th AS decimal(19, 4)) AS ScheduleSurgeonFeeMax,
-        CAST(Anesthetist13th AS decimal(19, 4)) AS ScheduleAnaesthetistFee
-    FROM genisis.Maint_MMASchedule
-    WHERE OPCSCode IS NOT NULL
-      AND (@code IS NULL
-           OR (@direction = 1 AND OPCSCode > @code)
-           OR (@direction = -1 AND OPCSCode < @code)
-           OR (@direction = 0 AND OPCSCode >= @code))
-    ORDER BY CASE WHEN @direction = -1 THEN NULL ELSE OPCSCode END, OPCSCode DESC
 -- FrmCaseTracking totals (legacy CaseTracking summary modes).
 -- Same filter set over VIEW_CAS_TRACKINGSUM, plus @claimPending: 'P' pending, 'C' closed, 'B' both-side.
 CREATE OR ALTER PROCEDURE genisis.CaseTracking_Summary
@@ -1949,6 +1824,140 @@ BEGIN
       AND (@claimNatureTo IS NULL OR ClaimNatureCode <= @claimNatureTo)
       AND (@hosName IS NULL OR HOSName = @hosName)
       AND (@stayType IS NULL OR CASStayType = @stayType)
+    OPTION (RECOMPILE);
+END
+GO
+
+-- ===== main/130_mma.sql =====
+-- Maintenance > Entity (legacy frmMMA: Procedures and Look Up Table tabs) and Maintenance > Accounts (legacy frmMMA13thSchDesc).
+-- The tables live in the maintenance database: genisis.Maint_MMAProcedures, genisis.Maint_MMAFees, genisis.Maint_MMASchedule (view).
+-- Text filters are LIKE fragments escaped by the caller. Only the columns the desktop maintains are written.
+
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Search
+    @top int, @bodyPart nvarchar(4000) = NULL, @code nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@top) ProcIndex AS [Index], RTRIM(ProcMainBPCode) AS BodyPart, RTRIM(OPCSCode) AS Code, OPCSNarrative AS Narrative,
+        RTRIM(ProcSurgCat) AS SurgeonCategory, RTRIM(ProcAnaesCat) AS AnaesthetistCategory, RTRIM(ProcPart) AS Part,
+        RTRIM(PartACost) AS PartACost, RTRIM(ProcPageNo) AS PageNo
+    FROM genisis.Maint_MMAProcedures
+    WHERE (@bodyPart IS NULL OR ProcMainBPCode LIKE N'%' + @bodyPart + N'%') AND (@code IS NULL OR OPCSCode LIKE N'%' + @code + N'%')
+    ORDER BY ProcMainBPCode, OPCSCode, ProcIndex
+    OPTION (RECOMPILE);
+END
+GO
+
+-- @index NULL adds a procedure. Result: 0 saved, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Save
+    @index int = NULL, @bodyPart nvarchar(4000), @code nvarchar(4000), @narrative nvarchar(4000), @surgeonCategory nvarchar(4000),
+    @anaesthetistCategory nvarchar(4000), @pageNo nvarchar(4000), @partACost nvarchar(4000), @part nvarchar(4000), @userCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+    IF @index IS NULL
+    BEGIN
+        INSERT INTO genisis.Maint_MMAProcedures (ProcMainBPCode, OPCSCode, OPCSNarrative, ProcSurgCat, ProcAnaesCat, ProcPageNo, PartACost, ProcPart,
+            ProcLastUpdateUser, ProcLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.ProcIndex AS [Index]
+        VALUES (@bodyPart, @code, @narrative, @surgeonCategory, @anaesthetistCategory, @pageNo, @partACost, @part, @userCode, @today);
+        RETURN;
+    END
+    UPDATE genisis.Maint_MMAProcedures SET ProcMainBPCode = @bodyPart, OPCSCode = @code, OPCSNarrative = @narrative, ProcSurgCat = @surgeonCategory,
+        ProcAnaesCat = @anaesthetistCategory, ProcPageNo = @pageNo, PartACost = @partACost, ProcPart = @part,
+        ProcLastUpdateUser = @userCode, ProcLastUpdateDate = @today
+    WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- Result: 0 deleted, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Delete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM genisis.Maint_MMAProcedures WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Search
+    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT FeeIndex AS [Index], RTRIM(SurgeonsCat) AS SurgeonCategory, SurgeonsFees AS SurgeonFee, RTRIM(AnaesthetistsCat) AS AnaesthetistCategory,
+        AnaesthetistsFees AS AnaesthetistFee
+    FROM genisis.Maint_MMAFees
+    WHERE (@surgeonCategory IS NULL OR SurgeonsCat LIKE N'%' + @surgeonCategory + N'%')
+      AND (@anaesthetistCategory IS NULL OR AnaesthetistsCat LIKE N'%' + @anaesthetistCategory + N'%')
+    ORDER BY FeeIndex
+    OPTION (RECOMPILE);
+END
+GO
+
+-- @index NULL adds a fee row. Result: 0 saved, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Save
+    @index int = NULL, @surgeonCategory nvarchar(4000), @surgeonFee decimal(19, 4), @anaesthetistCategory nvarchar(4000),
+    @anaesthetistFee decimal(19, 4), @userCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+    IF @index IS NULL
+    BEGIN
+        INSERT INTO genisis.Maint_MMAFees (SurgeonsCat, SurgeonsFees, AnaesthetistsCat, AnaesthetistsFees, FeeLastUpdateUser, FeeLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.FeeIndex AS [Index]
+        VALUES (@surgeonCategory, @surgeonFee, @anaesthetistCategory, @anaesthetistFee, @userCode, @today);
+        RETURN;
+    END
+    UPDATE genisis.Maint_MMAFees SET SurgeonsCat = @surgeonCategory, SurgeonsFees = @surgeonFee, AnaesthetistsCat = @anaesthetistCategory,
+        AnaesthetistsFees = @anaesthetistFee, FeeLastUpdateUser = @userCode, FeeLastUpdateDate = @today
+    WHERE FeeIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- The desktop deletes without a check; the web refuses while a procedure uses the row's surgeon or anaesthetist category
+-- (the fees reach procedures through those categories). Result: 0 deleted, 1 record not found, 2 still in use.
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Delete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @surgeon nvarchar(10), @anaesthetist nvarchar(50);
+    SELECT @surgeon = SurgeonsCat, @anaesthetist = AnaesthetistsCat FROM genisis.Maint_MMAFees WITH (UPDLOCK, HOLDLOCK) WHERE FeeIndex = @index;
+    IF @@ROWCOUNT = 0 BEGIN SELECT 1 AS Result; RETURN; END
+    IF EXISTS (SELECT 1 FROM genisis.Maint_MMAProcedures WHERE ProcSurgCat = @surgeon OR ProcAnaesCat = @anaesthetist)
+    BEGIN SELECT 2 AS Result; RETURN; END
+    DELETE FROM genisis.Maint_MMAFees WHERE FeeIndex = @index;
+    SELECT 0 AS Result;
+END
+GO
+
+-- Accounts screen: one OPCS code of VIEW_MMA_Schedule, MMA beside 13th Schedule (desktop cmdNext / cmdPrev).
+-- @direction 1 = next code after @code (first when NULL), -1 = previous code before @code (last when NULL), 0 = first code >= @code.
+-- No row means there is no such code. The MMA surgeon fee is the MMAFees fee for the procedure's surgeon category (view column [1]);
+-- the desktop read the view's SurgeonsFees column, which is the 14th Schedule surgeon fee.
+CREATE OR ALTER PROCEDURE genisis.MmaSchedule_Move
+    @code nvarchar(4000) = NULL, @direction int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 RTRIM(OPCSCode) AS Code, OPCSNarrative AS MmaDescription, ProcedureDescription AS ScheduleDescription,
+        RTRIM(ProcMainBPCode) AS MmaBodyPart, BodyParts AS ScheduleBodyPart, RTRIM(ProcPageNo) AS MmaPage, RTRIM(Page) AS SchedulePage,
+        CAST([1] AS decimal(19, 4)) AS MmaSurgeonFee, CAST(AnaesthetistsFees AS decimal(19, 4)) AS MmaAnaesthetistFee,
+        CAST(Surgeon13thMin AS decimal(19, 4)) AS ScheduleSurgeonFeeMin, CAST(Surgeon13th AS decimal(19, 4)) AS ScheduleSurgeonFeeMax,
+        CAST(Anesthetist13th AS decimal(19, 4)) AS ScheduleAnaesthetistFee
+    FROM genisis.Maint_MMASchedule
+    WHERE OPCSCode IS NOT NULL
+      AND (@code IS NULL
+           OR (@direction = 1 AND OPCSCode > @code)
+           OR (@direction = -1 AND OPCSCode < @code)
+           OR (@direction = 0 AND OPCSCode >= @code))
+    ORDER BY CASE WHEN @direction = -1 THEN NULL ELSE OPCSCode END, OPCSCode DESC
     OPTION (RECOMPILE);
 END
 GO
@@ -2533,140 +2542,6 @@ BEGIN
 END
 GO
 
--- ===== main/150_enquiry_tabs.sql =====
--- Membership > Enquiry: the tabs added after the first read-only release (HIS Benefits, Acc History, Fees, Non Disclosure,
--- Policy Terms, LT Limit, Policy Wording, T/O Claims, WS). The desktop built these queries from string fragments; here they take parameters.
-
--- HIS Benefits (desktop BNFListing / BNFListingSupp): the benefit schedule in force on the payor effective date, latest effective date only.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_Benefits
-    @plan nvarchar(4000), @hlt nvarchar(4000), @ins nvarchar(4000), @eff datetime
-AS
-BEGIN
-    SET NOCOUNT ON;
-    WITH latest AS (
-        SELECT MAX(BNFEffDate) AS EffDate FROM dbo.VIEW_BNF
-        WHERE PLNCode = @plan AND HLTCode = @hlt AND INSCode = @ins AND BNFEffDate <= @eff)
-    SELECT RTRIM(b.BNFCode) AS BenefitCode, RTRIM(b.BNFdescription) AS Description, ISNULL(b.BNFNoOfDays, 0) AS Days,
-        RTRIM(b.BNFClaimAbleAmount) AS RatePerDay, RTRIM(b.BNFRMPerDis) AS PerDisability, b.BNFEffDate AS EffectiveDate
-    FROM dbo.VIEW_BNF b JOIN latest l ON b.BNFEffDate = l.EffDate
-    WHERE b.PLNCode = @plan AND b.HLTCode = @hlt AND b.INSCode = @ins
-    ORDER BY b.BNFCode;
-END
-GO
-
--- Acc History (desktop GetAccHisListing): claims paid and receipts for the IC, from the worksheet database.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_AccountHistory
-    @ic nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(MBMNumber) AS MembershipNo, MBMPayorEffDate AS EffectiveDate, CASDateAdmitted AS Admitted, CaseRegDate AS Registered,
-        RTRIM(CASNumber) + '-' + CAST(ClaimVersion AS nvarchar(10)) AS CaseNo,
-        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN RTRIM(DebitCreditRefNo) END AS DebitCreditRefNo,
-        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN DebitCreditDate END AS DebitCreditDate,
-        CLMPayableByMedix2M AS Payable, RTRIM(ReceiptNo) AS ReceiptNo, ReceiptDate, ISNULL(ReceiptAmt, 0) AS ReceiptAmount,
-        ISNULL(ReceiptAmt, 0) + ISNULL(CLMPayableByMedix2M, 0) AS Balance
-    FROM genisis.WS_AccountHistory WHERE MBMIcBcPp = @ic;
-END
-GO
-
--- Fees tab: premium, MCO and access fee with the refund recorded for a cancelled membership (desktop showMBM).
-CREATE OR ALTER PROCEDURE genisis.Enquiry_Fees
-    @number nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT o.MBMPremium AS Premium, o.MBMMCOFee AS McoFee, o.MBMAccessFee AS AccessFee, o.MBMBasicPrem AS BasicPremium, o.MBMBasicMCO AS BasicMco,
-        r.MBMPremReduction AS PremiumRefund, r.MBMMCORefund AS McoRefund, r.MBMProviderRef AS AccessFeeRefund, r.MBMProviderEff AS AccessFeeEffective,
-        r.MBMMCOEffective AS McoEffective, r.MBMPremEffective AS PremiumEffective
-    FROM dbo.MBM m
-    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
-    OUTER APPLY (SELECT TOP (1) * FROM dbo.MBMRefund x WHERE x.MBMNumber = m.MBMNumber AND m.MBMStatus = 'C' ORDER BY x.MIndex) r
-    WHERE m.MBMNumber = @number;
-END
-GO
-
--- Non Disclosure (desktop SearchPrincipalIll / Case_SearchIllness): pre-existing and underlying illnesses recorded on cases for the IC.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_NonDisclosure
-    @ic nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(MBMNumber) AS MembershipNo, RTRIM(CASNumber) AS CaseNo, RTRIM(MBMPatientCovID) AS CoverId, CASDateAdmitted AS Admitted,
-        CASPreIllDate AS PreExistingDate,
-        CASE RTRIM(CASPreIllCAT) WHEN '1' THEN 'Illness' WHEN '2' THEN 'Injury' WHEN '3' THEN 'Hospitalisation' WHEN '4' THEN CASPreIllOthers END AS PreExisting,
-        RTRIM(CASPreIllInfBy) AS PreExistingInformedBy, CASUndIllDate AS UnderlyingDate,
-        CASE RTRIM(CASUndIllCAT) WHEN '1' THEN 'Diabetes' WHEN '2' THEN 'Hypertension' WHEN '3' THEN CASUndIllOthers END AS Underlying,
-        RTRIM(CASUndIllInfBy) AS UnderlyingInformedBy
-    FROM dbo.VIEW_Cas_SearchIll WHERE MBMIcBcPp = @ic;
-END
-GO
-
--- Policy Terms (desktop PolTermsListing / Case_Registration case 6): health type N plans are per payor.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyTerms
-    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT TOP (1) PLNRefRqdAdmin AS ReferralForAdmission, PLNRefRqdPreSpec AS ReferralForSpecialist, PLNMinDurHosp AS MinimumHospitalStay,
-        PLNPhyVstPerDay AS PhysicianVisitsPerDay, PLNSepPeriodPrin AS SeparationPeriodPrincipal, PLNSepPeriodSup AS SeparationPeriodSupplementary,
-        PLNLowerAgeLimit AS LowerAgeLimit, PLNUpperAgeLimit AS UpperAgeLimit, PLNStudentAge AS StudentAge, PLNChildUntilAge AS ChildUntilAge
-    FROM dbo.PLN WHERE PLNCode = @plan AND (@hlt = 'S' OR (@hlt = 'N' AND PAYCode = @pay));
-END
-GO
-
--- LT Limit (desktop LTLmtListing / SP_SearchLTLmt): annual and lifetime balances with current and historical cases, principal then supplementaries.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_LifetimeLimits
-    @number nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(p.MBMNumber) AS MembershipNo, RTRIM(p.MBMCOVID) AS CoverId, RTRIM(p.MBMName) AS Name, ISNULL(p.MBMAvailableLimit, 0) AS AnnualBalance,
-        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTPrinLmt WHERE MBMNumber = p.MBMTopupNumber), 0)
-             ELSE ISNULL(p.MBMAvailableLimit, 0) END AS LifetimeBalance,
-        ISNULL(c.Cases, 0) AS Cases, ISNULL(h.CasHistory, 0) AS CaseHistory, ISNULL(c.BordxAmt, 0) AS CaseAmount, ISNULL(h.BordxAmt, 0) AS HistoryAmount
-    FROM dbo.View_Search_LTPrinLmt p
-    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTPrinCase WHERE MBMNumber = p.MBMNumber) c
-    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.View_Search_LTPrinCaseHistory WHERE MBMTopupNumber = p.MBMTopupNumber) h
-    WHERE p.MBMNumber = @number
-    UNION ALL
-    SELECT RTRIM(s.MBMCNumber), RTRIM(s.MBMCCoverID), RTRIM(s.MBMCName), ISNULL(s.MBMCAvailableLimit, 0),
-        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTSuppLmt
-                 WHERE MBMCNumber = p.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID), 0)
-             ELSE ISNULL(s.MBMCAvailableLimit, 0) END,
-        ISNULL(c.Cases, 0), ISNULL(h.CasHistory, 0), ISNULL(c.BordxAmt, 0), ISNULL(h.BordxAmt, 0)
-    FROM dbo.View_Search_LTPrinLmt p
-    JOIN dbo.View_Search_LTSuppLmt s ON s.MBMCNumber = p.MBMNumber
-    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTSuppCase WHERE MBMCNumber = s.MBMCNumber AND MBMCCoverID = s.MBMCCoverID) c
-    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.VIEW_Search_LTSuppCaseHistory WHERE MBMTopupNumber = s.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID) h
-    WHERE p.MBMNumber = @number AND RTRIM(p.INSCode) IN ('F', 'H');
-END
-GO
-
--- T/O Claims (desktop TakeoverClaims): previous insurer's claims for the policy number.
-CREATE OR ALTER PROCEDURE genisis.Enquiry_TakeoverClaims
-    @policy nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT CLMEffDate AS EffectiveDate, CLMExpDate AS ExpiryDate, RTRIM(CLMPatientname) AS Patient, RTRIM(CLMPatientIC) AS PatientIc,
-        CLMDOA AS Admitted, CLMDOD AS Discharged, RTRIM(CLMHospital) AS Hospital,
-        RTRIM(ISNULL(CLMDiagnosis1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis2), ''), '') + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis3), ''), '') AS Diagnosis,
-        RTRIM(ISNULL(CLMDrName1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDrName2), ''), '') AS Doctor,
-        CLMBillAmt AS BillAmount, CLMAppAmt AS ApprovedAmount, CLMExcessAmt AS ExcessAmount
-    FROM dbo.CLMMAATakaful WHERE CLMPolNo = @policy;
-END
-GO
-
--- Plan policy wording folder name (desktop showMBM: PLN.PLNPolicyWording).
-CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyWording
-    @number nvarchar(4000)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT TOP (1) RTRIM(p.PLNPolicyWording) AS PolicyWording
-    FROM dbo.MBM m JOIN dbo.PLN p ON p.PLNCode = m.PLNCode AND p.HLTCode = m.HLTCode AND (m.HLTCode = 'S' OR p.PAYCode = m.PAYCode)
-    WHERE m.MBMNumber = @number;
 -- ===== main/140_case_registration.sql =====
 -- Case > Registration (frmCaseAdmission).
 -- Reads replace the legacy Case_Registration dispatchers (main and maintenance), which appended a raw
@@ -3267,6 +3142,143 @@ BEGIN
     FROM genisis.Maint_MBMCrossReference
     WHERE MBMIcBcPp = @ic AND MBMStatus <> 'D'
     ORDER BY MBMPayorEffDate;
+END
+GO
+
+-- ===== main/150_enquiry_tabs.sql =====
+-- Membership > Enquiry: the tabs added after the first read-only release (HIS Benefits, Acc History, Fees, Non Disclosure,
+-- Policy Terms, LT Limit, Policy Wording, T/O Claims, WS). The desktop built these queries from string fragments; here they take parameters.
+
+-- HIS Benefits (desktop BNFListing / BNFListingSupp): the benefit schedule in force on the payor effective date, latest effective date only.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_Benefits
+    @plan nvarchar(4000), @hlt nvarchar(4000), @ins nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    WITH latest AS (
+        SELECT MAX(BNFEffDate) AS EffDate FROM dbo.VIEW_BNF
+        WHERE PLNCode = @plan AND HLTCode = @hlt AND INSCode = @ins AND BNFEffDate <= @eff)
+    SELECT RTRIM(b.BNFCode) AS BenefitCode, RTRIM(b.BNFdescription) AS Description, ISNULL(b.BNFNoOfDays, 0) AS Days,
+        RTRIM(b.BNFClaimAbleAmount) AS RatePerDay, RTRIM(b.BNFRMPerDis) AS PerDisability, b.BNFEffDate AS EffectiveDate
+    FROM dbo.VIEW_BNF b JOIN latest l ON b.BNFEffDate = l.EffDate
+    WHERE b.PLNCode = @plan AND b.HLTCode = @hlt AND b.INSCode = @ins
+    ORDER BY b.BNFCode;
+END
+GO
+
+-- Acc History (desktop GetAccHisListing): claims paid and receipts for the IC, from the worksheet database.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_AccountHistory
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMNumber) AS MembershipNo, MBMPayorEffDate AS EffectiveDate, CASDateAdmitted AS Admitted, CaseRegDate AS Registered,
+        RTRIM(CASNumber) + '-' + CAST(ClaimVersion AS nvarchar(10)) AS CaseNo,
+        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN RTRIM(DebitCreditRefNo) END AS DebitCreditRefNo,
+        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN DebitCreditDate END AS DebitCreditDate,
+        CLMPayableByMedix2M AS Payable, RTRIM(ReceiptNo) AS ReceiptNo, ReceiptDate, ISNULL(ReceiptAmt, 0) AS ReceiptAmount,
+        ISNULL(ReceiptAmt, 0) + ISNULL(CLMPayableByMedix2M, 0) AS Balance
+    FROM genisis.WS_AccountHistory WHERE MBMIcBcPp = @ic;
+END
+GO
+
+-- Fees tab: premium, MCO and access fee with the refund recorded for a cancelled membership (desktop showMBM).
+CREATE OR ALTER PROCEDURE genisis.Enquiry_Fees
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT o.MBMPremium AS Premium, o.MBMMCOFee AS McoFee, o.MBMAccessFee AS AccessFee, o.MBMBasicPrem AS BasicPremium, o.MBMBasicMCO AS BasicMco,
+        r.MBMPremReduction AS PremiumRefund, r.MBMMCORefund AS McoRefund, r.MBMProviderRef AS AccessFeeRefund, r.MBMProviderEff AS AccessFeeEffective,
+        r.MBMMCOEffective AS McoEffective, r.MBMPremEffective AS PremiumEffective
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    OUTER APPLY (SELECT TOP (1) * FROM dbo.MBMRefund x WHERE x.MBMNumber = m.MBMNumber AND x.MBMCovID = '00' AND m.MBMStatus = 'C' ORDER BY x.MIndex DESC) r
+    WHERE m.MBMNumber = @number;
+END
+GO
+
+-- Non Disclosure (desktop SearchPrincipalIll / Case_SearchIllness): pre-existing and underlying illnesses recorded on cases for the IC.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_NonDisclosure
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMNumber) AS MembershipNo, RTRIM(CASNumber) AS CaseNo, RTRIM(MBMPatientCovID) AS CoverId, CASDateAdmitted AS Admitted,
+        CASPreIllDate AS PreExistingDate,
+        CASE RTRIM(CASPreIllCAT) WHEN '1' THEN 'Illness' WHEN '2' THEN 'Injury' WHEN '3' THEN 'Hospitalisation' WHEN '4' THEN CASPreIllOthers END AS PreExisting,
+        RTRIM(CASPreIllInfBy) AS PreExistingInformedBy, CASUndIllDate AS UnderlyingDate,
+        CASE RTRIM(CASUndIllCAT) WHEN '1' THEN 'Diabetes' WHEN '2' THEN 'Hypertension' WHEN '3' THEN CASUndIllOthers END AS Underlying,
+        RTRIM(CASUndIllInfBy) AS UnderlyingInformedBy
+    FROM dbo.VIEW_Cas_SearchIll WHERE MBMIcBcPp = @ic;
+END
+GO
+
+-- Policy Terms (desktop PolTermsListing / Case_Registration case 6): health type N plans are per payor.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyTerms
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) PLNRefRqdAdmin AS ReferralForAdmission, PLNRefRqdPreSpec AS ReferralForSpecialist, PLNMinDurHosp AS MinimumHospitalStay,
+        PLNPhyVstPerDay AS PhysicianVisitsPerDay, PLNSepPeriodPrin AS SeparationPeriodPrincipal, PLNSepPeriodSup AS SeparationPeriodSupplementary,
+        PLNLowerAgeLimit AS LowerAgeLimit, PLNUpperAgeLimit AS UpperAgeLimit, PLNStudentAge AS StudentAge, PLNChildUntilAge AS ChildUntilAge
+    FROM dbo.PLN WHERE PLNCode = @plan AND (@hlt = 'S' OR (@hlt = 'N' AND PAYCode = @pay));
+END
+GO
+
+-- LT Limit (desktop LTLmtListing / SP_SearchLTLmt): annual and lifetime balances with current and historical cases, principal then supplementaries.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_LifetimeLimits
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(p.MBMNumber) AS MembershipNo, RTRIM(p.MBMCOVID) AS CoverId, RTRIM(p.MBMName) AS Name, ISNULL(p.MBMAvailableLimit, 0) AS AnnualBalance,
+        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTPrinLmt WHERE MBMNumber = p.MBMTopupNumber), 0)
+             ELSE ISNULL(p.MBMAvailableLimit, 0) END AS LifetimeBalance,
+        ISNULL(c.Cases, 0) AS Cases, ISNULL(h.CasHistory, 0) AS CaseHistory, ISNULL(c.BordxAmt, 0) AS CaseAmount, ISNULL(h.BordxAmt, 0) AS HistoryAmount
+    FROM dbo.View_Search_LTPrinLmt p
+    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTPrinCase WHERE MBMNumber = p.MBMNumber) c
+    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.View_Search_LTPrinCaseHistory WHERE MBMTopupNumber = p.MBMTopupNumber) h
+    WHERE p.MBMNumber = @number
+    UNION ALL
+    SELECT RTRIM(s.MBMCNumber), RTRIM(s.MBMCCoverID), RTRIM(s.MBMCName), ISNULL(s.MBMCAvailableLimit, 0),
+        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTSuppLmt
+                 WHERE MBMCNumber = p.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID), 0)
+             ELSE ISNULL(s.MBMCAvailableLimit, 0) END,
+        ISNULL(c.Cases, 0), ISNULL(h.CasHistory, 0), ISNULL(c.BordxAmt, 0), ISNULL(h.BordxAmt, 0)
+    FROM dbo.View_Search_LTPrinLmt p
+    JOIN dbo.View_Search_LTSuppLmt s ON s.MBMCNumber = p.MBMNumber
+    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTSuppCase WHERE MBMCNumber = s.MBMCNumber AND MBMCCoverID = s.MBMCCoverID) c
+    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.VIEW_Search_LTSuppCaseHistory WHERE MBMTopupNumber = s.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID) h
+    WHERE p.MBMNumber = @number AND RTRIM(p.INSCode) IN ('F', 'H');
+END
+GO
+
+-- T/O Claims (desktop TakeoverClaims): previous insurer's claims for the policy number.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_TakeoverClaims
+    @policy nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CLMEffDate AS EffectiveDate, CLMExpDate AS ExpiryDate, RTRIM(CLMPatientname) AS Patient, RTRIM(CLMPatientIC) AS PatientIc,
+        CLMDOA AS Admitted, CLMDOD AS Discharged, RTRIM(CLMHospital) AS Hospital,
+        RTRIM(ISNULL(CLMDiagnosis1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis2), ''), '') + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis3), ''), '') AS Diagnosis,
+        RTRIM(ISNULL(CLMDrName1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDrName2), ''), '') AS Doctor,
+        CLMBillAmt AS BillAmount, CLMAppAmt AS ApprovedAmount, CLMExcessAmt AS ExcessAmount
+    FROM dbo.CLMMAATakaful WHERE CLMPolNo = @policy;
+END
+GO
+
+-- Plan policy wording folder name (desktop showMBM: PLN.PLNPolicyWording).
+CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyWording
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(p.PLNPolicyWording) AS PolicyWording
+    FROM dbo.MBM m JOIN dbo.PLN p ON p.PLNCode = m.PLNCode AND p.HLTCode = m.HLTCode AND (m.HLTCode = 'S' OR p.PAYCode = m.PAYCode)
+    WHERE m.MBMNumber = @number;
 END
 GO
 

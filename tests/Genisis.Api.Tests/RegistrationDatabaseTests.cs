@@ -13,6 +13,7 @@ namespace Genisis.Api.Tests;
 /// Restored backups cannot open the production database master key, so the write test disables the four
 /// encryption triggers inside its own transaction; the rollback re-enables them.
 /// </summary>
+[Collection(DatabaseWriteCollection.Name)]
 public class RegistrationDatabaseTests
 {
     private static readonly string? MainDb = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINDB");

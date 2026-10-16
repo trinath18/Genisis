@@ -87,7 +87,9 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
             new { ins = Code(shown.InsuredType), hlt = FirstLetter(shown.HealthCode), plan = Code(shown.PlanCode), eff = effective }, tx);
         var status = Code(rates?.SuppMcoStatus) is { Length: > 0 } s ? s : SupplementaryCharge.PrincipalOnly;
         var chargeFrom = AdjustmentRules.CoverId(TextOrNull(rates?.CovIDChrg) ?? "");
-        foreach (var person in current.Covered.OrderBy(p => AdjustmentRules.CoverId(p.CoverId), StringComparer.Ordinal))
+        foreach (var person in current.Covered
+            .Where(p => Code(p.Status) is not (MemberStatus.Cancelled or EndorsementTypes.CancelSupplementary))
+            .OrderBy(p => AdjustmentRules.CoverId(p.CoverId), StringComparer.Ordinal))
         {
             var id = AdjustmentRules.CoverId(person.CoverId);
             var personEffective = person.EffectiveDate ?? effective;

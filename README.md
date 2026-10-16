@@ -42,17 +42,17 @@ separate projects:
 | --- | --- | --- |
 | HTTP | `Controllers/` | Routing, access check, request validation, status codes. No SQL and no business rules. |
 | Validation | `<Feature>/<Feature>Validator.cs` | Pure required-field / length / format checks, in the desktop's order and with its messages. |
-| Business rules | `<Feature>/*Rules.cs` | Pure calculations (fees, refunds, pro-rating, expiry). Unit tested without a database. |
-| Use cases | `<Feature>/<Feature>Service.cs` behind `I<Feature>Service` | Orchestration and transactions. |
+| Business rules | `<Feature>/*Rules.cs`, `Membership/FeeRules.cs` | Pure calculations (fees, refunds, pro-rating, expiry). Unit tested without a database. |
+| Use cases | `<Feature>/<Feature>Service.cs` behind `I<Feature>Service` | Orchestration and transactions. Larger flows are split (e.g. Adjustment: service, writer, query service). |
 | Data | `sql/main/*.sql` (`genisis.*` procedures) | All SQL. C# only calls procedures with typed parameters. |
 
-- **Constants:** code values,
+- **Constants:** code values (`Membership/MembershipCodes.cs`, `Adjustment/AdjustmentConstants.cs`),
   column sizes and messages (`*Constants.cs`) and SQL error numbers (`Common/Errors/SqlErrorNumbers.cs`)
   are named; no bare literals in the logic.
 - **Data access:** Dapper and stored procedures, not Entity Framework: the schema, procedures and triggers belong to the
   desktop application and are shared with it, so the API wraps them rather than owning migrations.
 - **Errors:** one format for every endpoint (below). Expected rule failures throw a `BusinessRuleException` subclass
-  (`BenefitException`, `MmaException`) and become 400; missing records are returned
+  (`AdjustmentException`, `BenefitException`, `MmaException`) and become 400; missing records are returned
   as 404 without exceptions.
 
 ## Error responses
@@ -81,11 +81,37 @@ traces and file paths are never returned.
 | `GET /api/membership/{mbmNumber}/member-history` | `SearchMBMHistory06` (rewritten with parameters) |
 | `GET /api/membership/{mbmNumber}/account` | `VIEW_MBMTotal_Summary` |
 | `GET /api/membership/{mbmNumber}/notes` | `View_Get_MemberExclusion`, `View_Get_MemberRemarks` |
+| `GET /api/membership/{mbmNumber}/benefits` | HIS Benefits tab, `View_BNF` (latest schedule on the payor effective date) |
+| `GET /api/membership/{mbmNumber}/account-history` | Acc History tab, worksheet database `VIEW_Account_History` |
+| `GET /api/membership/{mbmNumber}/fees` | Fees tab, `MBMOthers` + `MBMRefund` |
+| `GET /api/membership/{mbmNumber}/non-disclosure` | Non Disclosure tab, `VIEW_Cas_SearchIll` |
+| `GET /api/membership/{mbmNumber}/policy-terms` | Policy Terms tab, `PLN` terms |
+| `GET /api/membership/{mbmNumber}/lifetime-limits` | LT Limit tab, `View_Search_LT*` views |
+| `GET /api/membership/{mbmNumber}/policy-wording[/{file}]` | Policy Wording tab: files under `Documents:PolicyWordingPath\<wording>` (desktop `DocPath\PolicyWording`) |
+| `GET /api/membership/{mbmNumber}/takeover-claims` | T/O Claims tab, `CLMMAATakaful` |
+| `GET /api/membership/{mbmNumber}/worksheets` | WS tab, `SearchWorksheet` |
+
+The tabs added in the web version (HIS Benefits to WS) are served by `Membership/EnquiryTabsService.cs`; Policy Wording files
+are read by `Membership/PolicyWordingStore.cs`, which only serves plain file names with an allowed extension from inside the
+configured folder.
 
 The desktop's Print MBM / Print Report / Print History buttons (Crystal Reports) are not migrated.
 
 All SQL is parameterised. Stored procedures that build dynamic SQL from a string argument (`SearchMBMHistory06`,
 `MBM_GetExcRemarks`) are not called; their queries are reproduced with parameters instead.
+
+## Membership > Adjustment
+
+`/api/membership/adjustment` replaces `frmNewMBMAdjustment` and its "Others Details" form (menu position 2). Load, search,
+Prev/Next, fees, adjustment history, MBM history, fee recalculation and one save endpoint per endorsement type:
+A Amendment, P Plan Change, S Add / K Cancel / T Delete Supplementary, C Cancellation (with MCO / premium refunds),
+X Suspend and D Delete Policy. Clinical members' new supplementaries also get their `MBMCoveredPersonsCLN` row
+(clinical database tables through `genisis.Cis_*` synonyms; set `@CisDb` in `sql/main/000_setup.sql`).
+
+Differences from the desktop: everything (main, maintenance and clinical writes) runs in one transaction; refunds use the
+plan's round-up setting (the desktop only rounded if a fee field had been edited first); a name / date of birth change on a
+renewal renames only the base number and its `*nn` renewals (the desktop matched `LIKE '%base%'`); a supplementary's full
+relationship code is stored (the desktop kept the first letter); Add / Cancel / Delete Supplementary need at least one person.
 
 ## Maintenance > Benefits
 

@@ -19,6 +19,7 @@ against the same database.
 | `main/130_mma.sql` | Maintenance > Entity (Procedures, Look Up Table) and Maintenance > Accounts; tables in the maintenance database |
 | `main/140_adjustment.sql` | Membership > Adjustment (all endorsement types) |
 | `main/150_enquiry_tabs.sql` | Membership > Enquiry: HIS Benefits, Acc History, Fees, Non Disclosure, Policy Terms, LT Limit, Policy Wording, T/O Claims, WS |
+| `main/160_bordx.sql` | Membership > Upload Bordx (verify, upload through UploadDb staging, cancellation, reinstatement, Generate ASCII) |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

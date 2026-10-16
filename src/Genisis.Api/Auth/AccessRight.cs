@@ -10,6 +10,7 @@ public static class AccessRight
     public const int MembershipRegistration = 1;
     public const int MembershipAdjustment = 2;
     public const int MembershipEnquiry = 3;
+    public const int MembershipUploadBordx = 4;
 
     /// <summary>Maintenance > Plan uses the same position as Registration in the desktop menu.</summary>
     public const int PlanMaintenance = 1;

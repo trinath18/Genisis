@@ -45,7 +45,7 @@ BEGIN
         r.MBMMCOEffective AS McoEffective, r.MBMPremEffective AS PremiumEffective
     FROM dbo.MBM m
     LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
-    OUTER APPLY (SELECT TOP (1) * FROM dbo.MBMRefund x WHERE x.MBMNumber = m.MBMNumber AND m.MBMStatus = 'C' ORDER BY x.MIndex) r
+    OUTER APPLY (SELECT TOP (1) * FROM dbo.MBMRefund x WHERE x.MBMNumber = m.MBMNumber AND x.MBMCovID = '00' AND m.MBMStatus = 'C' ORDER BY x.MIndex DESC) r
     WHERE m.MBMNumber = @number;
 END
 GO

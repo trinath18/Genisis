@@ -8,6 +8,7 @@ public class DbConnections(IConfiguration configuration)
 
     public SqlConnection MainDb() => Open("MainDb");
     public SqlConnection Maintenance() => Open("Maintenance");
+    public SqlConnection WorkSheet() => Open("WorkSheet");
 
     /// <summary>
     /// Quoted database name of the Maintenance connection, for cross-database joins from MainDb.

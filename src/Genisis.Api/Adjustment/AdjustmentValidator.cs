@@ -129,7 +129,9 @@ public static class AdjustmentValidator
     private static string? ValidateChosen(LoadedMembership current, AdjustmentRequest request, string action)
     {
         const string ChooseRecord = "Please Choose a Record";
-        var existing = current.Covered.Select(p => AdjustmentRules.CoverId(p.CoverId)).ToHashSet();
+        var existing = current.Covered
+            .Where(p => action != CoveredActions.Cancel || Code(p.Status) is not (MemberStatus.Cancelled or EndorsementTypes.CancelSupplementary))
+            .Select(p => AdjustmentRules.CoverId(p.CoverId)).ToHashSet();
         var chosen = request.Covered.Where(p => CoveredActions.Is(p.Action, action)).ToList();
         if (chosen.Count == 0 || chosen.Any(p => !existing.Contains(AdjustmentRules.CoverId(p.CoverId)))) return ChooseRecord;
         return null;

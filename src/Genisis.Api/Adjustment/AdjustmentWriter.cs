@@ -41,11 +41,12 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
             await conn.ProcExecAsync("genisis.Adjustment_SetCoveredStatus", new { number = Number, status }, tx);
     }
 
-    private Task InsertHistoryAsync(string? policy, string? ic, string? name, DateTime? expiry, string? plan) =>
+    private Task InsertHistoryAsync(string? policy, string? ic, string? name, DateTime? expiry, string? plan, string? coverId = null) =>
         conn.ProcExecAsync("genisis.Adjustment_InsertAmendHistory", new
         {
             number = Number, policy = Text(policy), ic = Text(ic), name = Text(name), expiry = expiry?.Date, plan = Text(plan), type = save.Type,
             endtBordx = save.EndorsementBordxDate, endtEff = save.EndorsementEffectiveDate, user = save.UserCode, today = save.Today, batch = Stored.BatchNo,
+            coverId,
         }, tx);
 
     public Task SetCoveredAdjustmentAsync(string status, string? coverId, DateTime? cancelDate) =>
@@ -119,7 +120,7 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
             var effective = person.EffectiveDate ?? Stored.PayorEffectiveDate;
             var expiry = person.ExpiryDate ?? Stored.PayorExpiryDate;
             var plan = TextOrNull(person.PlanCode) ?? Stored.PlanCode;
-            await InsertHistoryAsync(Stored.PolicyNo, person.IcBcPp, person.Name, expiry, plan);
+            await InsertHistoryAsync(Stored.PolicyNo, person.IcBcPp, person.Name, expiry, plan, id);
             if (effective is { } from && expiry is { } to)
             {
                 var rates = await conn.ProcFirstOrDefaultAsync<McoRates>("genisis.Registration_Mco",

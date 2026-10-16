@@ -87,7 +87,9 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
             new { ins = Code(shown.InsuredType), hlt = FirstLetter(shown.HealthCode), plan = Code(shown.PlanCode), eff = effective }, tx);
         var status = Code(rates?.SuppMcoStatus) is { Length: > 0 } s ? s : SupplementaryCharge.PrincipalOnly;
         var chargeFrom = AdjustmentRules.CoverId(TextOrNull(rates?.CovIDChrg) ?? "");
-        foreach (var person in current.Covered.OrderBy(p => AdjustmentRules.CoverId(p.CoverId), StringComparer.Ordinal))
+        foreach (var person in current.Covered
+            .Where(p => Code(p.Status) is not (MemberStatus.Cancelled or EndorsementTypes.CancelSupplementary))
+            .OrderBy(p => AdjustmentRules.CoverId(p.CoverId), StringComparer.Ordinal))
         {
             var id = AdjustmentRules.CoverId(person.CoverId);
             var personEffective = person.EffectiveDate ?? effective;
@@ -228,7 +230,10 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
                 number = Number, coverId = Text(stored.CoverId), name = Code(person.Name), ic = Code(person.IcBcPp),
                 dob = person.DateOfBirth?.Date ?? stored.DateOfBirth, sex = Code(person.Sex), adultChild = Code(person.AdultChild),
                 rel = Code(person.Relationship), eff = person.EffectiveDate?.Date, exp = person.ExpiryDate?.Date, premium = person.Premium,
-                plan = TextOrNull(person.PlanCode)?.ToUpperInvariant(), status = save.Type == EndorsementTypes.PlanChange ? AdjustmentStatuses.PlanChanged : null,
+                plan = TextOrNull(person.PlanCode)?.ToUpperInvariant(),
+                status = save.Type == EndorsementTypes.PlanChange
+                    && Code(stored.Status) is not (EndorsementTypes.CancelSupplementary or MemberStatus.Cancelled)
+                    ? AdjustmentStatuses.PlanChanged : null,
                 salutation = Code(person.Salutation), allergic = Text(person.Allergic), exclusion = Text(person.Exclusion),
                 clmNonPayFrom = person.ClaimNonPayFrom?.Date, clmNonPayTo = person.ClaimNonPayTo?.Date, policyDisc = person.PolicyDisc ?? 0,
                 renewalDisc = person.RenewalDisc ?? 0, prevPlan = Text(person.PreviousPlanCode), rbAmount = person.RbAmount ?? 0,
@@ -308,7 +313,7 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
                 {
                     basicPremium = supplementaryPremium.SuppPrmAmt ?? 0;
                     var rate = await conn.ProcFirstOrDefaultAsync<PremiumRates>("genisis.Registration_Premium",
-                        new { ins = FirstLetter(Stored.InsuredType), hlt = health, plan = Code(Stored.PlanCode), ageCode, eff = effective, pay = payor }, tx);
+                        new { ins = FirstLetter(Stored.InsuredType), hlt = health, plan, ageCode, eff = effective, pay = payor }, tx);
                     premium = FeeRules.ProRateMoney(effective, expiry, LegacyRules.Money(rate?.SuppPrmAmt ?? 0));
                     if (discount is not null)
                     {

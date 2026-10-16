@@ -84,8 +84,8 @@ public class SqlScriptTests
         {
             var expected = SqlScripts.BuildCombined(part);
             var path = SqlScripts.CombinedPath(part);
-            if (Environment.GetEnvironmentVariable("GENISIS_WRITE_SQL") == "1") File.WriteAllText(path, expected);
-            Assert.True(File.Exists(path) && expected == SqlScripts.Normalize(File.ReadAllText(path)),
+            if (Environment.GetEnvironmentVariable("GENISIS_WRITE_SQL") == "1") File.WriteAllText(path, SqlScripts.Normalize(expected));
+            Assert.True(File.Exists(path) && SqlScripts.Normalize(expected) == SqlScripts.Normalize(File.ReadAllText(path)),
                 $"sql/genisis-{part}.sql is missing or out of date; rebuild it with GENISIS_WRITE_SQL=1 dotnet test");
         }
     }

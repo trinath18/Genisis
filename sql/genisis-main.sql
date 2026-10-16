@@ -3770,6 +3770,623 @@ BEGIN
 END
 GO
 
+-- ===== main/170_tracking.sql =====
+-- Membership > Tracking (legacy FrmNewMBMTracking). The desktop passed a concatenated WHERE fragment to dbo.MBMTracking; here every
+-- filter is a typed parameter. genisis.Tracking_CaseText (171_tracking_cases.sql, generated) holds each case's fixed query text.
+
+-- Result sets: payors (with health type), states (MBM.STACode holds the state description, as the desktop's list does), product categories.
+CREATE OR ALTER PROCEDURE genisis.Tracking_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name, RTRIM(HLTCode) AS HealthCode FROM dbo.PAY WHERE PAYCode IS NOT NULL ORDER BY PAYCode;
+    SELECT DISTINCT UPPER(RTRIM(STADescription)) AS Code, UPPER(RTRIM(STADescription)) AS Name FROM dbo.STA WHERE STADescription IS NOT NULL ORDER BY Name;
+    SELECT RTRIM(ProductCode) AS Code, RTRIM(ProductName) AS Name FROM genisis.Maint_ProductCategory WHERE ProductCode IS NOT NULL ORDER BY ProductCode;
+END
+GO
+
+-- Runs one MBMTracking case with the Tracking screen's filters (FrmNewMBMTracking.SearchRecord).
+--   @insuredGroup  0..7 (desktop insured type list), @status 0..6 (desktop status list), @renewal N/P/R/T
+--   @blanks        comma-separated filter keys whose "blank" box is ticked (keys outside the fixed list are ignored)
+--   @memberTypeFilter  DETAIL_C / DETAIL_S (detail listings) or NAME_<P|S|B>_<C|S|BOTH> (General Listing (Prin. Name))
+--   @extra         insured / adult-child restriction of the per-type count columns: I, F, G, H, I_C, I_A, G_C, G_A
+--   @withSuppRegDate  1 for the supplementary detail listings (Supp. registration date filter)
+CREATE OR ALTER PROCEDURE genisis.Tracking_Run
+    @case int,
+    @health nvarchar(10) = NULL, @payor nvarchar(10) = NULL, @insuredGroup nvarchar(1) = NULL, @status nvarchar(1) = NULL,
+    @renewal nvarchar(1) = NULL, @adultChild nvarchar(1) = NULL, @race nvarchar(1) = NULL, @sex nvarchar(1) = NULL,
+    @relationship nvarchar(2) = NULL, @dataStatus nvarchar(1) = NULL, @expired nvarchar(1) = NULL, @premiumMode nvarchar(1) = NULL,
+    @state nvarchar(50) = NULL, @takeOver nvarchar(1) = NULL, @agentCode nvarchar(50) = NULL, @membershipNo nvarchar(30) = NULL,
+    @groupCompany nvarchar(200) = NULL, @labelStatus nvarchar(1) = NULL, @department nvarchar(100) = NULL, @productCategory nvarchar(10) = NULL,
+    @dayInsuredFrom decimal(19, 4) = NULL, @dayInsuredTo decimal(19, 4) = NULL, @ageDaysFrom decimal(19, 4) = NULL, @ageDaysTo decimal(19, 4) = NULL,
+    @delayBordxFrom decimal(19, 4) = NULL, @delayBordxTo decimal(19, 4) = NULL, @delayInvBordxFrom decimal(19, 4) = NULL,
+    @delayInvBordxTo decimal(19, 4) = NULL, @delayRegFrom decimal(19, 4) = NULL, @delayRegTo decimal(19, 4) = NULL,
+    @delayInvDFrom decimal(19, 4) = NULL, @delayInvDTo decimal(19, 4) = NULL, @delayInvEFrom decimal(19, 4) = NULL, @delayInvETo decimal(19, 4) = NULL,
+    @premiumFrom decimal(19, 4) = NULL, @premiumTo decimal(19, 4) = NULL, @mcoFeeFrom decimal(19, 4) = NULL, @mcoFeeTo decimal(19, 4) = NULL,
+    @batchFrom decimal(19, 4) = NULL, @batchTo decimal(19, 4) = NULL,
+    @employeeNoFrom nvarchar(50) = NULL, @employeeNoTo nvarchar(50) = NULL, @policyNoFrom nvarchar(50) = NULL, @policyNoTo nvarchar(50) = NULL,
+    @planFrom nvarchar(10) = NULL, @planTo nvarchar(10) = NULL, @ageBandFrom nvarchar(10) = NULL, @ageBandTo nvarchar(10) = NULL,
+    @postCodeFrom nvarchar(10) = NULL, @postCodeTo nvarchar(10) = NULL, @policyYearFrom nvarchar(10) = NULL, @policyYearTo nvarchar(10) = NULL,
+    @invoiceNoFrom nvarchar(50) = NULL, @invoiceNoTo nvarchar(50) = NULL, @icFrom nvarchar(30) = NULL, @icTo nvarchar(30) = NULL,
+    @effDateFrom date = NULL, @effDateTo date = NULL, @expDateFrom date = NULL, @expDateTo date = NULL,
+    @dateJoinedFrom date = NULL, @dateJoinedTo date = NULL, @dorFrom date = NULL, @dorTo date = NULL, @dobFrom date = NULL, @dobTo date = NULL,
+    @bordxDateFrom date = NULL, @bordxDateTo date = NULL, @invoiceDateFrom date = NULL, @invoiceDateTo date = NULL,
+    @endtEffDateFrom date = NULL, @endtEffDateTo date = NULL, @cancelDateFrom date = NULL, @cancelDateTo date = NULL,
+    @dorSuppFrom date = NULL, @dorSuppTo date = NULL,
+    @blanks nvarchar(2000) = NULL, @memberTypeFilter nvarchar(20) = NULL, @extra nvarchar(5) = NULL, @withSuppRegDate bit = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @prefix nvarchar(max), @suffix nvarchar(max), @w nvarchar(max) = N'';
+    EXEC genisis.Tracking_CaseText @case = @case, @prefix = @prefix OUTPUT, @suffix = @suffix OUTPUT;
+    IF @prefix IS NULL THROW 50001, N'Unknown tracking report case.', 1;
+
+    -- Equality filters.
+    SET @w += CASE WHEN @health IS NOT NULL THEN N' AND HLTCode = @health' ELSE N'' END
+        + CASE WHEN @payor IS NOT NULL THEN N' AND PAYCode = @payor' ELSE N'' END
+        + CASE WHEN @adultChild IS NOT NULL THEN N' AND MBMAdultChild = @adultChild' ELSE N'' END
+        + CASE WHEN @race IS NOT NULL THEN N' AND RACCode = @race' ELSE N'' END
+        + CASE WHEN @sex IS NOT NULL THEN N' AND MBMSex = @sex' ELSE N'' END
+        + CASE WHEN @relationship IS NOT NULL THEN N' AND RELCode = @relationship' ELSE N'' END
+        + CASE WHEN @dataStatus IS NOT NULL THEN N' AND MBMDataStatus = @dataStatus' ELSE N'' END
+        + CASE WHEN @expired IS NOT NULL THEN N' AND MBMExpiredStatus = @expired' ELSE N'' END
+        + CASE WHEN @premiumMode IS NOT NULL THEN N' AND MBMInstallment = @premiumMode' ELSE N'' END
+        + CASE WHEN @state IS NOT NULL THEN N' AND STACode = @state' ELSE N'' END
+        + CASE WHEN @takeOver IS NOT NULL THEN N' AND MBMTakeover = @takeOver' ELSE N'' END
+        + CASE WHEN @agentCode IS NOT NULL THEN N' AND MBMAgentCode = @agentCode' ELSE N'' END
+        + CASE WHEN @membershipNo IS NOT NULL THEN N' AND MBMNumber = @membershipNo' ELSE N'' END
+        + CASE WHEN @groupCompany IS NOT NULL THEN N' AND MBMGroupCompany = @groupCompany' ELSE N'' END
+        + CASE WHEN @labelStatus IS NOT NULL THEN N' AND LabelStatus = @labelStatus' ELSE N'' END
+        + CASE WHEN @department IS NOT NULL THEN N' AND MBMDepartment = @department' ELSE N'' END
+        + CASE WHEN @productCategory IS NOT NULL THEN N' AND PLNProCat = @productCategory' ELSE N'' END;
+
+    -- Coded selections (desktop combo lists).
+    SET @w += CASE @insuredGroup
+            WHEN N'0' THEN N' AND INSCode = ''I''' WHEN N'1' THEN N' AND INSCode = ''F''' WHEN N'2' THEN N' AND INSCode = ''G'''
+            WHEN N'3' THEN N' AND INSCode = ''H''' WHEN N'4' THEN N' AND (INSCode = ''I'' OR INSCode = ''F'')'
+            WHEN N'5' THEN N' AND (INSCode = ''I'' OR INSCode = ''G'')' WHEN N'6' THEN N' AND (INSCode = ''F'' OR INSCode = ''H'')'
+            WHEN N'7' THEN N' AND (INSCode = ''G'' OR INSCode = ''H'')' ELSE N'' END
+        + CASE @status
+            WHEN N'0' THEN N' AND MBMStatus = ''A''' WHEN N'1' THEN N' AND MBMStatus = ''C''' WHEN N'2' THEN N' AND MBMStatus = ''D'''
+            WHEN N'3' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''C'')' WHEN N'4' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''S'')'
+            WHEN N'5' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''C'' OR MBMStatus = ''S'')' WHEN N'6' THEN N' AND MBMStatus = ''S''' ELSE N'' END
+        + CASE @renewal
+            WHEN N'P' THEN N' AND (MBMRenewFlag = ''P'')' WHEN N'N' THEN N' AND (MBMRenewFlag IS NULL OR MBMRenewFlag = '''' OR MBMRenewFlag = ''N'')'
+            WHEN N'R' THEN N' AND (MBMRenewFlag = ''R'')' WHEN N'T' THEN N' AND (MBMRenewFlag = ''T'')' ELSE N'' END;
+
+    -- From / to ranges.
+    SELECT @w += CASE WHEN r.FromSet = 1 THEN N' AND ' + r.Col + N' >= @' + r.Param + N'From' ELSE N'' END
+               + CASE WHEN r.ToSet = 1 THEN N' AND ' + r.Col + N' <= @' + r.Param + N'To' ELSE N'' END
+    FROM (VALUES
+        (N'DayInsured', N'dayInsured', IIF(@dayInsuredFrom IS NULL, 0, 1), IIF(@dayInsuredTo IS NULL, 0, 1)),
+        (N'AgeDays', N'ageDays', IIF(@ageDaysFrom IS NULL, 0, 1), IIF(@ageDaysTo IS NULL, 0, 1)),
+        (N'DelayBordx', N'delayBordx', IIF(@delayBordxFrom IS NULL, 0, 1), IIF(@delayBordxTo IS NULL, 0, 1)),
+        (N'DelayInvBordx', N'delayInvBordx', IIF(@delayInvBordxFrom IS NULL, 0, 1), IIF(@delayInvBordxTo IS NULL, 0, 1)),
+        (N'DelayReg', N'delayReg', IIF(@delayRegFrom IS NULL, 0, 1), IIF(@delayRegTo IS NULL, 0, 1)),
+        (N'DelayInvD', N'delayInvD', IIF(@delayInvDFrom IS NULL, 0, 1), IIF(@delayInvDTo IS NULL, 0, 1)),
+        (N'DelayInvE', N'delayInvE', IIF(@delayInvEFrom IS NULL, 0, 1), IIF(@delayInvETo IS NULL, 0, 1)),
+        (N'MBMPremium', N'premium', IIF(@premiumFrom IS NULL, 0, 1), IIF(@premiumTo IS NULL, 0, 1)),
+        (N'MBMMCOFee', N'mcoFee', IIF(@mcoFeeFrom IS NULL, 0, 1), IIF(@mcoFeeTo IS NULL, 0, 1)),
+        (N'MBMBatchNo', N'batch', IIF(@batchFrom IS NULL, 0, 1), IIF(@batchTo IS NULL, 0, 1)),
+        (N'MBMEmployeeNo', N'employeeNo', IIF(@employeeNoFrom IS NULL, 0, 1), IIF(@employeeNoTo IS NULL, 0, 1)),
+        (N'MBMPolicyNo', N'policyNo', IIF(@policyNoFrom IS NULL, 0, 1), IIF(@policyNoTo IS NULL, 0, 1)),
+        (N'PLNCode', N'plan', IIF(@planFrom IS NULL, 0, 1), IIF(@planTo IS NULL, 0, 1)),
+        (N'AGECode', N'ageBand', IIF(@ageBandFrom IS NULL, 0, 1), IIF(@ageBandTo IS NULL, 0, 1)),
+        (N'MBMPostCode', N'postCode', IIF(@postCodeFrom IS NULL, 0, 1), IIF(@postCodeTo IS NULL, 0, 1)),
+        (N'MBMPolicyYear', N'policyYear', IIF(@policyYearFrom IS NULL, 0, 1), IIF(@policyYearTo IS NULL, 0, 1)),
+        (N'MBMInvoiceNo', N'invoiceNo', IIF(@invoiceNoFrom IS NULL, 0, 1), IIF(@invoiceNoTo IS NULL, 0, 1)),
+        (N'MBMIcBcPp', N'ic', IIF(@icFrom IS NULL, 0, 1), IIF(@icTo IS NULL, 0, 1)),
+        (N'MBMPayorEffDate', N'effDate', IIF(@effDateFrom IS NULL, 0, 1), IIF(@effDateTo IS NULL, 0, 1)),
+        (N'MBMPayorExpDate', N'expDate', IIF(@expDateFrom IS NULL, 0, 1), IIF(@expDateTo IS NULL, 0, 1)),
+        (N'MBMFirstJoinedDate', N'dateJoined', IIF(@dateJoinedFrom IS NULL, 0, 1), IIF(@dateJoinedTo IS NULL, 0, 1)),
+        (N'MBMValueDate', N'dor', IIF(@dorFrom IS NULL, 0, 1), IIF(@dorTo IS NULL, 0, 1)),
+        (N'MBMDOB', N'dob', IIF(@dobFrom IS NULL, 0, 1), IIF(@dobTo IS NULL, 0, 1)),
+        (N'MBMBordxDate', N'bordxDate', IIF(@bordxDateFrom IS NULL, 0, 1), IIF(@bordxDateTo IS NULL, 0, 1)),
+        (N'MBMInvoiceDate', N'invoiceDate', IIF(@invoiceDateFrom IS NULL, 0, 1), IIF(@invoiceDateTo IS NULL, 0, 1)),
+        (N'MBMEndtEffDate', N'endtEffDate', IIF(@endtEffDateFrom IS NULL, 0, 1), IIF(@endtEffDateTo IS NULL, 0, 1)),
+        (N'MBMCancelDate', N'cancelDate', IIF(@cancelDateFrom IS NULL, 0, 1), IIF(@cancelDateTo IS NULL, 0, 1)),
+        (N'MBMCRegDate', N'dorSupp', IIF(@withSuppRegDate = 1 AND @dorSuppFrom IS NOT NULL, 1, 0), IIF(@withSuppRegDate = 1 AND @dorSuppTo IS NOT NULL, 1, 0))
+    ) r (Col, Param, FromSet, ToSet);
+
+    -- "Blank" check boxes. (HISDB runs at a legacy compatibility level, so STRING_SPLIT is not available; keys are matched with
+    -- CHARINDEX against a fixed list and never concatenated into the SQL.)
+    DECLARE @blankList nvarchar(2002) = N',' + REPLACE(ISNULL(@blanks, N''), N' ', N'') + N',';
+    DECLARE @blankClauses TABLE (BlankKey nvarchar(50) PRIMARY KEY, Clause nvarchar(200));
+    INSERT INTO @blankClauses VALUES
+        (N'health', N'(HLTCode IS NULL OR HLTCode = '''')'), (N'payor', N'(PAYCode IS NULL OR PAYCode = '''')'),
+        (N'insuredGroup', N'(INSCode IS NULL OR INSCode = '''')'), (N'memberTypeBlank', N'(MBMMemberType IS NULL OR MBMMemberType = '''')'),
+        (N'adultChild', N'(MBMAdultChild IS NULL OR MBMAdultChild = '''')'), (N'race', N'(RACCode IS NULL OR RACCode = '''')'),
+        (N'sex', N'(MBMSex IS NULL OR MBMSex = '''')'), (N'relationship', N'(RELCode IS NULL OR RELCode = '''')'),
+        (N'dataStatus', N'(MBMDataStatus IS NULL OR MBMDataStatus = '''')'), (N'status', N'(MBMStatus IS NULL OR MBMStatus = '''')'),
+        (N'expired', N'(MBMExpiredStatus IS NULL OR MBMExpiredStatus = '''')'), (N'renewal', N'(MBMRenewFlag IS NULL OR MBMRenewFlag = '''')'),
+        (N'premiumMode', N'(MBMInstallment IS NULL OR MBMInstallment = '''')'), (N'state', N'(STACode IS NULL OR STACode = '''')'),
+        (N'takeOver', N'(MBMTakeover IS NULL OR MBMTakeover = '''')'), (N'agentCode', N'(MBMAgentCode IS NULL OR MBMAgentCode = '''')'),
+        (N'membershipNo', N'(MBMNumber IS NULL OR MBMNumber = '''')'), (N'policyNo', N'(MBMPolicyNo IS NULL OR MBMPolicyNo = '''')'),
+        (N'groupCompany', N'(MBMGroupCompany IS NULL OR MBMGroupCompany = '''')'), (N'plan', N'(PLNCode IS NULL OR PLNCode = '''')'),
+        (N'ageBand', N'(AGECode IS NULL OR AGECode = '''')'), (N'employeeNo', N'(MBMEmployeeNo IS NULL OR MBMEmployeeNo = '''')'),
+        (N'dayInsured', N'(DayInsured IS NULL)'), (N'ageDays', N'(AgeDays IS NULL)'), (N'delayBordx', N'(DelayBordx IS NULL)'),
+        (N'delayInvBordx', N'(DelayInvBordx IS NULL)'), (N'delayReg', N'(DelayReg IS NULL)'), (N'delayInvD', N'(DelayInvD IS NULL)'),
+        (N'delayInvE', N'(DelayInvE IS NULL)'), (N'premium', N'(MBMPremium IS NULL)'), (N'mcoFee', N'(MBMMCOFee IS NULL)'),
+        (N'effDate', N'(MBMPayorEffDate IS NULL OR MBMPayorEffDate = '''')'), (N'expDate', N'(MBMPayorExpDate IS NULL OR MBMPayorExpDate = '''')'),
+        (N'dateJoined', N'(MBMFirstJoinedDate IS NULL OR MBMFirstJoinedDate = '''')'), (N'dor', N'(MBMValueDate IS NULL OR MBMValueDate = '''')'),
+        (N'dob', N'(MBMDOB IS NULL OR MBMDOB = '''')'), (N'bordxDate', N'(MBMBordxDate IS NULL OR MBMBordxDate = '''')'),
+        (N'batch', N'(MBMBatchNo IS NULL OR MBMBatchNo = '''')'), (N'postCode', N'(MBMPostCode IS NULL OR MBMPostCode = '''')'),
+        (N'policyYear', N'(MBMPolicyYear IS NULL OR MBMPolicyYear = '''')'), (N'invoiceNo', N'(MBMInvoiceNo IS NULL OR MBMInvoiceNo = '''')'),
+        (N'invoiceDate', N'(MBMInvoiceDate IS NULL OR MBMInvoiceDate = '''')'), (N'ic', N'(MBMIcBcPp IS NULL OR MBMIcBcPp = '''')'),
+        (N'labelStatus', N'(LabelStatus IS NULL OR LabelStatus = '''')'), (N'department', N'(MBMDepartment IS NULL OR MBMDepartment = '''')'),
+        (N'productCategory', N'(PLNProCat IS NULL OR PLNProCat = '''')'), (N'endtEffDate', N'(MBMEndtEffDate IS NULL OR MBMEndtEffDate = '''')'),
+        (N'cancelDate', N'(MBMCancelDate IS NULL OR MBMCancelDate = '''')'), (N'dorSupp', N'(MBMCRegDate IS NULL OR MBMCRegDate = '''')');
+    SELECT @w += N' AND ' + c.Clause FROM @blankClauses c
+    WHERE CHARINDEX(N',' + c.BlankKey + N',', @blankList) > 0 AND (c.BlankKey <> N'dorSupp' OR @withSuppRegDate = 1);
+
+    -- Member type selection of the detail listings and of General Listing (Prin. Name).
+    IF @memberTypeFilter IS NOT NULL
+    BEGIN
+        DECLARE @memberClause nvarchar(200) = CASE @memberTypeFilter
+            WHEN N'DETAIL_C' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''C'')'
+            WHEN N'DETAIL_S' THEN N'(MBMMemberType = ''Q'')'
+            WHEN N'NAME_P_C' THEN N'MBMMemberType = ''P'' AND MBMCCoverID = ''00'''
+            WHEN N'NAME_P_S' THEN N'MBMMemberType = ''Q'' AND MBMCCoverID = ''00'''
+            WHEN N'NAME_P_BOTH' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''Q'') AND MBMCCoverID = ''00'''
+            WHEN N'NAME_S_C' THEN N'MBMMemberType = ''C'''
+            WHEN N'NAME_S_S' THEN N'MBMMemberType = ''S'''
+            WHEN N'NAME_S_BOTH' THEN N'(MBMMemberType = ''S'' OR MBMMemberType = ''C'')'
+            WHEN N'NAME_B_C' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''C'')'
+            WHEN N'NAME_B_S' THEN N'(MBMMemberType = ''Q'' OR MBMMemberType = ''S'')'
+            WHEN N'NAME_B_BOTH' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''Q'')' END;
+        IF @memberClause IS NULL THROW 50003, N'Unknown tracking member type filter.', 1;
+        SET @w += N' AND ' + @memberClause;
+    END
+
+    -- Per insured / adult-child count columns (Bordx and MCO invoice "INS Type & MBM Type", Branch by Agent).
+    IF @extra IS NOT NULL
+    BEGIN
+        DECLARE @extraClause nvarchar(200) = CASE @extra
+            WHEN N'I' THEN N'INSCode = ''I''' WHEN N'F' THEN N'INSCode = ''F''' WHEN N'G' THEN N'INSCode = ''G''' WHEN N'H' THEN N'INSCode = ''H'''
+            WHEN N'I_C' THEN N'INSCode = ''I'' AND MBMAdultChild = ''C''' WHEN N'I_A' THEN N'INSCode = ''I'' AND MBMAdultChild = ''A'''
+            WHEN N'G_C' THEN N'INSCode = ''G'' AND MBMAdultChild = ''C''' WHEN N'G_A' THEN N'INSCode = ''G'' AND MBMAdultChild = ''A''' END;
+        IF @extraClause IS NULL THROW 50004, N'Unknown tracking count column.', 1;
+        SET @w += N' AND ' + @extraClause;
+    END
+
+    -- Payors starting with Z are internal test payors and never reported.
+    SET @w += N' AND SUBSTRING(PAYCode, 1, 1) <> ''Z''';
+
+    DECLARE @sql nvarchar(max) = @prefix + @w + N' ' + @suffix;
+    EXEC sp_executesql @sql,
+        N'@health nvarchar(10), @payor nvarchar(10), @adultChild nvarchar(1), @race nvarchar(1), @sex nvarchar(1), @relationship nvarchar(2),
+          @dataStatus nvarchar(1), @expired nvarchar(1), @premiumMode nvarchar(1), @state nvarchar(50), @takeOver nvarchar(1), @agentCode nvarchar(50),
+          @membershipNo nvarchar(30), @groupCompany nvarchar(200), @labelStatus nvarchar(1), @department nvarchar(100), @productCategory nvarchar(10),
+          @dayInsuredFrom decimal(19, 4), @dayInsuredTo decimal(19, 4), @ageDaysFrom decimal(19, 4), @ageDaysTo decimal(19, 4),
+          @delayBordxFrom decimal(19, 4), @delayBordxTo decimal(19, 4), @delayInvBordxFrom decimal(19, 4), @delayInvBordxTo decimal(19, 4),
+          @delayRegFrom decimal(19, 4), @delayRegTo decimal(19, 4), @delayInvDFrom decimal(19, 4), @delayInvDTo decimal(19, 4),
+          @delayInvEFrom decimal(19, 4), @delayInvETo decimal(19, 4), @premiumFrom decimal(19, 4), @premiumTo decimal(19, 4),
+          @mcoFeeFrom decimal(19, 4), @mcoFeeTo decimal(19, 4), @batchFrom decimal(19, 4), @batchTo decimal(19, 4),
+          @employeeNoFrom nvarchar(50), @employeeNoTo nvarchar(50), @policyNoFrom nvarchar(50), @policyNoTo nvarchar(50),
+          @planFrom nvarchar(10), @planTo nvarchar(10), @ageBandFrom nvarchar(10), @ageBandTo nvarchar(10), @postCodeFrom nvarchar(10),
+          @postCodeTo nvarchar(10), @policyYearFrom nvarchar(10), @policyYearTo nvarchar(10), @invoiceNoFrom nvarchar(50), @invoiceNoTo nvarchar(50),
+          @icFrom nvarchar(30), @icTo nvarchar(30), @effDateFrom date, @effDateTo date, @expDateFrom date, @expDateTo date,
+          @dateJoinedFrom date, @dateJoinedTo date, @dorFrom date, @dorTo date, @dobFrom date, @dobTo date, @bordxDateFrom date, @bordxDateTo date,
+          @invoiceDateFrom date, @invoiceDateTo date, @endtEffDateFrom date, @endtEffDateTo date, @cancelDateFrom date, @cancelDateTo date,
+          @dorSuppFrom date, @dorSuppTo date',
+        @health = @health, @payor = @payor, @adultChild = @adultChild, @race = @race, @sex = @sex, @relationship = @relationship,
+        @dataStatus = @dataStatus, @expired = @expired, @premiumMode = @premiumMode, @state = @state, @takeOver = @takeOver, @agentCode = @agentCode,
+        @membershipNo = @membershipNo, @groupCompany = @groupCompany, @labelStatus = @labelStatus, @department = @department,
+        @productCategory = @productCategory, @dayInsuredFrom = @dayInsuredFrom, @dayInsuredTo = @dayInsuredTo, @ageDaysFrom = @ageDaysFrom,
+        @ageDaysTo = @ageDaysTo, @delayBordxFrom = @delayBordxFrom, @delayBordxTo = @delayBordxTo, @delayInvBordxFrom = @delayInvBordxFrom,
+        @delayInvBordxTo = @delayInvBordxTo, @delayRegFrom = @delayRegFrom, @delayRegTo = @delayRegTo, @delayInvDFrom = @delayInvDFrom,
+        @delayInvDTo = @delayInvDTo, @delayInvEFrom = @delayInvEFrom, @delayInvETo = @delayInvETo, @premiumFrom = @premiumFrom,
+        @premiumTo = @premiumTo, @mcoFeeFrom = @mcoFeeFrom, @mcoFeeTo = @mcoFeeTo, @batchFrom = @batchFrom, @batchTo = @batchTo,
+        @employeeNoFrom = @employeeNoFrom, @employeeNoTo = @employeeNoTo, @policyNoFrom = @policyNoFrom, @policyNoTo = @policyNoTo,
+        @planFrom = @planFrom, @planTo = @planTo, @ageBandFrom = @ageBandFrom, @ageBandTo = @ageBandTo, @postCodeFrom = @postCodeFrom,
+        @postCodeTo = @postCodeTo, @policyYearFrom = @policyYearFrom, @policyYearTo = @policyYearTo, @invoiceNoFrom = @invoiceNoFrom,
+        @invoiceNoTo = @invoiceNoTo, @icFrom = @icFrom, @icTo = @icTo, @effDateFrom = @effDateFrom, @effDateTo = @effDateTo,
+        @expDateFrom = @expDateFrom, @expDateTo = @expDateTo, @dateJoinedFrom = @dateJoinedFrom, @dateJoinedTo = @dateJoinedTo,
+        @dorFrom = @dorFrom, @dorTo = @dorTo, @dobFrom = @dobFrom, @dobTo = @dobTo, @bordxDateFrom = @bordxDateFrom, @bordxDateTo = @bordxDateTo,
+        @invoiceDateFrom = @invoiceDateFrom, @invoiceDateTo = @invoiceDateTo, @endtEffDateFrom = @endtEffDateFrom, @endtEffDateTo = @endtEffDateTo,
+        @cancelDateFrom = @cancelDateFrom, @cancelDateTo = @cancelDateTo, @dorSuppFrom = @dorSuppFrom, @dorSuppTo = @dorSuppTo;
+END
+GO
+
+-- ===== main/171_tracking_cases.sql =====
+-- GENERATED by tools/Generate-TrackingCases.ps1 from dbo.MBMTracking. Do not edit by hand; rerun the script instead.
+-- Fixed query text of each MBMTracking case: prefix (SELECT ... FROM view WHERE ...) and suffix (GROUP BY / ORDER BY).
+CREATE OR ALTER PROCEDURE genisis.Tracking_CaseText
+    @case int, @prefix nvarchar(max) OUTPUT, @suffix nvarchar(max) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @prefix = CASE @case
+    WHEN 1 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 2 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 3 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalP,SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 4 THEN N'SELECT PAYCode, HLTCode, PrinAGECode, COUNT(MBMNumber) AS TotalS,SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 5 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalP,SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 6 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 7 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 8 THEN N'SELECT HLTCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 9 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 10 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 11 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 12 THEN N'SELECT PAYCode, HLTCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 13 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 14 THEN N'SELECT PAYCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 15 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 16 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 17 THEN N'SELECT PAYCode, MBMAgentCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 18 THEN N'SELECT PAYCode, MBMAgentCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 19 THEN N'SELECT MBMAgentCode, PAYCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 20 THEN N'SELECT MBMAgentCode, PAYCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 21 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 22 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 23 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 24 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 25 THEN N'SELECT PAYCode, MBMAgentCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross, SUM(MBMAccessFee) AS EAFee From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 26 THEN N'SELECT PAYCode, MBMAgentCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 27 THEN N'SELECT PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 28 THEN N'SELECT PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 29 THEN N'SELECT TOP 20 PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 30 THEN N'SELECT TOP 20 PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 31 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, MBMMemberType, PLNCode, MBMCCoverID, HLTCode, MBMAgentCode, MBMStatus, MBMAccessFee, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMPremium, DayInsured, PAYCode From View_MBM_Search2 Where 0 = 0'
+    WHEN 32 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, MBMMemberType, PLNCode, MBMCCoverID, HLTCode, MBMAgentCode, MBMStatus, MBMAccessFee, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMPremium, DayInsured, PAYCode, RElCode, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 33 THEN N'SELECT MBMValueDate, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 34 THEN N'SELECT MBMValueDate, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 35 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMBordxDate, MBMBatchNo, MBMPremium, MBMMemberType, MBMStatus, MBMCCoverID, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMAccessFee From View_MBM_Search2 Where 0 = 0'
+    WHEN 36 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMBordxDate, MBMBatchNo, MBMPremium, MBMCCoverID, MBMMemberType, MBMStatus, MBMCCoverID, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMAccessFee From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 37 THEN N'SELECT PAYCode, MBMBordxDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 38 THEN N'SELECT PAYCode, MBMBordxDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 39 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIC, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''C'''
+    WHEN 40 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIA, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''A'''
+    WHEN 41 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalF, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''F'''
+    WHEN 42 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGC, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''C'''
+    WHEN 43 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGA, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''A'''
+    WHEN 44 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalH, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''H'''
+    WHEN 45 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalFS, SUM(MBMMCOFee) AS MCOFee From View_MBM_Supplementary2 Where INSCode = ''F'''
+    WHEN 46 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalHS, SUM(MBMMCOFee) AS MCOFee From View_MBM_Supplementary2 Where INSCode = ''H'''
+    WHEN 47 THEN N'SELECT PAYCode, MBMBordxDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 48 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIC, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''C'''
+    WHEN 49 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIA, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''A'''
+    WHEN 50 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalF, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''F'''
+    WHEN 51 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalFS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where INSCode = ''F'''
+    WHEN 52 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGC, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''C'''
+    WHEN 53 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGA, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''A'''
+    WHEN 54 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalH, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''H'''
+    WHEN 55 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalHS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where INSCode = ''H'''
+    WHEN 56 THEN N'SELECT PAYCode, MBMBordxDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 57 THEN N'SELECT PAYCode, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 58 THEN N'SELECT PAYCode, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 59 THEN N'SELECT HLTCode, BRNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 60 THEN N'SELECT HLTCode, BRNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 61 THEN N'SELECT BRNCode, MBMAgentCode From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 62 THEN N'SELECT BRNCode, MBMAgentCode From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 63 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 64 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 65 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 66 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 67 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 68 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 69 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 70 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 71 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 72 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 73 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 74 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0'
+    WHEN 75 THEN N'SELECT HLTCode, PAYCode, BRNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 76 THEN N'SELECT HLTCode, PAYCode, BRNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 77 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMDOB, MBMBordxDate, MBMValueDate, MBMInvoiceDate, MBMMemberType, MBMStatus, MBMPayorEffDate, MBMPayorExpDate, MBMRenewFlag, PAYCode, DayInsured, AgeDays, DelayBordx, DelayReg, DelayInvD, DelayInvE, DelayInvBordx, RELCode, MBMCCoverID From View_MBM_Search2 Where 0 = 0'
+    WHEN 78 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMDOB, MBMBordxDate, MBMValueDate, MBMInvoiceDate, MBMMemberType, MBMStatus, MBMPayorEffDate, MBMPayorExpDate, MBMRenewFlag, PAYCode, DayInsured, AgeDays, DelayBordx, DelayReg, DelayInvD, DelayInvE, DelayInvBordx, RELCode, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 79 THEN N'SELECT MBMNumber, MBMPolicyNo, MBMName, MBMPayorEffDate, MBMPayorExpDate, DayInsured, INSCode, PLNCode From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 80 THEN N'SELECT COUNT(MBMNumber) AS TotalP, DayInsured From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 81 THEN N'SELECT DayInsured, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 82 THEN N'SELECT HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 83 THEN N'SELECT HLTCode, INSCode, PrinSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 84 THEN N'SELECT HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 85 THEN N'SELECT PAYCode, HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 86 THEN N'SELECT PAYCode, HLTCode, INSCode, PrinSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 87 THEN N'SELECT PAYCode, HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 88 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, MBMBatchNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, RElCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment,MBMCostCenter,MBMGroupCategory,MBMSecurityCode,MBMClientType,Subsidiary,MBMRemarks,Remark, MBMInvoiceDate,MBMInvoiceNo From View_MBM_Search2 Where 0 = 0'
+    WHEN 89 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, MBMBatchNo, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment, RELCode, MBMCCoverID,MBMCostCenter,MBMGroupCategory,MBMSecurityCode,MBMClientType,Subsidiary,MBMRemarks,Remark, MBMInvoiceDate,MBMInvoiceNo From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 90 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment, RELCode, MBMCCoverID, MBMCRegDate,MBMCostCenter,MBMGroupCategory From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 91 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, RELCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment From View_MBM_Search2 Where 0 = 0'
+    WHEN 92 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment, MBMCSex, MBMCAgeband, MBMCDOB, RELCode, MBMCCoverID From View_MBM_Supplementary3 Where 0 = 0'
+    WHEN 93 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, RELCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment, MBMCSex, MBMCAgeband, MBMCDOB, MBMCRegDate From View_MBM_Supplementary3 Where 0 = 0'
+    WHEN 94 THEN N'Select MBMNumber, MBMName, RElCode, MBMCCoverID, MBMStatus, MBMMemberType, MBMPremium, MBMBasicMCO, MBMMCOFee, MBMBasicPrem, MBMPayorMCONet, MBMPayorMCOGross, MBMPayorPremNet, MBMPayorPremGross From View_MBM_Search2 Where 0 = 0'
+    WHEN 95 THEN N'Select MBMNumber, MBMName, RElCode, MBMCCoverID, MBMStatus, MBMMemberType, MBMPremium, MBMBasicMCO, MBMMCOFee, MBMBasicPrem, MBMPayorMCONet, MBMPayorMCOGross, MBMPayorPremNet, MBMPayorPremGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 96 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3 From View_MBM_Search2 Where 0 = 0'
+    WHEN 97 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3, MBMCCoverID, MBMCRegDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 98 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 99 THEN N'SELECT PAYCode, MBMExpiredStatus, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 100 THEN N'SELECT PAYCode, MBMExpiredStatus, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 101 THEN N'Select MBMNumber, MBMName, MBMIcBcPp, MBMInstallment, MBMMemberType, MBMStatus, MBMCCoverID, MBMTakeover, MBMPayorEffDate, MBMPayorExpDate, MBMPolicyYear, MBMRenewFlag, MBMFirstJoinedDate From View_MBM_Search2 Where 0 = 0'
+    WHEN 102 THEN N'Select MBMNumber, MBMName, MBMIcBcPp, MBMInstallment, MBMMemberType, MBMStatus, MBMCCoverID, MBMTakeover, MBMPayorEffDate, MBMPayorExpDate, MBMPolicyYear, MBMRenewFlag, MBMFirstJoinedDate, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 103 THEN N'SELECT MBMPolicyYear, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 104 THEN N'SELECT MBMPolicyYear, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 105 THEN N'SELECT PAYCode, MBMInstallment, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 106 THEN N'SELECT PAYCode, MBMInstallment, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 107 THEN N'SELECT PAYCode, MBMRenewFlag, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 108 THEN N'SELECT PAYCode, MBMRenewFlag, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 109 THEN N'SELECT PAYCode, MBMTakeover, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 110 THEN N'SELECT PAYCode, MBMTakeover, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 111 THEN N'SELECT HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 112 THEN N'SELECT HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 113 THEN N'SELECT PAYCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 114 THEN N'SELECT PAYCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 115 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 116 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 117 THEN N'SELECT PAYCode, MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 118 THEN N'SELECT PAYCode, MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 119 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 120 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 121 THEN N'SELECT PAYCode, MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 122 THEN N'SELECT PAYCode, MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 123 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 124 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 125 THEN N'SELECT PAYCode, MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 126 THEN N'SELECT PAYCode, MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 127 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate,MBMGroupCompany From View_MBM_Search2 Where 0 = 0'
+    WHEN 128 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate, RELCode,MBMGroupCompany From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 129 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate, RELCode From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 130 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 131 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 132 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 133 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBMS, SUM(MBMMCOFEE) AS MCOFEE From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 134 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 135 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBMS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 136 THEN N'SELECT HLTCode, PAYCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 137 THEN N'SELECT HLTCode, PAYCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 138 THEN N'SELECT PAYCode, SUM(MBMMCOFee) AS MBMMCOFee, SUM(MBMBasicMCO) AS MBMBasicMCO, SUM(MBMPayorMCOGross) AS MBMPayorMCOGross, SUM(MBMPayorMCONet) AS MBMPayorMCONet, SUM(MBMPremium) AS MBMPremium, SUM(MBMBasicPrem) AS MBMBasicPrem, SUM(MBMPayorPremGross) AS MBMPayorPremGross, SUM(MBMPayorPremNet) AS MBMPayorPremNet From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 139 THEN N'SELECT PAYCode, SUM(MBMMCOFee) AS MBMMCOFee, SUM(MBMBasicMCO) AS MBMBasicMCO, SUM(MBMPayorMCOGross) AS MBMPayorMCOGross, SUM(MBMPayorMCONet) AS MBMPayorMCONet, SUM(MBMPremium) AS MBMPremium, SUM(MBMBasicPrem) AS MBMBasicPrem, SUM(MBMPayorPremGross) AS MBMPayorPremGross, SUM(MBMPayorPremNet) AS MBMPayorPremNet From VIEW_MBM_Supplementary2 Where 0 = 0'
+    WHEN 140 THEN N'SELECT PAYCompanyName, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(CLMTotalApproved) AS CLMTotalApproved From VIEW_MBM_Search4 Where (INSCode = ''G'' OR INSCode = ''H'')'
+    WHEN 141 THEN N'SELECT PAYCompanyName, MBMGroupCompany, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary4 Where (INSCode = ''G'' OR INSCode = ''H'')'
+    WHEN 142 THEN N'SELECT HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 143 THEN N'SELECT HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 144 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 145 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 146 THEN N'SELECT HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 147 THEN N'SELECT HLTCode, INSCode, PLNCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 148 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 149 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 150 THEN N'SELECT HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 151 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 152 THEN N'SELECT PAYCode, MBMPolicyNo, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 153 THEN N'SELECT PAYCode, MBMPolicyNo, MBMGroupCompany, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 154 THEN N'SELECT HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 155 THEN N'SELECT HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 156 THEN N'SELECT PAYCode, HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 157 THEN N'SELECT PAYCode, HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 158 THEN N'SELECT PAYCode, HLTCode, RELCode, AGECode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From VIEW_MBM_Search3 Where 0 = 0'
+    WHEN 159 THEN N'SELECT PAYCode, HLTCode, RELCode, AGECode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where RELCode <> ''P'''
+    WHEN 160 THEN N'SELECT PAYCode, HLTCode, INSCode, RELCode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From VIEW_MBM_Search3 Where 0 = 0'
+    WHEN 161 THEN N'SELECT PAYCode, HLTCode, INSCode, RELCode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where RELCode <> ''P'''
+    WHEN 162 THEN N'SELECT HLTCode, STACode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 163 THEN N'SELECT HLTCode, STACode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 164 THEN N'SELECT PAYCode, HLTCode, STACode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 165 THEN N'SELECT PAYCode, HLTCode, STACode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 166 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 167 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 168 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, MBMDepartment, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 169 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, MBMDepartment, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 170 THEN N'SELECT PLNProCat, ProductNameCat, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 171 THEN N'SELECT PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 172 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 173 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 174 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 175 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 176 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 177 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 178 THEN N'SELECT MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 179 THEN N'SELECT MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 180 THEN N'SELECT PAYCode, MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 181 THEN N'SELECT PAYCode, MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 182 THEN N'SELECT * From CLN Where 0 = 0'
+    WHEN 183 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Search2 Where 0 = 0'
+    WHEN 184 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 185 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 186 THEN N'SELECT MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 187 THEN N'SELECT MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 188 THEN N'SELECT PAYCode, MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 189 THEN N'SELECT PAYCode, MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 190 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2_MX Where 0 = 0'
+    WHEN 191 THEN N'SELECT case when coverid=''00'' then ''00'' else ''01'' end as cc,PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search_MCO Where 0 = 0'
+    WHEN 192 THEN N'SELECT case when coverid=''00'' then ''Principal'' else ''Dependent'' end as cc, PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM,SUM(MBMMCOFEE) AS MCOFEE into #temp From VIEW_MBM_Search_MCO Where 0 = 0'
+    END;
+    SET @suffix = CASE @case
+    WHEN 1 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 2 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 3 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 4 THEN N'GROUP BY PAYCode, HLTCode, PrinAGECode'
+    WHEN 5 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 6 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 7 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 8 THEN N'GROUP BY HLTCode, INSCode, PrinAGECode'
+    WHEN 9 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 10 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 11 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 12 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PrinAGECode'
+    WHEN 13 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 14 THEN N'GROUP BY PAYCode, INSCode, PrinAGECode'
+    WHEN 15 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 16 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 17 THEN N'GROUP BY PAYCode, MBMAgentCode, HLTCode, INSCode'
+    WHEN 18 THEN N'GROUP BY PAYCode, MBMAgentCode, HLTCode, INSCode'
+    WHEN 19 THEN N'GROUP BY MBMAgentCode, PAYCode'
+    WHEN 20 THEN N'GROUP BY MBMAgentCode, PAYCode'
+    WHEN 21 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 22 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 23 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 24 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 25 THEN N'GROUP BY PAYCode, MBMAgentCode, RACCode'
+    WHEN 26 THEN N'GROUP BY PAYCode, MBMAgentCode, RACCode'
+    WHEN 27 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 28 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 29 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 30 THEN N'GROUP BY PAYCode, MBMAgentCode ORDER BY PremiumGross Desc'
+    WHEN 31 THEN N''
+    WHEN 32 THEN N''
+    WHEN 33 THEN N'GROUP BY MBMValueDate, MBMBordxDate, MBMBatchNo'
+    WHEN 34 THEN N'GROUP BY MBMValueDate, MBMBordxDate, MBMBatchNo'
+    WHEN 35 THEN N''
+    WHEN 36 THEN N''
+    WHEN 37 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 38 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 39 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 40 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 41 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 42 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 43 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 44 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 45 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 46 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 47 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 48 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 49 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 50 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 51 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 52 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 53 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 54 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 55 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 56 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 57 THEN N'GROUP BY PAYCode, MBMBordxDate, MBMBatchNo'
+    WHEN 58 THEN N'GROUP BY PAYCode, MBMBordxDate, MBMBatchNo'
+    WHEN 59 THEN N'GROUP BY HLTCode, BRNCode'
+    WHEN 60 THEN N'GROUP BY HLTCode, BRNCode'
+    WHEN 61 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 62 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 63 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 64 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 65 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 66 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 67 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 68 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 69 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 70 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 71 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 72 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 73 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 74 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 75 THEN N'GROUP BY HLTCode, PAYCode, BRNCode'
+    WHEN 76 THEN N'GROUP BY HLTCode, PAYCode, BRNCode'
+    WHEN 77 THEN N''
+    WHEN 78 THEN N''
+    WHEN 79 THEN N''
+    WHEN 80 THEN N'GROUP BY DayInsured'
+    WHEN 81 THEN N'GROUP BY DayInsured'
+    WHEN 82 THEN N'GROUP BY HLTCode, INSCode, MBMSex'
+    WHEN 83 THEN N'GROUP BY HLTCode, INSCode, PrinSex'
+    WHEN 84 THEN N'GROUP BY HLTCode, INSCode, MBMSex'
+    WHEN 85 THEN N'GROUP BY PAYCode, HLTCode, INSCode, MBMSex'
+    WHEN 86 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PrinSex'
+    WHEN 87 THEN N'GROUP BY PAYCode, HLTCode, INSCode, MBMSex'
+    WHEN 88 THEN N''
+    WHEN 89 THEN N''
+    WHEN 90 THEN N''
+    WHEN 91 THEN N''
+    WHEN 92 THEN N''
+    WHEN 93 THEN N''
+    WHEN 94 THEN N''
+    WHEN 95 THEN N''
+    WHEN 96 THEN N''
+    WHEN 97 THEN N''
+    WHEN 98 THEN N''
+    WHEN 99 THEN N'GROUP BY PAYCode, MBMExpiredStatus, INSCode'
+    WHEN 100 THEN N'GROUP BY PAYCode, MBMExpiredStatus, INSCode'
+    WHEN 101 THEN N''
+    WHEN 102 THEN N''
+    WHEN 103 THEN N'GROUP BY MBMPolicyYear'
+    WHEN 104 THEN N'GROUP BY MBMPolicyYear'
+    WHEN 105 THEN N'GROUP BY PAYCode, MBMInstallment'
+    WHEN 106 THEN N'GROUP BY PAYCode, MBMInstallment'
+    WHEN 107 THEN N'GROUP BY PAYCode, MBMRenewFlag, INSCode'
+    WHEN 108 THEN N'GROUP BY PAYCode, MBMRenewFlag, INSCode'
+    WHEN 109 THEN N'GROUP BY PAYCode, MBMTakeover, INSCode'
+    WHEN 110 THEN N'GROUP BY PAYCode, MBMTakeover, INSCode'
+    WHEN 111 THEN N'GROUP BY HLTCode, INSCode'
+    WHEN 112 THEN N'GROUP BY HLTCode, INSCode'
+    WHEN 113 THEN N'GROUP BY PAYCode, HLTCode, INSCode'
+    WHEN 114 THEN N'GROUP BY PAYCode, HLTCode, INSCode'
+    WHEN 115 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 116 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 117 THEN N'GROUP BY PAYCode, MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 118 THEN N'GROUP BY PAYCode, MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 119 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 120 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 121 THEN N'GROUP BY PAYCode, MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 122 THEN N'GROUP BY PAYCode, MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 123 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 124 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 125 THEN N'GROUP BY PAYCode, MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 126 THEN N'GROUP BY PAYCode, MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 127 THEN N''
+    WHEN 128 THEN N''
+    WHEN 129 THEN N''
+    WHEN 130 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 131 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 132 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 133 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 134 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 135 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 136 THEN N'GROUP BY HLTCode, PAYCode'
+    WHEN 137 THEN N'GROUP BY HLTCode, PAYCode'
+    WHEN 138 THEN N'GROUP BY PAYCode'
+    WHEN 139 THEN N'GROUP BY PAYCode'
+    WHEN 140 THEN N'GROUP BY PAYCompanyName, MBMGroupCompany'
+    WHEN 141 THEN N'GROUP BY PAYCompanyName, MBMGroupCompany'
+    WHEN 142 THEN N'GROUP BY HLTCode, INSCode, PLNCode'
+    WHEN 143 THEN N'GROUP BY HLTCode, INSCode, PLNCode'
+    WHEN 144 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode'
+    WHEN 145 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode'
+    WHEN 146 THEN N'GROUP BY HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 147 THEN N'GROUP BY HLTCode, INSCode, PLNCode, PrinAGECode'
+    WHEN 148 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 149 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, PrinAGECode'
+    WHEN 150 THEN N'GROUP BY HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 151 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 152 THEN N'GROUP BY PAYCode, MBMPolicyNo, MBMGroupCompany'
+    WHEN 153 THEN N'GROUP BY PAYCode, MBMPolicyNo, MBMGroupCompany'
+    WHEN 154 THEN N'GROUP BY HLTCode, INSCode, RACCode'
+    WHEN 155 THEN N'GROUP BY HLTCode, INSCode, RACCode'
+    WHEN 156 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RACCode'
+    WHEN 157 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RACCode'
+    WHEN 158 THEN N'GROUP BY PAYCode, HLTCode, RELCode, AGECode'
+    WHEN 159 THEN N'GROUP BY PAYCode, HLTCode, RELCode, AGECode'
+    WHEN 160 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RELCode'
+    WHEN 161 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RELCode'
+    WHEN 162 THEN N'GROUP BY HLTCode, STACode'
+    WHEN 163 THEN N'GROUP BY HLTCode, STACode'
+    WHEN 164 THEN N'GROUP BY PAYCode, HLTCode, STACode'
+    WHEN 165 THEN N'GROUP BY PAYCode, HLTCode, STACode'
+    WHEN 166 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany'
+    WHEN 167 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany'
+    WHEN 168 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany, MBMDepartment'
+    WHEN 169 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany, MBMDepartment'
+    WHEN 170 THEN N'GROUP BY PLNProCat,ProductNameCat'
+    WHEN 171 THEN N'GROUP BY PLNProCat, ProductName'
+    WHEN 172 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate), PLNProCat, ProductName'
+    WHEN 173 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate), PLNProCat, ProductName'
+    WHEN 174 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate), PLNProCat, ProductName'
+    WHEN 175 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate), PLNProCat, ProductName'
+    WHEN 176 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate), PLNProCat, ProductName'
+    WHEN 177 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate), PLNProCat, ProductName'
+    WHEN 178 THEN N'GROUP BY MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 179 THEN N'GROUP BY MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 180 THEN N'GROUP BY PAYCode, MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 181 THEN N'GROUP BY PAYCode, MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 182 THEN N''
+    WHEN 183 THEN N''
+    WHEN 184 THEN N''
+    WHEN 185 THEN N''
+    WHEN 186 THEN N'GROUP BY MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 187 THEN N'GROUP BY MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 188 THEN N'GROUP BY PAYCode, MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 189 THEN N'GROUP BY PAYCode, MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 190 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 191 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate,case when coverid=''00'' then ''00'' else ''01'' end'
+    WHEN 192 THEN N'GROUP BY case when coverid=''00'' then ''Principal'' else ''Dependent'' end,PAYCode, MBMInvoiceNo, MBMInvoiceDate Select [PAYCode], Sum(coalesce(Principal_amt,0)) as Principal_amt, Sum(coalesce(Dependent_amt,0)) as Dependent_amt, Sum(coalesce(Principal_mbmcnt,0)) as Principal_mbmcnt, Sum(coalesce(Dependent_mbmcnt,0)) as Dependent_mbmcnt, MBMInvoiceNo, MBMInvoiceDate from ( Select [PAYCode],MBMInvoiceNo, MBMInvoiceDate ,Sum(MCOFEE) as MCOFEE ,Sum(TotalMBM) as TotalMBM ,[MCOFEE_amt]=[CC]+''_amt'' ,[TotalMBM_cnt]=[CC]+''_mbmcnt'' from #temp group by PAYCode,[CC],MBMInvoiceNo, MBMInvoiceDate )NN PIVOT (Sum(MCOFEE) for [MCOFEE_amt] IN (Principal_amt,Dependent_amt)) As PV1 PIVOT (Sum(TotalMBM) for [TotalMBM_cnt] IN (Principal_mbmcnt,Dependent_mbmcnt)) As PV2 group by [PAYCode],MBMInvoiceNo, MBMInvoiceDate Drop table #temp'
+    END;
+END
+GO
+
 PRINT N'Done.';
 GO
 SET NOEXEC OFF;

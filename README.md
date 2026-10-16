@@ -31,6 +31,7 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 | 2 | Membership > Adjustment |
 | 3 | Membership > Enquiry |
 | 4 | Membership > Upload Bordx |
+| 14 | Membership > Tracking |
 
 Every endpoint checks its position on the server (`[RequireAccess]`); hiding a menu item in the UI is not the protection.
 
@@ -113,6 +114,22 @@ Differences from the desktop: everything (main, maintenance and clinical writes)
 plan's round-up setting (the desktop only rounded if a fee field had been edited first); a name / date of birth change on a
 renewal renames only the base number and its `*nn` renewals (the desktop matched `LIKE '%base%'`); a supplementary's full
 relationship code is stored (the desktop kept the first letter); Add / Cancel / Delete Supplementary need at least one person.
+
+## Membership > Tracking
+
+`/api/membership/tracking` replaces `FrmNewMBMTracking` (menu position 14): all 22 report types / 83 selections, every filter
+(value, from / to range and "blank" check box) and the MBM type / principal type options. `meta` lists reports and filter
+fields, `run` returns up to 5,000 rows with the footer totals, `export` returns every row as CSV (Print to File).
+
+The desktop sent a concatenated WHERE fragment to `dbo.MBMTracking`. In the web version all SQL is in stored procedures:
+`genisis.Tracking_CaseText` holds each case's fixed query text (`sql/main/171_tracking_cases.sql`, generated from the live
+procedure by `tools/Generate-TrackingCases.ps1` together with `Tracking/TrackingCaseKeys.g.cs`; rerun it if `MBMTracking`
+changes), and `genisis.Tracking_Run` (`sql/main/170_tracking.sql`) adds the filters as typed parameters, so no value reaches
+the SQL text. C# keeps only the report catalog, the validator and the CSV writer. Supplementary counts are matched to the
+principal rows in one pass instead of one query per row. Differences: the Employee No "from" filter is applied (the desktop
+built it into an unused variable); the Cancel Date "blank" filter works (the desktop's had an unbalanced bracket);
+"General Listing (Prin. Name)" uses the views' `MBMCCoverID` / `MBMMemberType` columns (the desktop named columns those
+views do not have, so it failed for Principal or Supplementary).
 
 ## Membership > Upload Bordx
 

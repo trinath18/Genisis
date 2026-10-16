@@ -27,6 +27,8 @@ builder.Services.AddSingleton<Genisis.Api.Membership.IPolicyWordingStore, Genisi
 builder.Services.AddScoped<Genisis.Api.Membership.IEnquiryTabsService, Genisis.Api.Membership.EnquiryTabsService>();
 builder.Services.AddScoped<Genisis.Api.Bordx.BordxAsciiExporter>();
 builder.Services.AddScoped<Genisis.Api.Bordx.IBordxService, Genisis.Api.Bordx.BordxService>();
+builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingRepository, Genisis.Api.Tracking.TrackingRepository>();
+builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingService, Genisis.Api.Tracking.TrackingService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();

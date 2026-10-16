@@ -230,7 +230,10 @@ internal sealed class AdjustmentWriter(SqlConnection conn, SqlTransaction tx, Lo
                 number = Number, coverId = Text(stored.CoverId), name = Code(person.Name), ic = Code(person.IcBcPp),
                 dob = person.DateOfBirth?.Date ?? stored.DateOfBirth, sex = Code(person.Sex), adultChild = Code(person.AdultChild),
                 rel = Code(person.Relationship), eff = person.EffectiveDate?.Date, exp = person.ExpiryDate?.Date, premium = person.Premium,
-                plan = TextOrNull(person.PlanCode)?.ToUpperInvariant(), status = save.Type == EndorsementTypes.PlanChange ? AdjustmentStatuses.PlanChanged : null,
+                plan = TextOrNull(person.PlanCode)?.ToUpperInvariant(),
+                status = save.Type == EndorsementTypes.PlanChange
+                    && Code(stored.Status) is not (EndorsementTypes.CancelSupplementary or MemberStatus.Cancelled)
+                    ? AdjustmentStatuses.PlanChanged : null,
                 salutation = Code(person.Salutation), allergic = Text(person.Allergic), exclusion = Text(person.Exclusion),
                 clmNonPayFrom = person.ClaimNonPayFrom?.Date, clmNonPayTo = person.ClaimNonPayTo?.Date, policyDisc = person.PolicyDisc ?? 0,
                 renewalDisc = person.RenewalDisc ?? 0, prevPlan = Text(person.PreviousPlanCode), rbAmount = person.RbAmount ?? 0,

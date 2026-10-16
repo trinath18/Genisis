@@ -25,6 +25,11 @@ builder.Services.AddScoped<Genisis.Api.Adjustment.IAdjustmentQueryService, Genis
 builder.Services.Configure<Genisis.Api.Membership.DocumentOptions>(builder.Configuration.GetSection(Genisis.Api.Membership.DocumentOptions.SectionName));
 builder.Services.AddSingleton<Genisis.Api.Membership.IPolicyWordingStore, Genisis.Api.Membership.PolicyWordingStore>();
 builder.Services.AddScoped<Genisis.Api.Membership.IEnquiryTabsService, Genisis.Api.Membership.EnquiryTabsService>();
+builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
+builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
+builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();
+builder.Services.AddScoped<Genisis.Api.Case.CaseAdjustmentService>();
+builder.Services.AddSingleton<Genisis.Api.Case.CaseFilesService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
@@ -59,7 +64,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseExceptionHandler();
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Genisis.Api")
+        .LogError(error, "Unhandled error processing {Method} {Path}", context.Request.Method, context.Request.Path);
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new
+    {
+        message = error is Microsoft.Data.SqlClient.SqlException { Number: StoredProcedures.MissingProcedure }
+            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql and sql/genisis-maintenance.sql (see sql/README.md)."
+            : "Server error. Check the API log for details.",
+    });
+}));
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

@@ -146,6 +146,62 @@ Differences from the desktop: a fee row needs at least one category and cannot b
 or anaesthetist category (the desktop saved empty rows and deleted without a check); OPCS Narrative is limited to the
 table's 400 characters (the desktop box allowed 3000, which the database rejected); the Accounts MMA surgeon fee is the
 `MMAFees` fee for the procedure's category (the desktop showed the view's `SurgeonsFees` column, which is the 14th Schedule fee).
+## Case > Registration
+
+`/api/case/registration` replaces `frmCaseAdmission` (menu position 11). The UI page keeps every desktop field, the same
+12 tabs and the same workflow (alerts, validation order, hidden interactions) in the app's modern layout.
+
+| Endpoint | VB6 source |
+| --- | --- |
+| `GET lookups` | `ComboListing`: special approval, claim nature, cash / stay type, treatment mode, hospitals, repudiation letter selections |
+| `GET member-search` | Search button (`frmSearchMBM`) |
+| `GET member/{mbm}` | Go button: `SearchMBMCas` plus plan prompts, annual limit, agent, exclusions; returns the desktop's alerts in order |
+| `GET member/{mbm}/patient/{coverId}` | `cboPatientList_Click` |
+| `GET benefits`, `member-history`, `non-disclosure`, `policy-terms`, `surgical-schedule` | Benefit, MBM'Ship History, Non-Disclosure, Policy Terms, Surgical Schedule tabs |
+| `GET icd`, `GET repudiation-codes` | `frmSearchICD`, `FrmSearchRepudiation` |
+| `GET procedures` | `frmSearchCPT` / `frmSearchInv` (OPCS code search; investigations are ProcPart 'A') |
+| `GET mma/{code}` | `SearchMMARate` (fees next to an OPCS code) |
+| `GET hospital-check` | `txtHOSCode_LostFocus` panel check |
+| `POST validate` | every Register check without saving; returns the flags for the "activated < 30 days" / "not discharged" questions |
+| `POST` | Register (`NewCaseAddmission`) |
+| `POST letter` | `funcword`/`bookmark` letters — doc requests on admission/discharge, take-home drugs, prior/expiry notification, repudiation |
+| `POST lg` | `cmdLG_Click`: `CheckLimit` balance check, `GetLGCode`, `Case_AdjInsertCASLG` and the LG / BTBG letter data |
+
+The save runs in one transaction: case number from `CAQ2013`, then the existing `Case_RegInsertCAS2013` / `CAS32013`,
+`Case_RegInsertCASRemark` / `2` / `3`, `Case_RegInsertCASRef` / `Ref1` (maintenance, through synonyms), `Case_RegInsertDIAFirst`,
+`DIAFinal`, `UD`, `CASOthers`, `CASOthers2`, the balance-limit reduction and `Case_RegInsertCASRep`. The legacy
+`Case_Registration` dispatchers (raw `@strAppend` SQL) are not called; their reads are reproduced with parameters.
+
+Differences from the desktop: the cross reference is written inside the same transaction (the desktop wrote it outside);
+a repudiated case needs Document and Personnel only (the desktop also required Attention, whose list is hidden, so it
+could never save one); for payors other than AX the panel check accepts any panel entry for the payor (the desktop
+compared every payor against the AX panel code). The Word `.DOT` mail-merge letters are replaced by server-rendered
+letter data shown in a printable modal (the templates never shipped with the source); the LG button issues the letter
+through `POST lg` and `Notification` produces the prior/expiry letter. Not migrated yet: the SOAP push to the legacy
+mobile service (the notification row is still written), F6 screen capture, Excel export on the search windows, CPT/Inv
+Info maintenance, and opening policy wording documents. See `docs/case-registration-migration.md` for the full mapping
+and migration notes.
+
+## Case > Adjustment
+
+`/api/case/adjustment` replaces `frmCaseAdjustmentNew` (+ `frmGLMenu`, `frmCASList`; menu position 12). The UI shares the
+registration editor (`useCaseEditor`/`CaseSections`) and adds the adjustment-only pieces: load/prev/next navigation,
+status/claimability/pending edits, repudiation, referral progress actions, letters, GL management, and the LG /
+Worksheet / Forms / Policy Wording tabs.
+
+| Endpoint | VB6 source |
+| --- | --- |
+| `GET search`, `GET {cas}` (`{cas}/neighbour` exists but is unused by the UI) | `cmdSearch` (`frmCASList` → `View_Case_Search`), `cmdShow`; `cmdPrev`/`cmdNext` not migrated |
+| `GET gl-options`, `GET {cas}/gl`, `POST {cas}/gl/check`, `POST {cas}/gl` | `frmGLMenu`: purpose/request/delay lists, defaults, `CheckLimit`, `Case_AdjInsertCASLG_2011` |
+| `PUT {cas}`, `POST {cas}/repudiate`, `POST {cas}/reset-claimability`, `POST {cas}/progress/{action}` | `cmdUpdate1`, `cmdRepudiate`, pending-accepted prompt, C. Ref AA/RR, Clear Doc Record, Doc Disch |
+| `POST {cas}/letter/{D,I,S,M,auto}` | `funcword` letters: Doc Req Discharge, GP/QA, Reim Req, Mgmt Note, Notify (P/E) |
+| `GET/DELETE {cas}/lg[/{lgNo}]`, `GET {cas}/worksheet` | LG tab listing + Delete, Worksheet tab (`VIEW_WS_Listing`) |
+| `GET/POST/DELETE {cas}/documents[...]`, `GET policy-wording/...` | Forms tab document folders + Browse/Copy/Delete GL, Policy Wording `ShellExecute` |
+| `GET pending-reasons`, `POST {cas}/notes-template` | `SearchPendingReason` combo, Case Mgmt Notes template fill |
+
+The update runs in one transaction (the desktop ran ~15 uncommitted writes across two databases). Not migrated: the
+"Upd &Add" button (no handler in the desktop), the SOAP device push, and client-side folder browsing (replaced by
+document list/upload/download endpoints). See `docs/case-adjustment-migration.md` for the full mapping.
 
 ## Database procedures
 

@@ -7,13 +7,12 @@
 -- ===== main/000_setup.sql =====
 -- Setup for the Genesis stored procedures. Run on the main database (the one that has dbo.PLN and dbo.MBM).
 -- Creates the genisis schema and the synonyms the procedures use to read the maintenance database.
--- If your maintenance database has another name, change @MaintenanceDb below before running.
+-- If your maintenance, clinical or worksheet database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb below before running.
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
--- The worksheet and payment databases are optional: the screens that read them need them, the synonyms are skipped when absent.
-DECLARE @WorkSheetDb sysname = N'HISWorkSheet';
-DECLARE @PaymentDb sysname = N'HISPayment';
+DECLARE @CisDb sysname = N'CISDB';
+DECLARE @WorksheetDb sysname = N'HISWorkSheet';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -34,6 +33,16 @@ BEGIN
     RAISERROR(N'STOPPED: maintenance database "%s" was not found on this server (or it has no dbo.ProductCategory). Change @MaintenanceDb at the top of this script to your maintenance database name and run it again.', 16, 1, @MaintenanceDb);
     SET NOEXEC ON;
 END
+ELSE IF DB_ID(@CisDb) IS NULL OR OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas', N'U') IS NULL
+BEGIN
+    RAISERROR(N'STOPPED: clinical database "%s" was not found on this server (or it has no dbo.CISCas). Change @CisDb at the top of this script to your clinical (CIS) database name and run it again.', 16, 1, @CisDb);
+    SET NOEXEC ON;
+END
+ELSE IF DB_ID(@WorksheetDb) IS NULL OR OBJECT_ID(QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History', N'V') IS NULL
+BEGIN
+    RAISERROR(N'STOPPED: worksheet database "%s" was not found on this server (or it has no dbo.VIEW_Account_History). Change @WorksheetDb at the top of this script to your worksheet database name and run it again.', 16, 1, @WorksheetDb);
+    SET NOEXEC ON;
+END
 
 IF SCHEMA_ID(N'genisis') IS NULL EXEC (N'CREATE SCHEMA genisis AUTHORIZATION dbo');
 
@@ -45,6 +54,18 @@ FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCate
     (N'Maint_MBMCrossReference', N'MBMCrossReference'), (N'Maint_MBMSEQ05', N'MBMSEQ05'),
     (N'Maint_MBMSEQRenew05', N'MBMSEQRenew05'), (N'Maint_MBMSEQRenewPol', N'MBMSEQRenewPol'),
     (N'Maint_MBMSEQRenewHistory', N'MBMSEQRenewHistory'), (N'Maint_CTY', N'CTY'), (N'Maint_SuppMCOStatus', N'SuppMCOStatus'), (N'Maint_MBMSEQ', N'MBMSEQ'), (N'Maint_CaseMgmtFee', N'CaseMgmtFee'),
+    (N'Maint_MMAProcedures', N'MMAProcedures'), (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'),
+    (N'Maint_DiscPlan', N'DiscPlan'), (N'Maint_MCOPending', N'MCOPending'), (N'Maint_CASCrossReference', N'CASCrossReference'),
+    (N'Maint_Renewal', N'Renewal')) v (s, t);
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_PRM', N'PRM'), (N'Cis_MCO', N'MCO'),
+    (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t);
+SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
+CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
+';
+    (N'Maint_MMAProcedures', N'MMAProcedures'), (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule')) v (s, t);
     (N'Maint_CAQ2013', N'CAQ2013'), (N'Maint_CASCrossReference', N'CASCrossReference'), (N'Maint_SpecApprove', N'SpecApprove'),
     (N'Maint_REPSelection', N'REPSelection'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'),
     (N'Maint_MMAProcedures', N'MMAProcedures'),
@@ -68,7 +89,8 @@ FROM (VALUES (N'WS_Claim', @WorkSheetDb, N'Claim'), (N'WS_ClaimInvoice', @WorkSh
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
-PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N').';
+PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + @CisDb
+    + N', worksheet database: ' + @WorksheetDb + N').';
 GO
 
 -- ===== main/010_plan.sql =====
@@ -1569,6 +1591,22 @@ BEGIN
 END
 GO
 
+-- ===== main/130_mma.sql =====
+-- Maintenance > Entity (legacy frmMMA: Procedures and Look Up Table tabs) and Maintenance > Accounts (legacy frmMMA13thSchDesc).
+-- The tables live in the maintenance database: genisis.Maint_MMAProcedures, genisis.Maint_MMAFees, genisis.Maint_MMASchedule (view).
+-- Text filters are LIKE fragments escaped by the caller. Only the columns the desktop maintains are written.
+
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Search
+    @top int, @bodyPart nvarchar(4000) = NULL, @code nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@top) ProcIndex AS [Index], RTRIM(ProcMainBPCode) AS BodyPart, RTRIM(OPCSCode) AS Code, OPCSNarrative AS Narrative,
+        RTRIM(ProcSurgCat) AS SurgeonCategory, RTRIM(ProcAnaesCat) AS AnaesthetistCategory, RTRIM(ProcPart) AS Part,
+        RTRIM(PartACost) AS PartACost, RTRIM(ProcPageNo) AS PageNo
+    FROM genisis.Maint_MMAProcedures
+    WHERE (@bodyPart IS NULL OR ProcMainBPCode LIKE N'%' + @bodyPart + N'%') AND (@code IS NULL OR OPCSCode LIKE N'%' + @code + N'%')
+    ORDER BY ProcMainBPCode, OPCSCode, ProcIndex
 -- ===== main/130_case_enquiry.sql =====
 -- Case > Enquiry and Case > Tracking (read-only).
 -- Replaces the legacy Case_Inquiry / CaseTracking dispatchers, which appended a raw @strAppend
@@ -1610,6 +1648,52 @@ BEGIN
 END
 GO
 
+-- @index NULL adds a procedure. Result: 0 saved, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Save
+    @index int = NULL, @bodyPart nvarchar(4000), @code nvarchar(4000), @narrative nvarchar(4000), @surgeonCategory nvarchar(4000),
+    @anaesthetistCategory nvarchar(4000), @pageNo nvarchar(4000), @partACost nvarchar(4000), @part nvarchar(4000), @userCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+    IF @index IS NULL
+    BEGIN
+        INSERT INTO genisis.Maint_MMAProcedures (ProcMainBPCode, OPCSCode, OPCSNarrative, ProcSurgCat, ProcAnaesCat, ProcPageNo, PartACost, ProcPart,
+            ProcLastUpdateUser, ProcLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.ProcIndex AS [Index]
+        VALUES (@bodyPart, @code, @narrative, @surgeonCategory, @anaesthetistCategory, @pageNo, @partACost, @part, @userCode, @today);
+        RETURN;
+    END
+    UPDATE genisis.Maint_MMAProcedures SET ProcMainBPCode = @bodyPart, OPCSCode = @code, OPCSNarrative = @narrative, ProcSurgCat = @surgeonCategory,
+        ProcAnaesCat = @anaesthetistCategory, ProcPageNo = @pageNo, PartACost = @partACost, ProcPart = @part,
+        ProcLastUpdateUser = @userCode, ProcLastUpdateDate = @today
+    WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- Result: 0 deleted, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaProcedure_Delete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM genisis.Maint_MMAProcedures WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Search
+    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT FeeIndex AS [Index], RTRIM(SurgeonsCat) AS SurgeonCategory, SurgeonsFees AS SurgeonFee, RTRIM(AnaesthetistsCat) AS AnaesthetistCategory,
+        AnaesthetistsFees AS AnaesthetistFee
+    FROM genisis.Maint_MMAFees
+    WHERE (@surgeonCategory IS NULL OR SurgeonsCat LIKE N'%' + @surgeonCategory + N'%')
+      AND (@anaesthetistCategory IS NULL OR AnaesthetistsCat LIKE N'%' + @anaesthetistCategory + N'%')
+    ORDER BY FeeIndex
 -- Diagnosis / repudiation block of frmCaseInquiry (legacy Case_Inquiry @strAppendCase 2, 5 and 6).
 -- Result sets: first diagnosis, final diagnosis, repudiation codes with descriptions.
 CREATE OR ALTER PROCEDURE genisis.CaseEnquiry_Diagnoses
@@ -1747,6 +1831,66 @@ BEGIN
 END
 GO
 
+-- @index NULL adds a fee row. Result: 0 saved, 1 record not found.
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Save
+    @index int = NULL, @surgeonCategory nvarchar(4000), @surgeonFee decimal(19, 4), @anaesthetistCategory nvarchar(4000),
+    @anaesthetistFee decimal(19, 4), @userCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+    IF @index IS NULL
+    BEGIN
+        INSERT INTO genisis.Maint_MMAFees (SurgeonsCat, SurgeonsFees, AnaesthetistsCat, AnaesthetistsFees, FeeLastUpdateUser, FeeLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.FeeIndex AS [Index]
+        VALUES (@surgeonCategory, @surgeonFee, @anaesthetistCategory, @anaesthetistFee, @userCode, @today);
+        RETURN;
+    END
+    UPDATE genisis.Maint_MMAFees SET SurgeonsCat = @surgeonCategory, SurgeonsFees = @surgeonFee, AnaesthetistsCat = @anaesthetistCategory,
+        AnaesthetistsFees = @anaesthetistFee, FeeLastUpdateUser = @userCode, FeeLastUpdateDate = @today
+    WHERE FeeIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- The desktop deletes without a check; the web refuses while a procedure uses the row's surgeon or anaesthetist category
+-- (the fees reach procedures through those categories). Result: 0 deleted, 1 record not found, 2 still in use.
+CREATE OR ALTER PROCEDURE genisis.MmaFee_Delete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @surgeon nvarchar(10), @anaesthetist nvarchar(50);
+    SELECT @surgeon = SurgeonsCat, @anaesthetist = AnaesthetistsCat FROM genisis.Maint_MMAFees WITH (UPDLOCK, HOLDLOCK) WHERE FeeIndex = @index;
+    IF @@ROWCOUNT = 0 BEGIN SELECT 1 AS Result; RETURN; END
+    IF EXISTS (SELECT 1 FROM genisis.Maint_MMAProcedures WHERE ProcSurgCat = @surgeon OR ProcAnaesCat = @anaesthetist)
+    BEGIN SELECT 2 AS Result; RETURN; END
+    DELETE FROM genisis.Maint_MMAFees WHERE FeeIndex = @index;
+    SELECT 0 AS Result;
+END
+GO
+
+-- Accounts screen: one OPCS code of VIEW_MMA_Schedule, MMA beside 13th Schedule (desktop cmdNext / cmdPrev).
+-- @direction 1 = next code after @code (first when NULL), -1 = previous code before @code (last when NULL), 0 = first code >= @code.
+-- No row means there is no such code. The MMA surgeon fee is the MMAFees fee for the procedure's surgeon category (view column [1]);
+-- the desktop read the view's SurgeonsFees column, which is the 14th Schedule surgeon fee.
+CREATE OR ALTER PROCEDURE genisis.MmaSchedule_Move
+    @code nvarchar(4000) = NULL, @direction int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 RTRIM(OPCSCode) AS Code, OPCSNarrative AS MmaDescription, ProcedureDescription AS ScheduleDescription,
+        RTRIM(ProcMainBPCode) AS MmaBodyPart, BodyParts AS ScheduleBodyPart, RTRIM(ProcPageNo) AS MmaPage, RTRIM(Page) AS SchedulePage,
+        CAST([1] AS decimal(19, 4)) AS MmaSurgeonFee, CAST(AnaesthetistsFees AS decimal(19, 4)) AS MmaAnaesthetistFee,
+        CAST(Surgeon13thMin AS decimal(19, 4)) AS ScheduleSurgeonFeeMin, CAST(Surgeon13th AS decimal(19, 4)) AS ScheduleSurgeonFeeMax,
+        CAST(Anesthetist13th AS decimal(19, 4)) AS ScheduleAnaesthetistFee
+    FROM genisis.Maint_MMASchedule
+    WHERE OPCSCode IS NOT NULL
+      AND (@code IS NULL
+           OR (@direction = 1 AND OPCSCode > @code)
+           OR (@direction = -1 AND OPCSCode < @code)
+           OR (@direction = 0 AND OPCSCode >= @code))
+    ORDER BY CASE WHEN @direction = -1 THEN NULL ELSE OPCSCode END, OPCSCode DESC
 -- FrmCaseTracking totals (legacy CaseTracking summary modes).
 -- Same filter set over VIEW_CAS_TRACKINGSUM, plus @claimPending: 'P' pending, 'C' closed, 'B' both-side.
 CREATE OR ALTER PROCEDURE genisis.CaseTracking_Summary
@@ -1823,6 +1967,720 @@ BEGIN
 END
 GO
 
+-- ===== main/140_adjustment.sql =====
+-- Membership > Adjustment (legacy frmNewMBMAdjustment + frmNewMBMOthers). Reads for the screen and the writes behind each
+-- endorsement type. All writes run inside the API's transaction; main, maintenance and clinical tables are reached on one
+-- connection (maintenance through genisis.Maint_*, clinical through genisis.Cis_*).
+
+-- ===== Reads =====
+
+-- Next (@direction 1) or previous (-1) membership number (desktop cmdNext / cmdPrev).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_Navigate
+    @from nvarchar(4000), @direction int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMNumber FROM dbo.MBM
+    WHERE (@direction = 1 AND MBMNumber > @from) OR (@direction = -1 AND MBMNumber < @from)
+    ORDER BY CASE WHEN @direction = -1 THEN NULL ELSE MBMNumber END, MBMNumber DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- Result sets: principal, covered persons, clinical plan (MBMCLNOthers), annual limit in force on the payor effective date.
+-- Status follows SearchMBMCovPersonsProc: a cancellation dated in the future without a cancel date still shows as active.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_Load
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.HLTCode) AS HealthCode, RTRIM(m.PAYCode) AS PayorCode, RTRIM(m.INSCode) AS InsuredType,
+        RTRIM(m.PLNCode) AS PlanCode, RTRIM(m.MBMPolicyNo) AS PolicyNo, RTRIM(m.MBMName) AS Name, RTRIM(m.MBMIcBcPp) AS IcBcPp,
+        m.MBMDOB AS DateOfBirth, RTRIM(m.MBMSex) AS Sex, RTRIM(m.RACCode) AS RaceCode,
+        RTRIM(m.MBMAddress1) AS Address1, RTRIM(m.MBMAddress2) AS Address2, RTRIM(m.MBMAddress3) AS Address3,
+        RTRIM(m.CTYCode) AS City, RTRIM(m.STACode) AS State, RTRIM(m.MBMPostCode) AS PostCode,
+        m.MBMPayorEffDate AS PayorEffectiveDate, m.MBMPayorExpDate AS PayorExpiryDate, m.MBMBordxDate AS BordxDate, m.MBMBatchNo AS BatchNo,
+        RTRIM(m.AGECode) AS AgeCode, RTRIM(m.MBMAdultChild) AS AdultChild, RTRIM(m.MBMTakeover) AS TakeOver, RTRIM(m.MBMRenewFlag) AS Renewal,
+        RTRIM(m.MBMDataStatus) AS DataStatus,
+        RTRIM(CASE WHEN m.MBMStatus = 'C' AND m.MBMPayorEffDate > CAST(GETDATE() AS date) AND t.MBMCancelDate IS NULL THEN 'A' ELSE m.MBMStatus END) AS Status,
+        RTRIM(m.MBMExpiredStatus) AS ExpiredStatus, m.MBMAvailableLimit AS AvailableLimit, m.MBMValueDate AS ValueDate,
+        RTRIM(m.MBMPolicyYear) AS PolicyYear, m.MBMFinalExpiryDate AS FinalExpiryDate, m.MBMNextDueDate AS NextDueDate,
+        RTRIM(m.MBMTopupInd) AS TopupInd, RTRIM(m.MBMTopupNumber) AS TopupNumber,
+        RTRIM(t.MBMSalutation) AS Salutation, RTRIM(t.MBMEmail) AS Email, RTRIM(t.LGNCode) AS LgnCode, RTRIM(t.NATCode) AS NationalityCode,
+        RTRIM(t.MBMTelnoH) AS TelHome, RTRIM(t.MBMTelNoM) AS TelMobile, RTRIM(t.MBMTelNoO) AS TelOffice, t.MBMMmgtNotes AS MgmtNotes,
+        RTRIM(t.MBMIcBcPp2nd) AS OtherIc, RTRIM(t.MBMSendingMode) AS SendingMode, t.MBMCardDate AS CardSentDate, t.MBMCancelDate AS CancelDate,
+        RTRIM(o.MBMDepartment) AS Department, RTRIM(o.MBMGroupCompany) AS GroupCompany, RTRIM(o.MBMPOLSubNo1) AS PolicySubNo,
+        CAST(CASE WHEN o.LabelStatus = 'Y' THEN 1 ELSE 0 END AS bit) AS LabelStatus, RTRIM(o.MBMEmployeeNo) AS EmployeeNo,
+        RTRIM(o.MBMAgentCode) AS AgentCode, RTRIM(o.MBMInstallment) AS InstallmentMode, o.MBMMCOFee AS McoFee, o.MBMBasicMCO AS BasicMco,
+        RTRIM(o.MBMBranch) AS Branch, o.MBMBasicPrem AS BasicPremium, o.MBMPremium AS Premium, o.MBMFirstJoinedDate AS DateJoined,
+        o.MBMClmNonPayFr AS ClaimNonPayFrom, o.MBMClmNonPayTo AS ClaimNonPayTo, RTRIM(o.MBMNewPlanCode) AS NewPlanCode,
+        o.MBMNewPolEffDate AS NewPolicyEffectiveDate, o.MBMPolicyDisc AS PolicyDisc, o.MBMRenewalDisc AS RenewalDisc,
+        RTRIM(o.MBMPolCondition) AS PolicyCondition, o.MBMUndExcess AS UnderwritingExcess, RTRIM(o.MBMENDtRefNo) AS EndtRefNo,
+        RTRIM(o.MBMCostCenter) AS CostCenter, RTRIM(o.MBMPosition) AS Position, RTRIM(o.MBMGroupCategory) AS GroupCategory,
+        RTRIM(o.MBMDivision) AS Division, RTRIM(o.MBMSubDivision) AS SubDivision, RTRIM(o.Subsidiary) AS Subsidiary,
+        RTRIM(o.MBMGuaRenewal) AS GuaranteeRenewal, RTRIM(o.MBMInvoiceNo) AS InvoiceNo, o.MBMInvoiceDate AS InvoiceDate,
+        RTRIM(o.MBMCRNote) AS CreditNote, o.MBMCRNoteDate AS CreditNoteDate,
+        w.MBMAllergic AS Allergic, w.MBMRemarks AS Remarks, RTRIM(w.MBMWeight) AS Weight, RTRIM(w.MBMHeight) AS Height,
+        RTRIM(w.MBMWorkNature) AS WorkNature, RTRIM(w.MBMBlood) AS Blood, RTRIM(w.MBMSmoking) AS Smoking, RTRIM(w.MBMAlcohol) AS Alcohol,
+        RTRIM(w.MBMMaritalStatus) AS MaritalStatus, RTRIM(w.MBMPrevPLNCode) AS PreviousPlanCode, w.MBMRBAmt AS RbAmount,
+        RTRIM(w.MBMPrevInsCom) AS PreviousInsurer, RTRIM(w.MBMOccupation) AS Occupation, RTRIM(w.MBMCoPayRB) AS CoPayRb,
+        w.MBMGenWP AS GeneralWaitingDays, w.MBMGenEndWP AS GeneralWaitingEnd, w.MBMPreExWP AS PreExistingWaitingDays,
+        w.MBMPreExEndWP AS PreExistingWaitingEnd, w.MBMSpeIllWP AS SpecificIllnessWaitingDays, w.MBMSpeIllEndWP AS SpecificIllnessWaitingEnd,
+        RTRIM(w.MBMStaffDec) AS StaffDiscount, RTRIM(w.MBMBTBG) AS Btbg, w.MBMPayorPremGross AS PayorPremiumGross,
+        w.MBMPayorPremNet AS PayorPremiumNet, w.MBMPayorMCOGross AS PayorMcoGross, w.MBMPayorMCONet AS PayorMcoNet,
+        w.MBMFamDiscAmt AS FamilyDiscountAmount, w.MBMRenewDiscAmt AS RenewalDiscountAmount, w.MBMLoadingPrem AS LoadingPremium,
+        w.MBMExclusion AS Exclusion, RTRIM(w.MBMBankACNo) AS BankAccountNo, w.MBMTopupJoinDate AS TopupJoinDate,
+        RTRIM(p.PAYGRPCode) AS PayorGroupCode
+    FROM dbo.MBM m
+    INNER JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthersTwo w ON w.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.PAY p ON p.PAYCode = m.PAYCode
+    WHERE m.MBMNumber = @number;
+
+    SELECT RTRIM(c.MBMCCoverID) AS CoverId, RTRIM(c2.MBMCSalutation) AS Salutation, RTRIM(c.MBMCName) AS Name,
+        RTRIM(c.MBMCICBCPPNo) AS IcBcPp, c.MBMCDOB AS DateOfBirth, RTRIM(c.MBMCSex) AS Sex, RTRIM(c.MBMCAdultChild) AS AdultChild,
+        RTRIM(c.MBMCRELCode) AS Relationship, RTRIM(c.MBMCPLNCode) AS PlanCode,
+        RTRIM(CASE WHEN c.MBMCStatus = 'C' AND c.MBMCEffDate > CAST(GETDATE() AS date) AND c.MBMCCancelDate IS NULL THEN 'A' ELSE c.MBMCStatus END) AS Status,
+        c2.MBMCExclusion AS Exclusion, c2.MBMCAllergic AS Allergic, c.MBMCAnnualLimit AS AnnualLimit, c.MBMCAvailableLimit AS AvailableLimit,
+        c.MBMCEffDate AS EffectiveDate, c.MBMCExpDate AS ExpiryDate, c.MBMCCancelDate AS CancelDate, c2.MBMCUndExcess AS UnderwritingExcess,
+        c.MBMCMCO AS Mco, c.MBMCBasicMCO AS BasicMco, c.MBMCPremium AS Premium, c.MBMCBasicPremium AS BasicPremium,
+        RTRIM(c.MBMInvoiceNo) AS InvoiceNo, c.MBMInvoiceDate AS InvoiceDate, RTRIM(c2.MBMCRNote) AS CreditNote, c2.MBMCRNoteDate AS CreditNoteDate,
+        RTRIM(c2.MBMCPrevPLNCode) AS PreviousPlanCode, c2.MBMCRBAmt AS RbAmount, RTRIM(c2.MBMCPAYRemarks) AS PayorRemarks,
+        RTRIM(c2.MBMCPrevInsCom) AS PreviousInsurer, c2.MBMCGenWP AS GeneralWaitingDays, c2.MBMCGenEndWP AS GeneralWaitingEnd,
+        c2.MBMCPreExWP AS PreExistingWaitingDays, c2.MBMCPreExEndWP AS PreExistingWaitingEnd, c2.MBMCSpeIllWP AS SpecificIllnessWaitingDays,
+        c2.MBMSpeIllEndWP AS SpecificIllnessWaitingEnd, RTRIM(c2.MBMCStaffDec) AS StaffDiscount, c2.MBMCClmNonPayFr AS ClaimNonPayFrom,
+        c2.MBMCClmNonPayTo AS ClaimNonPayTo, c2.MBMCPayorPremGross AS PayorPremiumGross, c2.MBMCPayorPremNet AS PayorPremiumNet,
+        c2.MBMCPayorMCOGross AS PayorMcoGross, c2.MBMCPayorMCONet AS PayorMcoNet, c2.MBMCRenewalDisc AS RenewalDisc,
+        c2.MBMCPolicyDisc AS PolicyDisc, c2.MBMCFamDiscAmt AS FamilyDiscountAmount, c2.MBMCRenewDiscAmt AS RenewalDiscountAmount,
+        c2.MBMCLoadingPrem AS LoadingPremium, RTRIM(c2.MBMCPAYNo) AS PayorMemberNo, RTRIM(c2.MBMCPAYSeqNo) AS PayorSeqNo,
+        RTRIM(c2.MBMCClientNO) AS ClientNo, RTRIM(c2.MBMCClientID) AS ClientId, RTRIM(c2.MBMCIcBcPp2nd) AS OtherIc
+    FROM dbo.MBMCoveredPersons c
+    LEFT JOIN dbo.MBMCoveredPersonsTwo c2 ON c2.MBMCNumber = c.MBMCNumber AND c2.MBMCCoverID = c.MBMCCoverID
+    WHERE c.MBMCNumber = @number
+    ORDER BY c.MBMCCoverID;
+
+    SELECT TOP (1) RTRIM(PLNType) AS PlanCode, RTRIM(INSType) AS InsuredType, MBMPolEffDate AS EffectiveDate, MBMPolExpDate AS ExpiryDate
+    FROM dbo.MBMCLNOthers WHERE MBMNumber = @number;
+
+    SELECT TOP (1) a.AnnLimit AS AnnualLimit, a.DisabilityLmt AS DisabilityLimit, RTRIM(a.SuppLimitStatus) AS SuppLimitStatus,
+        RTRIM(l.LimitDesc) AS SuppLimitDescription
+    FROM dbo.MBM m
+    INNER JOIN dbo.AnnualLimit a ON a.PLNCode = m.PLNCode AND a.INSCode = m.INSCode AND a.HLTCode = m.HLTCode AND a.AnnualEffDate <= m.MBMPayorEffDate
+    LEFT JOIN dbo.AnnualLimitType l ON l.LimitCode = a.SuppLimitStatus
+    WHERE m.MBMNumber = @number
+    ORDER BY a.AnnualEffDate DESC;
+END
+GO
+
+-- Fees tab: refund rows (the desktop shows the last one per cover ID) and reinstatement rows.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_FeeAdjustments
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMCovID) AS CoverId, MBMMCOEffective AS McoEffective, MBMMCORefund AS McoRefund,
+        MBMPremEffective AS PremiumEffective, MBMPremReduction AS PremiumReduction
+    FROM dbo.MBMRefund WHERE MBMNumber = @number ORDER BY MIndex;
+    SELECT RTRIM(MBMCoverID) AS CoverId, MBMMCOFee AS Mco, MBMPremium AS Premium, RTRIM(MBMInvoiceNo) AS InvoiceNo, MBMInvoiceDate AS InvoiceDate
+    FROM dbo.MBMReinstatement WHERE MBMNumber = @number;
+END
+GO
+
+-- MBM History tab (desktop MBMHISListing / SearchMBMHistory06 "Princ"): by IC (dashes ignored) when it is longer than 4
+-- characters, otherwise by name and date of birth.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_History
+    @ic nvarchar(4000) = NULL, @name nvarchar(4000) = NULL, @dob datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT TOP (200) RTRIM(x.MBMNumber) AS MembershipNo, RTRIM(x.MBMTopupInd) AS TopupInd, RTRIM(x.MBMTopupNumber) AS TopupNumber,
+        RTRIM(x.MBMPolicyNo) AS PolicyNo, x.MBMPayorEffDate AS EffectiveDate, x.MBMPayorExpDate AS ExpiryDate,
+        CASE WHEN m.MBMStatus = 'C' THEN t.MBMENDtEffDate END AS CancelDate, RTRIM(m.MBMDataStatus) AS DataStatus,
+        RTRIM(m.MBMStatus) AS Status, x.MBMBordxDate AS BordxDate, t.MBMENDtBordxDate AS EndtBordxDate, m.MBMValueDate AS ValueDate
+    FROM genisis.Maint_MBMCrossReference x
+    INNER JOIN dbo.MBM m ON m.MBMNumber = x.MBMNumber
+    INNER JOIN dbo.MBMTwo t ON t.MBMNumber = x.MBMNumber
+    WHERE (LEN(@ic) > 4 AND REPLACE(x.MBMIcBcPp, '-', '') = REPLACE(@ic, '-', ''))
+       OR ((@ic IS NULL OR LEN(@ic) <= 4) AND x.MBMName = @name AND x.MBMDOB = @dob)
+    ORDER BY x.MBMPayorEffDate DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- Last endorsement batch for the bordereaux date (desktop txtEndtBordxDate_LostFocus); 1 when none.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_LastBatch
+    @bordx datetime, @pay nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL((SELECT TOP (1) BATSequence FROM dbo.BAT
+        WHERE BATBordxDate = @bordx AND BordxType = 'E' AND (@pay IS NULL OR PAYCode = @pay) ORDER BY BATSequence DESC), 1) AS LastBatch;
+END
+GO
+
+-- Another membership using the policy number (desktop txtMBMPolNo_LostFocus warning).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_PolicyOwner
+    @policy nvarchar(4000), @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(MBMNumber) AS MembershipNo FROM genisis.Maint_MBMCrossReference WHERE MBMPolicyNo = @policy AND MBMNumber <> @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_ValidDates
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMDOBStart AS DobStart, MBMDOBEnd AS DobEnd, MBMEffStart AS EffectiveStart, MBMEffEnd AS EffectiveEnd,
+        MBMExpStart AS ExpiryStart, MBMExpEnd AS ExpiryEnd
+    FROM dbo.MBMValidDateRange ORDER BY ValidID DESC;
+END
+GO
+
+-- Plan settings for fee recalculation (desktop MemberCallFees): health type N plans are per payor.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_PlanRates
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PLNRoundUpStatus) AS RoundUpStatus, RTRIM(PLNProRate) AS ProRate, RTRIM(PLNPremGenderStatus) AS PremGenderStatus,
+        RTRIM(PRMInd) AS PremiumInd
+    FROM dbo.PLN
+    WHERE PLNCode = @plan AND HLTCode = @hlt AND PLNEffDate <= @eff AND (@hlt <> 'N' OR PAYCode = @pay)
+    ORDER BY PLNEffDate DESC;
+END
+GO
+
+-- Lifetime flag and supplementary age limit of a plan code (desktop GetSuppExpDate / AddSupplementaryAdjustment).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_PlanSettings
+    @plan nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PLNLifeTimeStatus) AS LifetimeStatus, PlnAgeLimit AS AgeLimit, RTRIM(PLNRoundUpStatus) AS RoundUpStatus
+    FROM dbo.PLN WHERE PLNCode = @plan ORDER BY PLNEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_DiscPlan
+    @plan nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) PolicyDisc, RenewalDisc FROM genisis.Maint_DiscPlan WHERE PLNCode = @plan ORDER BY DISIndex;
+END
+GO
+
+-- Supplementary limit status of a plan code: latest annual limit row regardless of insured / health type (desktop AddSupplementaryAdjustment).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SuppLimit
+    @plan nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppLimitStatus) AS SuppLimitStatus, SuppLimit AS SuppLimitAmount FROM dbo.AnnualLimit WHERE PLNCode = @plan ORDER BY AnnualEffDate DESC;
+END
+GO
+
+-- Supplementary premium status and base amount for a plan / age band / insured type (desktop AddSupplementaryAdjustment).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SuppPremium
+    @plan nvarchar(4000), @ageCode nvarchar(4000), @ins nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppPrmStatus) AS SuppPrmStatus, SuppPrmAmt FROM dbo.PRM
+    WHERE PLNCode = @plan AND AGECode = @ageCode AND INSCode = @ins ORDER BY PRMEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_NextCoverId
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(MAX(TRY_CAST(MBMCCoverID AS int)), 0) + 1 AS NextCoverId FROM dbo.MBMCoveredPersons WITH (UPDLOCK, HOLDLOCK) WHERE MBMCNumber = @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_Now
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT GETDATE() AS Now;
+END
+GO
+
+-- Outstanding HIS / clinical case on a covered person (desktop CmdRemove_Click).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_OpenCases
+    @number nvarchar(4000), @coverId nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM genisis.Maint_CASCrossReference WHERE MBMNumber = @number AND MBMPatientCovID = @coverId AND CASStatus = 'O')
+                THEN 1 ELSE 0 END AS bit) AS HisCase,
+           CAST(CASE WHEN EXISTS (SELECT 1 FROM genisis.Cis_CISCas WHERE MBMnumber = @number AND CoverID = @coverId AND CASStatus = 'O')
+                THEN 1 ELSE 0 END AS bit) AS ClinicalCase;
+END
+GO
+
+-- ===== Clinical (CISDB) reads for a new supplementary on a clinical member (desktop SaveCISCovPerson) =====
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_CisPlan
+    @plan nvarchar(4000), @hlt nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(DCStatus) AS DcStatus, RTRIM(PAYCode) AS PayorCode, RTRIM(SDentalStatus) AS SuppDentalStatus,
+        RTRIM(SSpecStatus) AS SuppSpecialistStatus, RTRIM(SMEPStatus) AS SuppMepStatus, RTRIM(PLNRoundUpStatus) AS RoundUpStatus,
+        RTRIM(PLNProRate) AS ProRate, RTRIM(MCOProcfeeStatus) AS McoProcFeeStatus
+    FROM genisis.Cis_PLN WHERE PLNCode = @plan AND HLTCode = @hlt;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_CisLimit
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppLimitStatus) AS SuppLimitStatus, SuppLimit, SDentalAnnLimit AS DentalLimit, SSpecAnnLimit AS SpecialistLimit,
+        SMEPAnnLimit AS MepLimit
+    FROM genisis.Cis_AnnualLimit WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND AnnEffDate <= @eff ORDER BY AnnEffDate DESC;
+    SELECT TOP (1) VisitLimit FROM genisis.Cis_VisitLimit
+    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND VisitEffDate <= @eff ORDER BY VisitEffDate DESC;
+END
+GO
+
+-- Result sets: premium status (payor filter only for health types other than S), supplementary premium for the age band and payor.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_CisPremium
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000), @ageCode nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppPRMStatus) AS SuppPrmStatus FROM genisis.Cis_PRM
+    WHERE PLNCode = @plan AND HLTCode = @hlt AND INSCode = @ins AND (@hlt = 'S' OR PAYCode = @pay) AND PRMEffDate <= @eff ORDER BY PRMEffDate DESC;
+    SELECT TOP (1) SuppPRMAmt AS SuppPrmAmt FROM genisis.Cis_PRM
+    WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND AGECode = @ageCode AND PAYCode = @pay AND PRMEffDate <= @eff
+    ORDER BY PRMEffDate DESC;
+END
+GO
+
+-- Plan-specific MCO row, else the default row (PLNCode NULL).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_CisMco
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppMCOStatus) AS SuppMcoStatus, MCOSuppAdultAmt AS SuppAdult, MCOSuppChildAmt AS SuppChild
+    FROM genisis.Cis_MCO
+    WHERE INSCode = @ins AND HLTCode = @hlt AND (PLNCode = @plan OR PLNCode IS NULL) AND MCOEffDate <= @eff
+    ORDER BY CASE WHEN PLNCode IS NULL THEN 1 ELSE 0 END, MCOEffDate DESC;
+END
+GO
+
+-- ===== Writes =====
+
+-- Membership and cross-reference status; a cancellation also sets the final expiry date (desktop Write2MBMnHistory).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SetStatus
+    @number nvarchar(4000), @status nvarchar(4000), @finalExpiry datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_MBMCrossReference SET MBMStatus = @status, MBMFinalExpiryDate = COALESCE(@finalExpiry, MBMFinalExpiryDate)
+    WHERE MBMNumber = @number;
+    UPDATE dbo.MBM SET MBMStatus = @status, MBMFinalExpiryDate = COALESCE(@finalExpiry, MBMFinalExpiryDate) WHERE MBMNumber = @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SetEndorsement
+    @number nvarchar(4000), @type nvarchar(4000), @endtEff datetime, @endtBordx datetime, @cancel bit
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMTwo SET MBMLastEndorseStatus = @type, MBMENDtEffDate = @endtEff, MBMENDtBordxDate = @endtBordx,
+        MBMCancelDate = CASE WHEN @cancel = 1 THEN @endtEff ELSE MBMCancelDate END
+    WHERE MBMNumber = @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_InsertAmendHistory
+    @number nvarchar(4000), @policy nvarchar(4000), @ic nvarchar(4000), @name nvarchar(4000), @expiry datetime = NULL,
+    @plan nvarchar(4000), @type nvarchar(4000), @endtBordx datetime, @endtEff datetime, @user nvarchar(4000), @today datetime,
+    @batch int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMAmendHistory (MBMNumber, MBMPolicyNo, MBMIcBcPp, MBMName, MBMExpiryDate, MBMPlanCode, MBMAmendEdtType,
+        MBMAEndtBordxDate, MBMAEndtEffDate, MBMAmendUser, MBMAmendDate, MBMAEndtBatchNo)
+    VALUES (@number, @policy, @ic, @name, @expiry, CASE WHEN @expiry IS NULL THEN NULL ELSE @plan END, @type,
+        @endtBordx, @endtEff, @user, @today, @batch);
+END
+GO
+
+-- Every covered person gets @status (desktop Write2MBMnHistory for cancellation, suspension and policy deletion).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SetCoveredStatus
+    @number nvarchar(4000), @status nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMCoveredPersons SET MBMCStatus = @status WHERE MBMCNumber = @number;
+END
+GO
+
+-- Desktop WriteAdjStatus2Cov: covered persons not already cancelled (K / C) take @status; @cancelDate (cancellations) is set on all.
+-- @coverId NULL = every covered person.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SetCoveredAdjustment
+    @number nvarchar(4000), @status nvarchar(4000), @coverId nvarchar(4000) = NULL, @cancelDate datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMCoveredPersons
+    SET MBMCStatus = CASE WHEN RTRIM(ISNULL(MBMCStatus, '')) IN ('K', 'C') THEN MBMCStatus ELSE @status END,
+        MBMCCancelDate = COALESCE(@cancelDate, MBMCCancelDate)
+    WHERE MBMCNumber = @number AND (@coverId IS NULL OR MBMCCoverID = @coverId);
+END
+GO
+
+-- MCO / premium refund row (the desktop's own Upload_MBMMcoRefund, called unchanged).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_InsertRefund
+    @number nvarchar(4000), @coverId nvarchar(4000), @premiumEffective decimal(19, 4), @premiumReduction decimal(19, 4),
+    @mcoEffective decimal(19, 4), @mcoRefund decimal(19, 4), @pay nvarchar(4000), @bordx datetime, @batch int = NULL, @hlt nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBMMcoRefund @number, @coverId, @premiumEffective, @premiumReduction, @mcoEffective, @mcoRefund, @pay, @bordx, @batch, @hlt;
+END
+GO
+
+-- Name / date of birth change on a renewal number moves the renewal sequence key and renames every renewal of the base number
+-- (desktop SavePrincipalAdjustment; it matched MBMNumber LIKE '%base%', this matches the base number and its *nn renewals only).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_RenameRenewals
+    @baseNumber nvarchar(4000), @previousKey nvarchar(4000), @newKey nvarchar(4000), @name nvarchar(4000), @dob datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_MBMSEQRenew05 SET RewMBMSEQKey = @newKey WHERE RewMBMSEQKey = @previousKey;
+    UPDATE dbo.MBM SET MBMName = @name, MBMDOB = @dob
+    WHERE MBMNumber = @baseNumber OR MBMNumber LIKE REPLACE(REPLACE(@baseNumber, '[', '[[]'), '_', '[_]') + N'*%';
+    UPDATE genisis.Maint_MBMCrossReference SET MBMName = @name, MBMDOB = @dob
+    WHERE MBMNumber = @baseNumber OR MBMNumber LIKE REPLACE(REPLACE(@baseNumber, '[', '[[]'), '_', '[_]') + N'*%';
+END
+GO
+
+-- Principal on MBM and the cross-reference (desktop SavePrincipalAdjustment). @availableLimit NULL keeps the stored limit.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SavePrincipal
+    @number nvarchar(4000), @name nvarchar(4000), @policy nvarchar(4000), @sex nvarchar(4000), @add1 nvarchar(4000),
+    @add2 nvarchar(4000), @add3 nvarchar(4000), @city nvarchar(4000), @state nvarchar(4000), @postCode nvarchar(4000),
+    @ic nvarchar(4000), @dob datetime, @race nvarchar(4000), @ageCode nvarchar(4000), @eff datetime = NULL, @exp datetime = NULL,
+    @bordx datetime, @takeOver nvarchar(4000), @renewal nvarchar(4000), @dataStatus nvarchar(4000), @status nvarchar(4000),
+    @plan nvarchar(4000), @availableLimit decimal(19, 4) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBM SET MBMName = @name, MBMPolicyNo = @policy, MBMSex = @sex, MBMAddress1 = @add1, MBMAddress2 = @add2, MBMAddress3 = @add3,
+        CTYCode = @city, STACode = @state, MBMPostCode = @postCode, MBMIcBcPp = @ic, MBMDOB = @dob, RACCode = @race, AGECode = @ageCode,
+        MBMPayorEffDate = COALESCE(@eff, MBMPayorEffDate), MBMPayorExpDate = COALESCE(@exp, MBMPayorExpDate), MBMBordxDate = @bordx,
+        MBMTakeover = @takeOver, MBMRenewFlag = @renewal, MBMDataStatus = @dataStatus, MBMStatus = @status, PLNCode = @plan,
+        MBMAvailableLimit = COALESCE(@availableLimit, MBMAvailableLimit)
+    WHERE MBMNumber = @number;
+    UPDATE genisis.Maint_MBMCrossReference SET MBMName = @name, MBMPolicyNo = @policy, MBMIcBcPp = @ic, MBMDOB = @dob,
+        MBMPayorEffDate = COALESCE(@eff, MBMPayorEffDate), MBMPayorExpDate = COALESCE(@exp, MBMPayorExpDate), MBMBordxDate = @bordx,
+        MBMDataStatus = @dataStatus, MBMStatus = @status, PLNCode = @plan
+    WHERE MBMNumber = @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SaveMbmTwo
+    @number nvarchar(4000), @salutation nvarchar(4000), @email nvarchar(4000), @lgn nvarchar(4000), @type nvarchar(4000),
+    @nat nvarchar(4000) = NULL, @telHome nvarchar(4000), @telMobile nvarchar(4000), @telOffice nvarchar(4000), @now datetime,
+    @user nvarchar(4000), @mgmtNotes nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBMTwo WHERE MBMNumber = @number) INSERT INTO dbo.MBMTwo (MBMNumber) VALUES (@number);
+    UPDATE dbo.MBMTwo SET MBMSalutation = @salutation, MBMEmail = @email, LGNCode = @lgn, MBMLastEndorseStatus = @type,
+        NATCode = COALESCE(@nat, NATCode), MBMTelnoH = @telHome, MBMTelNoM = @telMobile, MBMTelNoO = @telOffice,
+        MBMLastAdjustmentDate = @now, MBMLastUpdateUser = @user, MBMMmgtNotes = @mgmtNotes
+    WHERE MBMNumber = @number;
+END
+GO
+
+-- MBMOthers and MBMOthersTwo (desktop SavePrincipalAdjustment, including the frmNewMBMOthers fields). Rows are created when missing.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_SaveOthers
+    @number nvarchar(4000), @department nvarchar(4000), @groupCompany nvarchar(4000), @polSubNo nvarchar(4000), @labelStatus nvarchar(4000) = NULL,
+    @employeeNo nvarchar(4000), @agentCode nvarchar(4000), @installment nvarchar(4000), @mco decimal(19, 4) = NULL, @branch nvarchar(4000),
+    @basicPremium decimal(19, 4) = NULL, @premium decimal(19, 4) = NULL, @joined datetime = NULL, @clmNonPayFrom datetime = NULL,
+    @clmNonPayTo datetime = NULL, @newPlan nvarchar(4000), @newPolicyEff datetime = NULL, @policyDisc decimal(19, 4), @renewalDisc decimal(19, 4),
+    @polCondition nvarchar(4000), @undExcess decimal(19, 4), @endtRefNo nvarchar(4000), @costCenter nvarchar(4000), @position nvarchar(4000),
+    @groupCategory nvarchar(4000), @division nvarchar(4000), @subDivision nvarchar(4000), @subsidiary nvarchar(4000), @nextDue datetime = NULL,
+    @allergic nvarchar(4000), @remarks nvarchar(4000), @weight nvarchar(4000), @height nvarchar(4000), @workNature nvarchar(4000),
+    @blood nvarchar(4000), @smoking nvarchar(4000), @alcohol nvarchar(4000), @marital nvarchar(4000) = NULL, @prevPlan nvarchar(4000),
+    @rbAmount decimal(19, 4), @prevInsurer nvarchar(4000), @occupation nvarchar(4000), @coPayRb nvarchar(4000),
+    @genWp decimal(19, 4) = NULL, @genWpEnd datetime = NULL, @preExWp decimal(19, 4) = NULL, @preExWpEnd datetime = NULL,
+    @speIllWp decimal(19, 4) = NULL, @speIllWpEnd datetime = NULL, @staffDisc nvarchar(4000), @btbg nvarchar(4000) = NULL,
+    @payorPremGross decimal(19, 4) = NULL, @payorPremNet decimal(19, 4), @payorMcoGross decimal(19, 4), @payorMcoNet decimal(19, 4),
+    @familyDiscAmount decimal(19, 4), @renewalDiscAmount decimal(19, 4), @loadingPremium decimal(19, 4), @exclusion nvarchar(4000),
+    @bankAccountNo nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBMOthers WHERE MBMNumber = @number) INSERT INTO dbo.MBMOthers (MBMNumber) VALUES (@number);
+    UPDATE dbo.MBMOthers SET MBMDepartment = @department, MBMGroupCompany = @groupCompany, MBMPOLSubNo1 = @polSubNo, LabelStatus = @labelStatus,
+        MBMEmployeeNo = @employeeNo, MBMAgentCode = @agentCode, RELCode = 'P', MBMInstallment = @installment,
+        MBMMCOFee = COALESCE(@mco, MBMMCOFee), MBMBranch = @branch, MBMBasicPrem = COALESCE(@basicPremium, MBMBasicPrem),
+        MBMPremium = COALESCE(@premium, MBMPremium), MBMFirstJoinedDate = COALESCE(@joined, MBMFirstJoinedDate),
+        MBMClmNonPayFr = @clmNonPayFrom, MBMClmNonPayTo = @clmNonPayTo, MBMNewPlanCode = @newPlan, MBMNewPolEffDate = @newPolicyEff,
+        MBMPolicyDisc = @policyDisc, MBMRenewalDisc = @renewalDisc, MBMPolCondition = @polCondition, MBMUndExcess = @undExcess,
+        MBMENDtRefNo = @endtRefNo, MBMCostCenter = @costCenter, MBMPosition = @position, MBMGroupCategory = @groupCategory,
+        MBMDivision = @division, MBMSubDivision = @subDivision, Subsidiary = @subsidiary, MBMNextDueDate = COALESCE(@nextDue, MBMNextDueDate)
+    WHERE MBMNumber = @number;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBMOthersTwo WHERE MBMNumber = @number) INSERT INTO dbo.MBMOthersTwo (MBMNumber) VALUES (@number);
+    UPDATE dbo.MBMOthersTwo SET MBMAllergic = @allergic, MBMRemarks = @remarks, MBMWeight = @weight, MBMHeight = @height,
+        MBMWorkNature = @workNature, MBMBlood = @blood, MBMSmoking = @smoking, MBMAlcohol = @alcohol,
+        MBMMaritalStatus = COALESCE(@marital, MBMMaritalStatus), MBMPrevPLNCode = @prevPlan, MBMRBAmt = @rbAmount, MBMPrevInsCom = @prevInsurer,
+        MBMOccupation = @occupation, MBMCoPayRB = @coPayRb, MBMGenWP = @genWp, MBMGenEndWP = @genWpEnd, MBMPreExWP = @preExWp,
+        MBMPreExEndWP = @preExWpEnd, MBMSpeIllWP = @speIllWp, MBMSpeIllEndWP = @speIllWpEnd, MBMStaffDec = @staffDisc, MBMBTBG = @btbg,
+        MBMPayorPremGross = COALESCE(@payorPremGross, MBMPayorPremGross), MBMPayorPremNet = @payorPremNet, MBMPayorMCOGross = @payorMcoGross,
+        MBMPayorMCONet = @payorMcoNet, MBMFamDiscAmt = @familyDiscAmount, MBMRenewDiscAmt = @renewalDiscAmount, MBMLoadingPrem = @loadingPremium,
+        MBMExclusion = @exclusion, MBMBankACNo = @bankAccountNo
+    WHERE MBMNumber = @number;
+END
+GO
+
+-- One existing covered person (desktop SaveSupplementaryAdjustment). @status NULL keeps the status; null dates keep the stored ones.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_UpdateCovered
+    @number nvarchar(4000), @coverId nvarchar(4000), @name nvarchar(4000), @ic nvarchar(4000), @dob datetime, @sex nvarchar(4000),
+    @adultChild nvarchar(4000), @rel nvarchar(4000), @eff datetime = NULL, @exp datetime = NULL, @premium decimal(19, 4) = NULL,
+    @plan nvarchar(4000) = NULL, @status nvarchar(4000) = NULL, @salutation nvarchar(4000), @allergic nvarchar(4000), @exclusion nvarchar(4000),
+    @clmNonPayFrom datetime = NULL, @clmNonPayTo datetime = NULL, @policyDisc decimal(19, 4), @renewalDisc decimal(19, 4),
+    @prevPlan nvarchar(4000), @rbAmount decimal(19, 4), @payRemarks nvarchar(4000), @prevInsurer nvarchar(4000),
+    @genWp decimal(19, 4) = NULL, @genWpEnd datetime = NULL, @preExWp decimal(19, 4) = NULL, @preExWpEnd datetime = NULL,
+    @speIllWp decimal(19, 4) = NULL, @speIllWpEnd datetime = NULL, @staffDisc nvarchar(4000) = NULL, @payorPremGross decimal(19, 4) = NULL,
+    @payorPremNet decimal(19, 4), @payorMcoGross decimal(19, 4), @payorMcoNet decimal(19, 4), @familyDiscAmount decimal(19, 4),
+    @renewalDiscAmount decimal(19, 4), @loadingPremium decimal(19, 4), @undExcess decimal(19, 4), @payNo nvarchar(4000),
+    @paySeqNo nvarchar(4000), @clientNo nvarchar(4000), @clientId nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.MBMCoveredPersons SET MBMCName = @name, MBMCICBCPPNo = @ic, MBMCDOB = @dob, MBMCSex = @sex, MBMCAdultChild = @adultChild,
+        MBMCRELCode = @rel, MBMCEffDate = COALESCE(@eff, MBMCEffDate), MBMCExpDate = COALESCE(@exp, MBMCExpDate),
+        MBMCPremium = COALESCE(@premium, MBMCPremium), MBMCPLNCode = COALESCE(@plan, MBMCPLNCode), MBMCStatus = COALESCE(@status, MBMCStatus)
+    WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+    SELECT @@ROWCOUNT AS Updated;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBMCoveredPersonsTwo WHERE MBMCNumber = @number AND MBMCCoverID = @coverId)
+        INSERT INTO dbo.MBMCoveredPersonsTwo (MBMCNumber, MBMCCoverID) VALUES (@number, @coverId);
+    UPDATE dbo.MBMCoveredPersonsTwo SET MBMCSalutation = @salutation, MBMCAllergic = @allergic, MBMCExclusion = @exclusion,
+        MBMCClmNonPayFr = @clmNonPayFrom, MBMCClmNonPayTo = @clmNonPayTo, MBMCPolicyDisc = @policyDisc, MBMCRenewalDisc = @renewalDisc,
+        MBMCPrevPLNCode = @prevPlan, MBMCRBAmt = @rbAmount, MBMCPAYRemarks = @payRemarks, MBMCPrevInsCom = @prevInsurer,
+        MBMCGenWP = @genWp, MBMCGenEndWP = @genWpEnd, MBMCPreExWP = @preExWp, MBMCPreExEndWP = @preExWpEnd, MBMCSpeIllWP = @speIllWp,
+        MBMSpeIllEndWP = @speIllWpEnd, MBMCStaffDec = COALESCE(@staffDisc, MBMCStaffDec), MBMCPayorPremGross = @payorPremGross,
+        MBMCPayorPremNet = @payorPremNet, MBMCPayorMCOGross = @payorMcoGross, MBMCPayorMCONet = @payorMcoNet,
+        MBMCFamDiscAmt = @familyDiscAmount, MBMCRenewDiscAmt = @renewalDiscAmount, MBMCLoadingPrem = @loadingPremium,
+        MBMCUndExcess = @undExcess, MBMCPAYNo = @payNo, MBMCPAYSeqNo = @paySeqNo, MBMCClientNO = @clientNo, MBMCClientID = @clientId
+    WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+END
+GO
+
+-- New covered person (desktop AddSupplementaryAdjustment). Clinical-only members (no HIS plan) get no effective / expiry date.
+CREATE OR ALTER PROCEDURE genisis.Adjustment_InsertCovered
+    @number nvarchar(4000), @coverId nvarchar(4000), @ageCode nvarchar(4000), @status nvarchar(4000), @bordx datetime, @batch int = NULL,
+    @name nvarchar(4000), @ic nvarchar(4000), @dob datetime, @sex nvarchar(4000), @adultChild nvarchar(4000), @rel nvarchar(4000),
+    @today datetime, @plan nvarchar(4000), @eff datetime = NULL, @exp datetime = NULL, @annual decimal(19, 4), @basicPremium decimal(19, 4),
+    @premium decimal(19, 4), @basicMco decimal(19, 4), @mco decimal(19, 4), @salutation nvarchar(4000), @allergic nvarchar(4000),
+    @exclusion nvarchar(4000), @payorPremNet decimal(19, 4), @payorMcoGross decimal(19, 4), @payorMcoNet decimal(19, 4),
+    @loadingPremium decimal(19, 4), @familyDiscAmount decimal(19, 4), @renewalDiscAmount decimal(19, 4), @undExcess decimal(19, 4),
+    @renewalDisc decimal(19, 4), @policyDisc decimal(19, 4), @clmNonPayFrom datetime = NULL, @clmNonPayTo datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMCoveredPersons (MBMCNumber, MBMCCoverID, MBMCAgeband, MBMCStatus, MBMCBordxDate, MBMCBatchNo, MBMCName, MBMCICBCPPNo,
+        MBMCDOB, MBMCSex, MBMCAdultChild, MBMCRELCode, MBMCMemberType, MBMCRegDate, MBMCPLNCode, MBMCEffDate, MBMCExpDate,
+        MBMCAnnualLimit, MBMCAvailableLimit, MBMCBasicPremium, MBMCPremium, MBMCBasicMCO, MBMCMCO)
+    VALUES (@number, @coverId, @ageCode, @status, @bordx, @batch, @name, @ic, @dob, @sex, @adultChild, @rel, 'C', @today, @plan, @eff, @exp,
+        @annual, @annual, @basicPremium, @premium, @basicMco, @mco);
+    INSERT INTO dbo.MBMCoveredPersonsTwo (MBMCNumber, MBMCCoverID, MBMCSalutation, MBMCAllergic, MBMCExclusion, MBMCPayorPremNet,
+        MBMCPayorMCOGross, MBMCPayorMCONet, MBMCLoadingPrem, MBMCFamDiscAmt, MBMCRenewDiscAmt, MBMCUndExcess, MBMCRenewalDisc,
+        MBMCPolicyDisc, MBMCClmNonPayFr, MBMCClmNonPayTo)
+    VALUES (@number, @coverId, @salutation, @allergic, @exclusion, @payorPremNet, @payorMcoGross, @payorMcoNet, @loadingPremium,
+        @familyDiscAmount, @renewalDiscAmount, @undExcess, @renewalDisc, @policyDisc,
+        CASE WHEN @clmNonPayFrom IS NOT NULL AND @clmNonPayTo IS NOT NULL THEN @clmNonPayFrom END,
+        CASE WHEN @clmNonPayFrom IS NOT NULL AND @clmNonPayTo IS NOT NULL THEN @clmNonPayTo END);
+END
+GO
+
+-- Clinical covered person row (the desktop's own Upload_MBMCovPersonsCis, called unchanged).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_InsertCoveredClinical
+    @number nvarchar(4000), @coverId nvarchar(4000), @mco decimal(19, 4), @basicMco decimal(19, 4), @premium decimal(19, 4),
+    @basicPremium decimal(19, 4), @annual decimal(19, 4), @visit decimal(19, 4), @dental decimal(19, 4), @specialist decimal(19, 4),
+    @mep decimal(19, 4), @today datetime, @user nvarchar(4000), @expiry datetime = NULL, @plan nvarchar(4000),
+    @invoiceNo nvarchar(4000), @invoiceDate datetime = NULL, @invoiceBy nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.Upload_MBMCovPersonsCis @number, @coverId, @mco, @basicMco, @premium, @basicPremium, @annual, @visit, @dental, @specialist, @mep,
+        @today, @user, @today, @user, @expiry, '', '', 'A', @plan, @invoiceNo, @invoiceDate, @invoiceBy;
+END
+GO
+
+-- Removes a covered person and its limits (desktop DeleteSupplementary). @topupNo is set for guarantee renewal 3 (lifetime rows).
+CREATE OR ALTER PROCEDURE genisis.Adjustment_DeleteCovered
+    @number nvarchar(4000), @coverId nvarchar(4000), @topupNo nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+    DELETE FROM dbo.MBMCoveredPersonsTwo WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+    DELETE FROM dbo.MBMCoveredPersonsCLN WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+    IF NULLIF(@topupNo, N'') IS NOT NULL DELETE FROM dbo.MBMLifeTime WHERE MBMNumber = @topupNo AND MBMCovID = @coverId;
+    DELETE FROM dbo.MBMBnfLmt WHERE MBMNumber = @number AND MBMCoveredID = @coverId;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Adjustment_UpdateMcoPending
+    @number nvarchar(4000), @bordx datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_MCOPending SET MBMNewBordxDate = @bordx WHERE MBMNumber = @number;
+END
+GO
+
+-- ===== main/150_enquiry_tabs.sql =====
+-- Membership > Enquiry: the tabs added after the first read-only release (HIS Benefits, Acc History, Fees, Non Disclosure,
+-- Policy Terms, LT Limit, Policy Wording, T/O Claims, WS). The desktop built these queries from string fragments; here they take parameters.
+
+-- HIS Benefits (desktop BNFListing / BNFListingSupp): the benefit schedule in force on the payor effective date, latest effective date only.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_Benefits
+    @plan nvarchar(4000), @hlt nvarchar(4000), @ins nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    WITH latest AS (
+        SELECT MAX(BNFEffDate) AS EffDate FROM dbo.VIEW_BNF
+        WHERE PLNCode = @plan AND HLTCode = @hlt AND INSCode = @ins AND BNFEffDate <= @eff)
+    SELECT RTRIM(b.BNFCode) AS BenefitCode, RTRIM(b.BNFdescription) AS Description, ISNULL(b.BNFNoOfDays, 0) AS Days,
+        RTRIM(b.BNFClaimAbleAmount) AS RatePerDay, RTRIM(b.BNFRMPerDis) AS PerDisability, b.BNFEffDate AS EffectiveDate
+    FROM dbo.VIEW_BNF b JOIN latest l ON b.BNFEffDate = l.EffDate
+    WHERE b.PLNCode = @plan AND b.HLTCode = @hlt AND b.INSCode = @ins
+    ORDER BY b.BNFCode;
+END
+GO
+
+-- Acc History (desktop GetAccHisListing): claims paid and receipts for the IC, from the worksheet database.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_AccountHistory
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMNumber) AS MembershipNo, MBMPayorEffDate AS EffectiveDate, CASDateAdmitted AS Admitted, CaseRegDate AS Registered,
+        RTRIM(CASNumber) + '-' + CAST(ClaimVersion AS nvarchar(10)) AS CaseNo,
+        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN RTRIM(DebitCreditRefNo) END AS DebitCreditRefNo,
+        CASE WHEN ISNULL(CLMPayableByMedix2M, 0) <> 0 THEN DebitCreditDate END AS DebitCreditDate,
+        CLMPayableByMedix2M AS Payable, RTRIM(ReceiptNo) AS ReceiptNo, ReceiptDate, ISNULL(ReceiptAmt, 0) AS ReceiptAmount,
+        ISNULL(ReceiptAmt, 0) + ISNULL(CLMPayableByMedix2M, 0) AS Balance
+    FROM genisis.WS_AccountHistory WHERE MBMIcBcPp = @ic;
+END
+GO
+
+-- Fees tab: premium, MCO and access fee with the refund recorded for a cancelled membership (desktop showMBM).
+CREATE OR ALTER PROCEDURE genisis.Enquiry_Fees
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT o.MBMPremium AS Premium, o.MBMMCOFee AS McoFee, o.MBMAccessFee AS AccessFee, o.MBMBasicPrem AS BasicPremium, o.MBMBasicMCO AS BasicMco,
+        r.MBMPremReduction AS PremiumRefund, r.MBMMCORefund AS McoRefund, r.MBMProviderRef AS AccessFeeRefund, r.MBMProviderEff AS AccessFeeEffective,
+        r.MBMMCOEffective AS McoEffective, r.MBMPremEffective AS PremiumEffective
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    OUTER APPLY (SELECT TOP (1) * FROM dbo.MBMRefund x WHERE x.MBMNumber = m.MBMNumber AND m.MBMStatus = 'C' ORDER BY x.MIndex) r
+    WHERE m.MBMNumber = @number;
+END
+GO
+
+-- Non Disclosure (desktop SearchPrincipalIll / Case_SearchIllness): pre-existing and underlying illnesses recorded on cases for the IC.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_NonDisclosure
+    @ic nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMNumber) AS MembershipNo, RTRIM(CASNumber) AS CaseNo, RTRIM(MBMPatientCovID) AS CoverId, CASDateAdmitted AS Admitted,
+        CASPreIllDate AS PreExistingDate,
+        CASE RTRIM(CASPreIllCAT) WHEN '1' THEN 'Illness' WHEN '2' THEN 'Injury' WHEN '3' THEN 'Hospitalisation' WHEN '4' THEN CASPreIllOthers END AS PreExisting,
+        RTRIM(CASPreIllInfBy) AS PreExistingInformedBy, CASUndIllDate AS UnderlyingDate,
+        CASE RTRIM(CASUndIllCAT) WHEN '1' THEN 'Diabetes' WHEN '2' THEN 'Hypertension' WHEN '3' THEN CASUndIllOthers END AS Underlying,
+        RTRIM(CASUndIllInfBy) AS UnderlyingInformedBy
+    FROM dbo.VIEW_Cas_SearchIll WHERE MBMIcBcPp = @ic;
+END
+GO
+
+-- Policy Terms (desktop PolTermsListing / Case_Registration case 6): health type N plans are per payor.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyTerms
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) PLNRefRqdAdmin AS ReferralForAdmission, PLNRefRqdPreSpec AS ReferralForSpecialist, PLNMinDurHosp AS MinimumHospitalStay,
+        PLNPhyVstPerDay AS PhysicianVisitsPerDay, PLNSepPeriodPrin AS SeparationPeriodPrincipal, PLNSepPeriodSup AS SeparationPeriodSupplementary,
+        PLNLowerAgeLimit AS LowerAgeLimit, PLNUpperAgeLimit AS UpperAgeLimit, PLNStudentAge AS StudentAge, PLNChildUntilAge AS ChildUntilAge
+    FROM dbo.PLN WHERE PLNCode = @plan AND (@hlt = 'S' OR (@hlt = 'N' AND PAYCode = @pay));
+END
+GO
+
+-- LT Limit (desktop LTLmtListing / SP_SearchLTLmt): annual and lifetime balances with current and historical cases, principal then supplementaries.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_LifetimeLimits
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(p.MBMNumber) AS MembershipNo, RTRIM(p.MBMCOVID) AS CoverId, RTRIM(p.MBMName) AS Name, ISNULL(p.MBMAvailableLimit, 0) AS AnnualBalance,
+        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTPrinLmt WHERE MBMNumber = p.MBMTopupNumber), 0)
+             ELSE ISNULL(p.MBMAvailableLimit, 0) END AS LifetimeBalance,
+        ISNULL(c.Cases, 0) AS Cases, ISNULL(h.CasHistory, 0) AS CaseHistory, ISNULL(c.BordxAmt, 0) AS CaseAmount, ISNULL(h.BordxAmt, 0) AS HistoryAmount
+    FROM dbo.View_Search_LTPrinLmt p
+    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTPrinCase WHERE MBMNumber = p.MBMNumber) c
+    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.View_Search_LTPrinCaseHistory WHERE MBMTopupNumber = p.MBMTopupNumber) h
+    WHERE p.MBMNumber = @number
+    UNION ALL
+    SELECT RTRIM(s.MBMCNumber), RTRIM(s.MBMCCoverID), RTRIM(s.MBMCName), ISNULL(s.MBMCAvailableLimit, 0),
+        CASE WHEN RTRIM(p.MBMGuaRenewal) = '3' THEN ISNULL((SELECT TOP (1) MBMLifeTimeLmt FROM dbo.View_Search_LTSuppLmt
+                 WHERE MBMCNumber = p.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID), 0)
+             ELSE ISNULL(s.MBMCAvailableLimit, 0) END,
+        ISNULL(c.Cases, 0), ISNULL(h.CasHistory, 0), ISNULL(c.BordxAmt, 0), ISNULL(h.BordxAmt, 0)
+    FROM dbo.View_Search_LTPrinLmt p
+    JOIN dbo.View_Search_LTSuppLmt s ON s.MBMCNumber = p.MBMNumber
+    OUTER APPLY (SELECT TOP (1) Cases, BordxAmt FROM dbo.View_Search_LTSuppCase WHERE MBMCNumber = s.MBMCNumber AND MBMCCoverID = s.MBMCCoverID) c
+    OUTER APPLY (SELECT TOP (1) CasHistory, BordxAmt FROM dbo.VIEW_Search_LTSuppCaseHistory WHERE MBMTopupNumber = s.MBMTopupNumber AND MBMCCoverID = s.MBMCCoverID) h
+    WHERE p.MBMNumber = @number AND RTRIM(p.INSCode) IN ('F', 'H');
+END
+GO
+
+-- T/O Claims (desktop TakeoverClaims): previous insurer's claims for the policy number.
+CREATE OR ALTER PROCEDURE genisis.Enquiry_TakeoverClaims
+    @policy nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CLMEffDate AS EffectiveDate, CLMExpDate AS ExpiryDate, RTRIM(CLMPatientname) AS Patient, RTRIM(CLMPatientIC) AS PatientIc,
+        CLMDOA AS Admitted, CLMDOD AS Discharged, RTRIM(CLMHospital) AS Hospital,
+        RTRIM(ISNULL(CLMDiagnosis1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis2), ''), '') + ISNULL('/' + NULLIF(RTRIM(CLMDiagnosis3), ''), '') AS Diagnosis,
+        RTRIM(ISNULL(CLMDrName1, '')) + ISNULL('/' + NULLIF(RTRIM(CLMDrName2), ''), '') AS Doctor,
+        CLMBillAmt AS BillAmount, CLMAppAmt AS ApprovedAmount, CLMExcessAmt AS ExcessAmount
+    FROM dbo.CLMMAATakaful WHERE CLMPolNo = @policy;
+END
+GO
+
+-- Plan policy wording folder name (desktop showMBM: PLN.PLNPolicyWording).
+CREATE OR ALTER PROCEDURE genisis.Enquiry_PolicyWording
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(p.PLNPolicyWording) AS PolicyWording
+    FROM dbo.MBM m JOIN dbo.PLN p ON p.PLNCode = m.PLNCode AND p.HLTCode = m.HLTCode AND (m.HLTCode = 'S' OR p.PAYCode = m.PAYCode)
+    WHERE m.MBMNumber = @number;
 -- ===== main/140_case_registration.sql =====
 -- Case > Registration (frmCaseAdmission).
 -- Reads replace the legacy Case_Registration dispatchers (main and maintenance), which appended a raw
@@ -2426,790 +3284,1120 @@ BEGIN
 END
 GO
 
--- ===== main/160_panel_hospitals.sql =====
--- Case > Panel Hospitals (legacy frmPanelHospital). Replaces the raw @strAppend dbo.Search_PanelHospitals2.
+-- ===== main/160_bordx.sql =====
+-- Membership > Upload Bordx (legacy FrmNewMBMEndt10), standard format. The desktop stages new members in UploadDb through its
+-- TmpUpload_* procedures and copies them into HISDB with SaveUploadDate; the API does the same, inside one transaction, keyed by a
+-- per-run @runKey so concurrent uploads never see each other's staged rows.
 
--- PayorComboListing / SearchPayor: the payors of the payor drop-downs (Inpatient Case Listing, Claim ASCII, Case ASCII).
-CREATE OR ALTER PROCEDURE genisis.Case_Payors
+-- ===== Lookups =====
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_Payor
+    @pay nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+    SELECT TOP (1) RTRIM(BordxFormatType) AS BordxFormatType, RTRIM(CLNStatus) AS ClinicalStatus, RTRIM(MBMCancelStatus) AS CancelStatus,
+        RTRIM(PAYMBMRegStatus) AS RegStatus
+    FROM dbo.PAY WHERE PAYCode = @pay;
 END
 GO
 
--- Form_Load: the hospital panel codes (HosPanelCode on the maintenance database).
-CREATE OR ALTER PROCEDURE genisis.PanelHospitals_Codes
+-- Codes the verification checks against: insured types, relationships (data types), renewal types.
+CREATE OR ALTER PROCEDURE genisis.Bordx_Codes
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(HosPanelCode) AS Code, RTRIM(HosPanelDesc) AS Description
-    FROM genisis.Maint_HosPanelCode ORDER BY HosPanelCode;
+    SELECT RTRIM(INSCode) AS Code FROM dbo.INS WHERE INSCode IS NOT NULL;
+    SELECT RTRIM(RELCode) AS Code FROM dbo.REL WHERE RELCode IS NOT NULL;
+    SELECT RTRIM(RenewalType) AS Code FROM genisis.Maint_Renewal WHERE RenewalType IS NOT NULL;
 END
 GO
 
--- PanelListing: the hospitals of one panel code.
-CREATE OR ALTER PROCEDURE genisis.PanelHospitals_List
-    @code nvarchar(50)
+-- Plan by HIS plan code (@plan) or by the payor's own plan code (@payorPlan, ZURICH / TAK format).
+CREATE OR ALTER PROCEDURE genisis.Bordx_Plan
+    @plan nvarchar(4000) = NULL, @payorPlan nvarchar(4000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(h.HOSCode) AS Code, RTRIM(h.HOSName) AS Name, RTRIM(h.HOSTelNo) AS Tel, RTRIM(h.HOSFaxNo) AS Fax,
-        RTRIM(h.HOSAdd1) AS Add1, RTRIM(h.HOSAdd2) AS Add2, RTRIM(h.HOSAdd3) AS Add3,
-        RTRIM(h.HOSState) AS State, RTRIM(h.HOSTown) AS Town
-    FROM dbo.HOS h
-    INNER JOIN dbo.PanelHospitals p ON h.HOSCode = p.HOSCode
-    WHERE p.HosPanelCode = @code
-    ORDER BY h.HOSName, h.HOSCode;
+    SELECT TOP (1) RTRIM(PLNCode) AS PlanCode, RTRIM(PLNLifeTimeStatus) AS LifetimeStatus, RTRIM(PLNPayorCode) AS PayorCode, PlnAgeLimit AS AgeLimit
+    FROM dbo.PLN
+    WHERE (@plan IS NOT NULL AND PLNCode = @plan) OR (@payorPlan IS NOT NULL AND PLNPayorPlan = @payorPlan);
 END
 GO
 
--- ===== main/165_case_non_disclosure.sql =====
--- Case > Non-Disclosure Info (legacy frmCASNonDisclosure): the pre-existing / underlying illness the member did not
--- disclose, stored on dbo.CASOthersTwo.
-
--- CasDetails: nothing is returned when the case does not exist; HasRecord tells whether CASOthersTwo has a row yet.
-CREATE OR ALTER PROCEDURE genisis.NonDisclosure_Get
-    @cas nvarchar(15)
+-- Active cross-reference rows for an IC (desktop "Same IC ... Existed" check).
+CREATE OR ALTER PROCEDURE genisis.Bordx_ActiveByIc
+    @ic nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(c.CASNumber) AS CaseNumber,
-        CAST(CASE WHEN o.CASNumber IS NULL THEN 0 ELSE 1 END AS bit) AS HasRecord,
-        RTRIM(o.CASPreIllCAT) AS PreCategory, o.CASPreIllDate AS PreDate,
-        RTRIM(o.CASPreIllOthers) AS PreOthers, RTRIM(o.CASPreIllInfBy) AS PreInformedBy,
-        RTRIM(o.CASUndIllCAT) AS UndCategory, o.CASUndIllDate AS UndDate,
-        RTRIM(o.CASUndIllOthers) AS UndOthers, RTRIM(o.CASUndIllInfBy) AS UndInformedBy
-    FROM dbo.CAS c
-    LEFT JOIN dbo.CASOthersTwo o ON o.CASNumber = c.CASNumber
-    WHERE c.CASNumber = @cas;
+    SELECT RTRIM(MBMNumber) AS MembershipNo, RTRIM(MBMIcBcPp) AS Ic, MBMPayorExpDate AS ExpiryDate
+    FROM genisis.Maint_MBMCrossReference WHERE MBMIcBcPp = @ic AND MBMStatus = 'A';
 END
 GO
 
--- CmdUpdate_Click. The desktop only updated an existing CASOthersTwo row and otherwise reported success without
--- saving; this inserts the row when it is missing. Result: 0 saved, 1 case not found.
-CREATE OR ALTER PROCEDURE genisis.NonDisclosure_Save
-    @cas nvarchar(15),
-    @preCategory nvarchar(4000), @preDate datetime, @preOthers nvarchar(4000), @preInformedBy nvarchar(4000),
-    @undCategory nvarchar(4000), @undDate datetime, @undOthers nvarchar(4000), @undInformedBy nvarchar(4000)
+-- Latest active membership for the IC / payor / insured type (desktop renewal-type top-up check).
+CREATE OR ALTER PROCEDURE genisis.Bordx_TopupCheck
+    @ic nvarchar(4000), @pay nvarchar(4000), @ins nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF NOT EXISTS (SELECT 1 FROM dbo.CAS WHERE CASNumber = @cas)
+    SELECT TOP (1) RTRIM(MBMNumber) AS MembershipNo, RTRIM(INSCode) AS InsuredType, RTRIM(MBMTopupNumber) AS TopupNumber
+    FROM genisis.Maint_MBMCrossReference
+    WHERE MBMIcBcPp = @ic AND MBMStatus = 'A' AND PAYCode = @pay AND INSCode = @ins
+    ORDER BY MBMPayorEffDate DESC, MBMNumber;
+END
+GO
+
+-- Endorsement file checks: open case / already cancelled.
+CREATE OR ALTER PROCEDURE genisis.Bordx_EndorsementState
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM genisis.Maint_CASCrossReference WHERE CASStatus = 'O' AND MBMNumber = @number) THEN 1 ELSE 0 END AS bit) AS OpenCase,
+           CAST(CASE WHEN EXISTS (SELECT 1 FROM genisis.Maint_MBMCrossReference WHERE MBMStatus = 'C' AND MBMNumber = @number) THEN 1 ELSE 0 END AS bit) AS Cancelled;
+END
+GO
+
+-- ===== New member calculation reads (desktop SPHISDBTableRecAssign / SPCisDBTableRecAssign and the Get* helpers) =====
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_HisPlan
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PLNTopUPStatus) AS TopupStatus, RTRIM(PLNProRate) AS ProRate, RTRIM(PRMInd) AS PremiumInd, RTRIM(MCOInd) AS McoInd,
+        RTRIM(AnnLmtIND) AS AnnualLimitInd, RTRIM(PLNLifeTimeStatus) AS LifetimeStatus, PlnAgeLimit AS AgeLimit,
+        RTRIM(PLNRoundUpStatus) AS RoundUpStatus, RTRIM(PLNPremGenderStatus) AS PremGenderStatus, RTRIM(PLNGuaranteeStatus) AS GuaranteeStatus
+    FROM dbo.PLN WHERE PLNCode = @plan AND HLTCode = @hlt AND (@hlt <> 'N' OR PAYCode = @pay)
+    ORDER BY PLNEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_CisPlan
+    @plan nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(DCStatus) AS DcStatus, RTRIM(PRMInd) AS PremiumInd, RTRIM(MCOInd) AS McoInd, RTRIM(ANNLmtInd) AS AnnualLimitInd,
+        RTRIM(VISLmtInd) AS VisitLimitInd, RTRIM(PAYCode) AS PayorCode, RTRIM(PDentalStatus) AS DentalStatus, RTRIM(PSpecStatus) AS SpecialistStatus,
+        RTRIM(PMEPStatus) AS MepStatus, PLNAgeLimit AS AgeLimit, RTRIM(PLNRoundUpStatus) AS RoundUpStatus, RTRIM(MCOProcfeeStatus) AS McoProcFeeStatus,
+        RTRIM(PLNProRate) AS ProRate
+    FROM genisis.Cis_PLN WHERE PLNCode = @plan ORDER BY PLNEffDate DESC;
+END
+GO
+
+-- Clinical rates for one person. Result sets: annual limit row, visit limit, premium row (payor filter except health type S),
+-- MCO row (plan-specific, else default).
+CREATE OR ALTER PROCEDURE genisis.Bordx_CisRates
+    @ins nvarchar(4000), @plan nvarchar(4000), @hlt nvarchar(4000), @eff datetime, @premiumDate datetime, @pay nvarchar(4000), @ageCode nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(SuppLimitStatus) AS SuppLimitStatus, AnnLimit, SuppLimit, PDentalAnnLimit AS DentalLimit, PSpecAnnLimit AS SpecialistLimit,
+        PMEPAnnLimit AS MepLimit
+    FROM genisis.Cis_AnnualLimit WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND AnnEffDate <= @eff ORDER BY AnnEffDate DESC;
+    SELECT TOP (1) VisitLimit FROM genisis.Cis_VisitLimit
+    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND VisitEffDate <= @eff ORDER BY VisitEffDate DESC;
+    SELECT TOP (1) RTRIM(SuppPRMStatus) AS SuppPrmStatus, PRMAmount, SuppPRMAmt AS SuppPrmAmt FROM genisis.Cis_PRM
+    WHERE INSCode = @ins AND HLTCode = @hlt AND PLNCode = @plan AND AGECode = @ageCode AND PRMEffDate <= @premiumDate AND (@hlt = 'S' OR PAYCode = @pay)
+    ORDER BY PRMEffDate DESC;
+    SELECT TOP (1) RTRIM(SuppMCOStatus) AS SuppMcoStatus, MCOAmtAdult AS Adult, MCOAmtChild AS Child, MCOSuppAdultAmt AS SuppAdult, MCOSuppChildAmt AS SuppChild
+    FROM genisis.Cis_MCO WHERE INSCode = @ins AND HLTCode = @hlt AND (PLNCode = @plan OR PLNCode IS NULL) AND MCOEffDate <= @eff
+    ORDER BY CASE WHEN PLNCode IS NULL THEN 1 ELSE 0 END, MCOEffDate DESC;
+END
+GO
+
+-- Top-up: latest cross-reference row for the IC under the payor and insured type (desktop PLNTopUpStatus = Y).
+CREATE OR ALTER PROCEDURE genisis.Bordx_TopupByIc
+    @ic nvarchar(4000), @pay nvarchar(4000), @ins nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(MBMNumber) AS MembershipNo FROM genisis.Maint_MBMCrossReference
+    WHERE MBMIcBcPp = @ic AND LEFT(MBMNumber, 2) = @pay AND INSCode = @ins ORDER BY MBMPayorEffDate DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_PreviousCoveredLimit
+    @previousNo nvarchar(4000), @name nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) MBMCAvailableLimit AS Value FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @previousNo AND MBMCName = @name;
+END
+GO
+
+-- Clinical-only membership sequence (desktop GenerateMembershipNo, MBMSEQ by payor + insured type): A00001 .. Z99999.
+CREATE OR ALTER PROCEDURE genisis.Bordx_NextClinicalSeq
+    @pay nvarchar(4000), @ins nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @code nvarchar(20) = LTRIM(RTRIM(@pay + @ins)), @current nvarchar(10), @next nvarchar(10);
+    SELECT @current = RTRIM(SEQNumber) FROM genisis.Maint_MBMSEQ WITH (UPDLOCK, HOLDLOCK) WHERE SEQCode = @code;
+    IF @current IS NULL
     BEGIN
-        SELECT 1 AS Result;
-        RETURN;
+        SET @next = N'A00001';
+        INSERT INTO genisis.Maint_MBMSEQ (SEQCode, PAYCode, INSCode, SEQNumber) VALUES (@code, @pay, @ins, @next);
     END
-
-    IF EXISTS (SELECT 1 FROM dbo.CASOthersTwo WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas)
-        UPDATE dbo.CASOthersTwo
-        SET CASPreIllCAT = @preCategory, CASPreIllDate = @preDate, CASPreIllOthers = @preOthers, CASPreIllInfBy = @preInformedBy,
-            CASUndIllCAT = @undCategory, CASUndIllDate = @undDate, CASUndIllOthers = @undOthers, CASUndIllInfBy = @undInformedBy
-        WHERE CASNumber = @cas;
     ELSE
-        INSERT dbo.CASOthersTwo (CASNumber, CASPreIllCAT, CASPreIllDate, CASPreIllOthers, CASPreIllInfBy,
-            CASUndIllCAT, CASUndIllDate, CASUndIllOthers, CASUndIllInfBy)
-        VALUES (@cas, @preCategory, @preDate, @preOthers, @preInformedBy, @undCategory, @undDate, @undOthers, @undInformedBy);
-
-    SELECT 0 AS Result;
-END
-GO
-
--- ===== main/170_case_pay_claim.sql =====
--- Case > Pay & Claim (legacy frmCASPayClaim). Reads replace dbo.Case_CASPayClaim / dbo.Search_CAS_PayClaim; the save
--- replaces dbo.Case_SavePayClaim / dbo.Case_UpdatePayClaim and leaves the AgentName / CasRemarks columns untouched.
-
--- showMBM: the principal and, for family / group insured types (F, H), the covered persons.
-CREATE OR ALTER PROCEDURE genisis.PayClaim_Members
-    @cas nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(m.MBMNumber) AS MemberNo, N'00' AS CoverId, RTRIM(m.MBMName) AS PatientName, RTRIM(m.MBMPolicyNo) AS PolicyNo,
-        m.MBMPayorEffDate AS PolicyEffective, m.MBMPayorExpDate AS PolicyExpiry,
-        RTRIM(m.MBMAddress1) AS Add1, RTRIM(m.MBMAddress2) AS Add2, RTRIM(m.MBMAddress3) AS Add3,
-        RTRIM(m.MBMPostCode) AS PostCode, RTRIM(m.STACode) AS State, RTRIM(p.PAYCompanyName) AS InsuranceCompany, 0 AS Sort
-    FROM dbo.CAS c
-    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
-    LEFT JOIN dbo.PAY p ON p.PAYCode = m.PAYCode
-    WHERE c.CASNumber = @cas
-    UNION ALL
-    SELECT RTRIM(cp.MBMCNumber), RTRIM(cp.MBMCCoverID), RTRIM(cp.MBMCName), RTRIM(m.MBMPolicyNo),
-        m.MBMPayorEffDate, m.MBMPayorExpDate, NULL, NULL, NULL, NULL, NULL, NULL, 1
-    FROM dbo.CAS c
-    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
-    INNER JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = m.MBMNumber
-    WHERE c.CASNumber = @cas AND RTRIM(m.INSCode) IN (N'F', N'H')
-    ORDER BY Sort, CoverId;
-END
-GO
-
--- ShowMBMDetails: the case header the second tab shows (the patient is the principal for cover ID 00).
-CREATE OR ALTER PROCEDURE genisis.PayClaim_Case
-    @cas nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(c.CASNumber) AS CaseNumber, RTRIM(c.MBMNumber) AS MembershipNo, RTRIM(m.MBMPolicyNo) AS PolicyNo,
-        RTRIM(m.MBMName) AS PrincipalName,
-        RTRIM(CASE WHEN c.MBMPatientCovID = N'00' THEN m.MBMName ELSE ISNULL(cp.MBMCName, m.MBMName) END) AS PatientName,
-        c.CASDateAdmitted AS AdmissionDate, c.CASDischargeDate AS DischargeDate, RTRIM(h.HOSName) AS HospitalName
-    FROM dbo.CAS c
-    LEFT JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
-    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = c.MBMNumber AND cp.MBMCCoverID = c.MBMPatientCovID
-    LEFT JOIN dbo.HOS h ON h.HOSCode = c.CASHOSCode
-    WHERE c.CASNumber = @cas;
-END
-GO
-
--- showPayClaim: the case's Pay & Claim record (at most one per case).
-CREATE OR ALTER PROCEDURE genisis.PayClaim_Get
-    @cas nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT RTRIM(CASNumber) AS CaseNo, CASPayCLMDate AS PayClaimDate,
-        RTRIM(CASLab) AS LabTest, RTRIM(CASConfInfo) AS ConflictingInfo, RTRIM(CASInfoInv) AS Investigation,
-        RTRIM(CASCovgSub) AS Radiology, RTRIM(CASNonPan) AS NonPanel, RTRIM(CASNonCash) AS NoCashless,
-        RTRIM(CASCOthers) AS Others, RTRIM(CASOthers) AS Remarks
-    FROM dbo.CASPayClaim WHERE CASNumber = @cas;
-END
-GO
-
--- SavePayClaim. @isNew = 1 inserts (Result 2 when the case already has a record), 0 updates (Result 1 when it has none).
-CREATE OR ALTER PROCEDURE genisis.PayClaim_Save
-    @cas nvarchar(15), @isNew bit, @payClaimDate datetime,
-    @lab char(1), @confInfo char(1), @infoInv char(1), @covgSub char(1), @nonPan char(1), @nonCash char(1),
-    @cOthers char(1), @others nvarchar(4000), @userCode nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF NOT EXISTS (SELECT 1 FROM dbo.CAS WHERE CASNumber = @cas)
     BEGIN
-        SELECT 1 AS Result;
-        RETURN;
+        DECLARE @n int = TRY_CAST(SUBSTRING(@current, 2, 5) AS int), @c nchar(1) = LEFT(@current, 1);
+        SET @next = CASE WHEN @n = 99999 THEN NCHAR(UNICODE(@c) + 1) + N'00001' ELSE @c + RIGHT(N'00000' + CAST(@n + 1 AS nvarchar(5)), 5) END;
+        UPDATE genisis.Maint_MBMSEQ SET SEQNumber = @next WHERE SEQCode = @code;
     END
-
-    DECLARE @exists bit = CASE WHEN EXISTS (SELECT 1 FROM dbo.CASPayClaim WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas) THEN 1 ELSE 0 END;
-    IF @isNew = 1 AND @exists = 1 BEGIN SELECT 2 AS Result; RETURN; END
-    IF @isNew = 0 AND @exists = 0 BEGIN SELECT 1 AS Result; RETURN; END
-
-    DECLARE @now datetime = GETDATE();
-    IF @isNew = 1
-        INSERT dbo.CASPayClaim (CASNumber, CASPayCLMDate, CASLab, CASConfInfo, CASInfoInv, CASCovgSub, CASNonPan, CASNonCash,
-            CASCOthers, CASOthers, CASRegUser, CASRegDate, LastUpdateUser, LastUpdateDate)
-        VALUES (@cas, @payClaimDate, @lab, @confInfo, @infoInv, @covgSub, @nonPan, @nonCash,
-            @cOthers, @others, @userCode, @now, @userCode, @now);
-    ELSE
-        UPDATE dbo.CASPayClaim
-        SET CASPayCLMDate = @payClaimDate, CASLab = @lab, CASConfInfo = @confInfo, CASInfoInv = @infoInv, CASCovgSub = @covgSub,
-            CASNonPan = @nonPan, CASNonCash = @nonCash, CASCOthers = @cOthers, CASOthers = @others,
-            LastUpdateUser = @userCode, LastUpdateDate = @now
-        WHERE CASNumber = @cas;
-
-    SELECT 0 AS Result;
+    SELECT @next AS Sequence;
 END
 GO
 
--- ===== main/180_mma.sql =====
--- Case > MMA/CPT (legacy frmMMA, "Malaysian Medical Association"): the MMA procedure schedule (MMAProcedures) and the
--- surgeon / anaesthetist fee look-up table (MMAFees), both on the maintenance database. The search patterns are LIKE
--- patterns built (and escaped) by the API; NULL means "not filtered".
-
--- ProcListing / SearchProc: ProcMainBPCode and OPCSCode are the searchable fields.
-CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureSearch
-    @mainBodyPart nvarchar(4000) = NULL, @opcsCode nvarchar(4000) = NULL, @max int = 5000
+-- Desktop CheckBatch: next batch number for the payor / bordereaux date / file type.
+CREATE OR ALTER PROCEDURE genisis.Bordx_NextBatch
+    @pay nvarchar(4000), @bordx datetime, @type nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT TOP (@max) ProcIndex AS [Index], RTRIM(ProcMainBPCode) AS MainBodyPart, RTRIM(OPCSCode) AS OpcsCode,
-        RTRIM(OPCSNarrative) AS Narrative, RTRIM(ProcSurgCat) AS SurgeonCategory, RTRIM(ProcAnaesCat) AS AnaesthetistCategory,
-        RTRIM(ProcPart) AS Part, RTRIM(PartACost) AS PartACost, RTRIM(ProcPageNo) AS PageNo
-    FROM genisis.Maint_MMAProcedures
-    WHERE (@mainBodyPart IS NULL OR ProcMainBPCode LIKE @mainBodyPart)
-      AND (@opcsCode IS NULL OR OPCSCode LIKE @opcsCode)
-    ORDER BY ProcIndex;
-END
-GO
-
--- SaveProc: @index NULL inserts (returns the new index), otherwise updates that row (Result 1 when it does not exist).
-CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureSave
-    @index int = NULL, @mainBodyPart nvarchar(4000), @opcsCode nvarchar(4000), @narrative nvarchar(4000),
-    @surgeonCategory nvarchar(4000), @anaesthetistCategory nvarchar(4000), @part nvarchar(4000),
-    @partACost nvarchar(4000), @pageNo nvarchar(4000), @userCode nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
-    IF @index IS NULL
+    DECLARE @batch int;
+    SELECT @batch = BATSequence + 1 FROM dbo.BAT WITH (UPDLOCK, HOLDLOCK) WHERE PAYCode = @pay AND BATBordxDate = @bordx AND BordxType = @type;
+    IF @batch IS NULL
     BEGIN
-        INSERT genisis.Maint_MMAProcedures (ProcMainBPCode, OPCSCode, OPCSNarrative, ProcSurgCat, ProcAnaesCat, ProcPageNo,
-            PartACost, ProcPart, ProcLastUpdateUser, ProcLastUpdateDate)
-        OUTPUT 0 AS Result, inserted.ProcIndex AS [Index]
-        VALUES (@mainBodyPart, NULLIF(@opcsCode, N''), @narrative, NULLIF(@surgeonCategory, N''), NULLIF(@anaesthetistCategory, N''),
-            NULLIF(@pageNo, N''), NULLIF(@partACost, N''), @part, @user, @today);
-        RETURN;
+        SET @batch = 1;
+        INSERT INTO dbo.BAT (PAYCode, BATBordxDate, BATSequence, BordxType) VALUES (@pay, @bordx, 1, @type);
     END
-
-    UPDATE genisis.Maint_MMAProcedures
-    SET ProcMainBPCode = @mainBodyPart, OPCSCode = NULLIF(@opcsCode, N''), OPCSNarrative = @narrative,
-        ProcSurgCat = NULLIF(@surgeonCategory, N''), ProcAnaesCat = NULLIF(@anaesthetistCategory, N''),
-        ProcPageNo = NULLIF(@pageNo, N''), PartACost = NULLIF(@partACost, N''), ProcPart = @part,
-        ProcLastUpdateUser = @user, ProcLastUpdateDate = @today
-    WHERE ProcIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+    ELSE UPDATE dbo.BAT SET BATSequence = @batch WHERE PAYCode = @pay AND BATBordxDate = @bordx AND BordxType = @type;
+    SELECT @batch AS Batch;
 END
 GO
 
--- DeleteProc. Result 1 when the row does not exist.
-CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureDelete
-    @index int
+-- ===== Staging (the desktop's own procedures, called with named parameters) =====
+-- The current TmpUpload_MBM_HIS / _MBMCovPersonsNew / _MBMOthers_2015 have required parameters the desktop never passes
+-- (top-up IC, deductible, CMC / agent name); they are sent blank here.
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_ClearStaging
+    @runKey nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DELETE genisis.Maint_MMAProcedures WHERE ProcIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+    EXEC dbo.DeleteTmpUploadDate @UpdatedBy = @runKey;
 END
 GO
 
--- LookListing / SearchLook: the surgeon's and anaesthetist's categories are the searchable fields.
-CREATE OR ALTER PROCEDURE genisis.Mma_FeeSearch
-    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL, @max int = 5000
+-- Copies the staged rows into HISDB / HISMaintenance. SaveUploadDate swallows its own errors with a bare ROLLBACK, which inside the
+-- API's transaction surfaces as a transaction-count error, so a failed copy can never look like a success.
+CREATE OR ALTER PROCEDURE genisis.Bordx_CommitStaging
+    @runKey nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT TOP (@max) FeeIndex AS [Index], RTRIM(SurgeonsCat) AS SurgeonCategory, SurgeonsFees AS SurgeonFees,
-        RTRIM(AnaesthetistsCat) AS AnaesthetistCategory, AnaesthetistsFees AS AnaesthetistFees
-    FROM genisis.Maint_MMAFees
-    WHERE (@surgeonCategory IS NULL OR SurgeonsCat LIKE @surgeonCategory)
-      AND (@anaesthetistCategory IS NULL OR AnaesthetistsCat LIKE @anaesthetistCategory)
-    ORDER BY FeeIndex;
+    EXEC dbo.SaveUploadDate @UpdatedBy = @runKey;
 END
 GO
 
--- SaveLook: @index NULL inserts (returns the new index), otherwise updates that row (Result 1 when it does not exist).
-CREATE OR ALTER PROCEDURE genisis.Mma_FeeSave
-    @index int = NULL, @surgeonCategory nvarchar(4000), @surgeonFees money, @anaesthetistCategory nvarchar(4000),
-    @anaesthetistFees money, @userCode nvarchar(15)
+CREATE OR ALTER PROCEDURE genisis.Bordx_StagePrincipal
+    @runKey nvarchar(4000), @pay nvarchar(4000), @hlt nvarchar(4000), @number nvarchar(4000), @policy nvarchar(4000), @coverId nvarchar(4000),
+    @ic nvarchar(4000), @name nvarchar(4000), @dob datetime = NULL, @sex nvarchar(4000), @race nvarchar(4000), @status nvarchar(4000),
+    @dataStatus nvarchar(4000), @memberType nvarchar(4000), @add1 nvarchar(4000), @add2 nvarchar(4000), @add3 nvarchar(4000), @city nvarchar(4000),
+    @postCode nvarchar(4000), @state nvarchar(4000), @expiredStatus nvarchar(4000), @valueDate datetime, @eff datetime = NULL, @exp datetime = NULL,
+    @takeOver nvarchar(4000), @renewal nvarchar(4000), @bordx datetime, @batch int, @plan nvarchar(4000), @ins nvarchar(4000), @ageCode nvarchar(4000),
+    @adultChild nvarchar(4000), @available decimal(19, 4), @hsClnInd nvarchar(4000), @topupNo nvarchar(4000), @topupInd nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
-    IF @index IS NULL
-    BEGIN
-        INSERT genisis.Maint_MMAFees (SurgeonsCat, SurgeonsFees, AnaesthetistsCat, AnaesthetistsFees, FeeLastUpdateUser, FeeLastUpdateDate)
-        OUTPUT 0 AS Result, inserted.FeeIndex AS [Index]
-        VALUES (NULLIF(@surgeonCategory, N''), @surgeonFees, NULLIF(@anaesthetistCategory, N''), @anaesthetistFees, @user, @today);
-        RETURN;
-    END
-
-    UPDATE genisis.Maint_MMAFees
-    SET SurgeonsCat = NULLIF(@surgeonCategory, N''), SurgeonsFees = @surgeonFees,
-        AnaesthetistsCat = NULLIF(@anaesthetistCategory, N''), AnaesthetistsFees = @anaesthetistFees,
-        FeeLastUpdateUser = @user, FeeLastUpdateDate = @today
-    WHERE FeeIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+    EXEC dbo.TmpUpload_MBM_HIS @PAYCode = @pay, @HLTCode = @hlt, @MBMNumber = @number, @MBMPolicyNo = @policy, @MBMCOVID = @coverId,
+        @MBMIcBcPp = @ic, @MBMName = @name, @MBMDOB = @dob, @MBMSex = @sex, @RACCode = @race, @MBMStatus = @status, @MBMDataStatus = @dataStatus,
+        @MBMMemberType = @memberType, @MBMAddress1 = @add1, @MBMAddress2 = @add2, @MBMAddress3 = @add3, @CTYCode = @city, @MBMPostCode = @postCode,
+        @STACode = @state, @MBMExpiredStatus = @expiredStatus, @MBMValueDate = @valueDate, @MBMPayorEffDate = @eff, @MBMPayorEXPDate = @exp,
+        @MBMTakeOver = @takeOver, @MBMRenewFlag = @renewal, @MBMBordxDate = @bordx, @MBMBatchNo = @batch, @PLNCode = @plan, @INSCode = @ins,
+        @AgeCode = @ageCode, @MBMAdultChild = @adultChild, @MBMAvailableLimit = @available, @HSClnInd = @hsClnInd, @MBMTopupNumber = @topupNo,
+        @MBMTopupInd = @topupInd, @UpdatedBy = @runKey, @MBMTINumber = '', @MBMTIcoverID = '', @DEDUCT_LIMIT = NULL;
 END
 GO
 
--- DeleteLook. Result 1 when the row does not exist.
-CREATE OR ALTER PROCEDURE genisis.Mma_FeeDelete
-    @index int
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageMbmTwo
+    @runKey nvarchar(4000), @number nvarchar(4000), @salutation nvarchar(4000), @telHome nvarchar(4000), @telMobile nvarchar(4000),
+    @telOffice nvarchar(4000), @nat nvarchar(4000), @language nvarchar(4000), @user nvarchar(4000), @clinical nvarchar(4000), @appName nvarchar(4000),
+    @otherIc nvarchar(4000), @fileName nvarchar(4000), @today datetime, @agentName nvarchar(4000), @agentEmail nvarchar(4000), @agentPhone nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DELETE genisis.Maint_MMAFees WHERE FeeIndex = @index;
-    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+    EXEC dbo.TmpUpload_MBMTwo_Agent @MBMNumber = @number, @MBMSalutation = @salutation, @MBMTelnoH = @telHome, @MBMTelNoM = @telMobile,
+        @MBMTelNoO = @telOffice, @NATCode = @nat, @LGNCode = @language, @SRVCodeList = 'ME', @MBMRegUser = @user, @MBMLastUpdateUser = @user,
+        @MBMClinical = @clinical, @MBMAppName = @appName, @MBMIcBcPp2nd = @otherIc, @MBMUploadStatus = 'A', @MBMFilename = @fileName,
+        @MBMENDtEffDate = @today, @UpdatedBy = @runKey, @MBMAgentName = @agentName, @MBMAgentEmail = @agentEmail, @MBMAgentPhoneNo = @agentPhone;
 END
 GO
 
--- ===== main/190_case_audit_review.sql =====
--- Case > Case Audit Review (legacy frmCaseAuditReview). The case, member, diagnoses and repudiation are read with the
--- procedures Case Adjustment already uses; these cover what is specific to the audit review: its own record
--- (dbo.CASAuditReview, shown through dbo.VIEW_CAS_AuditReview) and the hospital payments (HISPayment.Payment2HOS).
--- They replace the raw @strAppend dbo.Case_AuditReview modes and dbo.Case_AuditInsert / dbo.Case_AuditUpdate.
-
--- showOther (audit part) + showPaymentRecord + the member. The visit date is stored by the desktop as an mm/dd/yyyy string.
-CREATE OR ALTER PROCEDURE genisis.CaseAudit_Get
-    @cas nvarchar(15)
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageXref
+    @runKey nvarchar(4000), @number nvarchar(4000), @policy nvarchar(4000), @ic nvarchar(4000), @name nvarchar(4000), @eff datetime = NULL,
+    @exp datetime = NULL, @ageCode nvarchar(4000), @ins nvarchar(4000), @plan nvarchar(4000), @bordx datetime, @topupNo nvarchar(4000),
+    @topupInd nvarchar(4000), @dataStatus nvarchar(4000), @status nvarchar(4000), @dob datetime = NULL, @hlt nvarchar(4000), @pay nvarchar(4000), @batch int
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET DATEFORMAT mdy;
-    SELECT RTRIM(CASInvNo) AS InvoiceNo, INVDate AS InvoiceDate, CASInvAmt AS InvoiceAmount, CASDisRec AS DiscountReceived,
-        RTRIM(CASDiscType) AS DiscountType, CASLetterSent AS LetterSent, CASHospReply AS LetterReply,
-        RTRIM(CASARStatus) AS Status, CASAROpenDate AS DateOpen, CASDTC AS DateToClaims,
-        CASReviewAudit AS Query, CASARAnswer AS Answer, CASARRemarks AS Remarks,
-        CASE WHEN ISDATE(NULLIF(RTRIM(CASDOV), N'')) = 1 THEN CONVERT(datetime, RTRIM(CASDOV), 101) END AS VisitDate, RTRIM(CASDOVTime) AS VisitTime,
-        CASVRemarks AS VisitAction, RTRIM(Officer) AS Officer
-    FROM dbo.CASAuditReview WHERE CASNumber = @cas;
-
-    IF OBJECT_ID(N'genisis.Pay_Payment2HOS', N'SN') IS NOT NULL
-        EXEC sp_executesql N'SELECT RTRIM(PVHOSNo) AS PvNo, PVHOSDate AS PvDate, HOSPaidAmt AS AmountPaid
-            FROM genisis.Pay_Payment2HOS WHERE CASNumber = @cas ORDER BY PVHOSDate, PVHOSIndex',
-            N'@cas nvarchar(15)', @cas;
-    ELSE
-        SELECT CAST(NULL AS nvarchar(30)) AS PvNo, CAST(NULL AS datetime) AS PvDate, CAST(NULL AS money) AS AmountPaid WHERE 1 = 0;
-
-    -- The member straight from dbo.MBM: SearchMBMCas (used for the case's member panel) returns nothing for a member
-    -- that has no MBMOthers / MBMOthersTwo / MBMTwo row, and the audit review still has to show who the member is.
-    SELECT RTRIM(m.MBMNumber) AS MemberNo, RTRIM(m.MBMName) AS Name, RTRIM(m.MBMIcBcPp) AS Ic, RTRIM(m.PAYCode) AS Payor,
-        RTRIM(m.MBMPolicyNo) AS PolicyNo, RTRIM(m.MBMRenewFlag) AS Renewal, RTRIM(m.MBMTakeover) AS TakeOver,
-        m.MBMPayorEffDate AS EffectiveDate, m.MBMPayorExpDate AS ExpiryDate, RTRIM(m.MBMAddress1) AS Address1,
-        RTRIM(m.MBMAddress2) AS Address2, RTRIM(m.MBMAddress3) AS Address3, RTRIM(m.MBMPostCode) AS PostCode,
-        RTRIM(m.CTYCode) AS Town, RTRIM(m.STACode) AS State, m.MBMDOB AS Dob, m.MBMAvailableLimit AS AvailableLimit,
-        RTRIM(m.MBMStatus) AS Status, RTRIM(CAST(o.MBMInstallment AS nvarchar(50))) AS Installment
-    FROM dbo.CAS c
-    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
-    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
-    WHERE c.CASNumber = @cas;
+    EXEC dbo.TmpUpload_MBMXref_HIS @MBMNumber = @number, @MBMCOVID = '00', @MBMPolicyNo = @policy, @MBMIcBcPp = @ic, @MBMName = @name,
+        @MBMPayorEffDate = @eff, @MBMPayorEXPDate = @exp, @AgeCode = @ageCode, @INSCode = @ins, @PLNCode = @plan, @MBMBordxDate = @bordx,
+        @MBMTopupNumber = @topupNo, @MBMTopupInd = @topupInd, @MBMDataStatus = @dataStatus, @MBMStatus = @status, @MBMDOB = @dob, @HLTCode = @hlt,
+        @PAYCode = @pay, @MBMBatchNo = @batch, @UpdatedBy = @runKey;
 END
 GO
 
--- cmdUpdate1_Click: Case_AuditInsert / Case_AuditUpdate on the case's audit row plus Case_AuditUpdate on the maintenance
--- cross reference (the audit status). Blank amounts are stored as 0, blank dates as NULL, like the desktop.
--- Result: 0 saved, 1 case not found.
-CREATE OR ALTER PROCEDURE genisis.CaseAudit_Save
-    @cas nvarchar(15), @invoiceNo nvarchar(4000), @invoiceDate datetime, @invoiceAmount money, @discountReceived money,
-    @discountType nvarchar(4000), @letterSent datetime, @letterReply datetime, @status nvarchar(4000),
-    @dateOpen datetime, @dateToClaims datetime, @query nvarchar(4000), @answer nvarchar(4000), @remarks nvarchar(4000),
-    @visitDate datetime, @visitTime nvarchar(4000), @visitAction nvarchar(4000), @officer nvarchar(4000), @userCode nvarchar(15)
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageOthers
+    @runKey nvarchar(4000), @number nvarchar(4000), @agentCode nvarchar(4000), @labelStatus nvarchar(4000), @premium decimal(19, 4),
+    @basicPremium decimal(19, 4), @basicMco decimal(19, 4), @mco decimal(19, 4), @rel nvarchar(4000), @policyDisc decimal(19, 4),
+    @renewalDisc decimal(19, 4), @groupCompany nvarchar(4000), @prevTakeOverPlan nvarchar(4000), @joined datetime = NULL, @prevPolicy nvarchar(4000),
+    @prevMember nvarchar(4000), @employeeNo nvarchar(4000), @department nvarchar(4000), @installment nvarchar(4000), @polSubNo1 nvarchar(4000),
+    @polSubNo2 nvarchar(4000), @branch nvarchar(4000), @newPolicyEff datetime = NULL, @endtRefNo nvarchar(4000), @polCondition nvarchar(4000),
+    @undExcess decimal(19, 4), @guarantee nvarchar(4000), @clmNonPayFrom datetime = NULL, @clmNonPayTo datetime = NULL, @invoiceNo nvarchar(4000),
+    @gstAmount decimal(19, 4) = NULL, @gstPercent decimal(19, 4) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @mbm nvarchar(30) = (SELECT MBMNumber FROM dbo.CAS WHERE CASNumber = @cas);
-    IF @mbm IS NULL
-    BEGIN
-        SELECT 1 AS Result;
-        RETURN;
-    END
-
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
-    DECLARE @visit nvarchar(10) = CONVERT(nvarchar(10), @visitDate, 101);
-    DECLARE @amount money = ISNULL(@invoiceAmount, 0), @discount money = ISNULL(@discountReceived, 0);
-
-    IF EXISTS (SELECT 1 FROM dbo.CASAuditReview WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas)
-        UPDATE dbo.CASAuditReview
-        SET CASInvNo = @invoiceNo, INVDate = @invoiceDate, CASInvAmt = @amount, CASLetterSent = @letterSent, CASHospReply = @letterReply,
-            CASDOV = @visit, CASDOVTime = @visitTime, Officer = @officer, CASVRemarks = @visitAction, CASDisRec = @discount,
-            CASDTC = @dateToClaims, CASAROpenDate = @dateOpen, CASARAnswer = @answer, CASARRemarks = @remarks,
-            CASReviewAudit = @query, CASARStatus = @status, CASLastUpdateUser = @user, CASLastUpdateDate = @today,
-            CASDiscType = @discountType
-        WHERE CASNumber = @cas;
-    ELSE
-        INSERT dbo.CASAuditReview (CASNumber, CASInvNo, INVDate, CASInvAmt, CASLetterSent, CASHospReply, CASDOV, CASDOVTime,
-            Officer, CASVRemarks, CASDisRec, CASDTC, CASAROpenDate, CASARAnswer, CASARRemarks, CASReviewAudit, CASARStatus,
-            CASLastUpdateUser, CASLastUpdateDate, CASDiscType)
-        VALUES (@cas, @invoiceNo, @invoiceDate, @amount, @letterSent, @letterReply, @visit, @visitTime,
-            @officer, @visitAction, @discount, @dateToClaims, @dateOpen, @answer, @remarks, @query, @status,
-            @user, @today, @discountType);
-
-    UPDATE genisis.Maint_CASCrossReference SET CASARStatus = @status WHERE CASNumber = @cas AND MBMNumber = @mbm;
-
-    SELECT 0 AS Result;
+    EXEC dbo.TmpUpload_MBMOthers_2015 @MBMNumber = @number, @MBMAgentCode = @agentCode, @LabelStatus = @labelStatus, @MBMFirstMEMNo = @number,
+        @MBMPremium = @premium, @MBMBasicPrem = @basicPremium, @MBMBasicMCO = @basicMco, @MBMMCOFee = @mco, @RELCODE = @rel,
+        @MBMPolicyDisc = @policyDisc, @MBMRenewalDisc = @renewalDisc, @MBMGroupCompany = @groupCompany, @MBMPrevTakeOverPlnCode = @prevTakeOverPlan,
+        @MBMFirstJoinedDate = @joined, @MBMPrevPolNo = @prevPolicy, @MBMPrevMemNo = @prevMember, @MBMEmployeeNo = @employeeNo,
+        @MBMDepartment = @department, @MBMInstallment = @installment, @MBMPolSubNo1 = @polSubNo1, @MBMPOLSubNo2 = @polSubNo2, @MBMBranch = @branch,
+        @MBMNewPlanCode = '', @MBMNewPolEffDate = @newPolicyEff, @MBMENDtRefNo = @endtRefNo, @MBMPolCondition = @polCondition,
+        @MBMUndExcess = @undExcess, @MBMGuaRenewal = @guarantee, @MBMClmNonPayFr = @clmNonPayFrom, @MBMClmNonPayTo = @clmNonPayTo,
+        @MBMInvoiceNo = @invoiceNo, @MBMPaymentDate = NULL, @UpdatedBy = @runKey, @MBMGSTAmt = @gstAmount, @MBMGSTPerc = @gstPercent,
+        @CMCName = '', @AgentName = '';
 END
 GO
 
--- ===== main/200_case_transfer.sql =====
--- Case > Case Transfer (legacy frmCaseTransferMBMNo, "Case - Transfer of Membership"). Replaces the raw @strAppend
--- dbo.Case_Transfer modes and the inline recordset writes of TransferProcess / ReCalculatePrevMBMLmt.
--- The worksheet totals are read through the genisis.WS_* synonyms, so the whole transfer is one MainDb transaction
--- (the desktop ran its writes on four connections with no working transaction).
-
--- Text amounts (ClaimApprove stores them as nvarchar) as a number; anything that is not a plain number is 0.
--- ISNUMERIC is not enough: it accepts a lone minus sign, a lone dot and a dollar sign, none of which can be cast.
-CREATE OR ALTER FUNCTION genisis.Util_SafeDecimal (@s nvarchar(60))
-RETURNS decimal(18, 4)
-AS
-BEGIN
-    DECLARE @t nvarchar(60) = LTRIM(RTRIM(ISNULL(@s, N'')));
-    RETURN CASE
-        WHEN @t = N'' OR LEN(@t) > 15 OR @t LIKE N'%[^0-9.-]%' OR @t NOT LIKE N'%[0-9]%'
-          OR @t LIKE N'%.%.%' OR @t LIKE N'%-%-%' OR (@t LIKE N'%-%' AND LEFT(@t, 1) <> N'-') THEN 0
-        ELSE CAST(@t AS decimal(18, 4))
-    END;
-END
-GO
-
--- showCAS: the member / cover the case is on now.
-CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Case
-    @cas nvarchar(15)
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageOthersTwo
+    @runKey nvarchar(4000), @number nvarchar(4000), @weight nvarchar(4000), @height nvarchar(4000), @workNature nvarchar(4000), @blood nvarchar(4000),
+    @occupation nvarchar(4000), @smoking nvarchar(4000), @alcohol nvarchar(4000), @marital nvarchar(4000), @grpAdd1 nvarchar(4000),
+    @grpAdd2 nvarchar(4000), @grpAdd3 nvarchar(4000), @grpAdd4 nvarchar(4000), @riskNo nvarchar(4000), @transNo nvarchar(4000), @payNo nvarchar(4000),
+    @paySeqNo nvarchar(4000), @bankAccountNo nvarchar(4000), @clientNo nvarchar(4000), @clientId nvarchar(4000), @rbAmount decimal(19, 4),
+    @prevInsurer nvarchar(4000), @prevPlan nvarchar(4000), @payRemarks nvarchar(4000), @coPayRb nvarchar(4000), @exclusion nvarchar(4000),
+    @btbg nvarchar(4000), @payorPremNet decimal(19, 4), @payorMcoNet decimal(19, 4), @payorMcoGross decimal(19, 4), @loadingPremium decimal(19, 4),
+    @familyDiscAmount decimal(19, 4), @renewalDiscAmount decimal(19, 4), @payorPremGross decimal(19, 4), @policyIssued datetime = NULL,
+    @allergic nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(CASNumber) AS CaseNumber, RTRIM(MBMNumber) AS MemberNo, RTRIM(MBMPatientCovID) AS CoverId, RTRIM(CASStatus) AS CaseStatus
-    FROM dbo.CAS WHERE CASNumber = @cas;
+    EXEC dbo.TmpUpload_MBMOthersTwoNew @MBMNumber = @number, @MBMWeight = @weight, @MBMHeight = @height, @MBMWorkNature = @workNature,
+        @MBMBlood = @blood, @MBMOccupation = @occupation, @MBMSmoking = @smoking, @MBMAlcohol = @alcohol, @MBMMaritalStatus = @marital,
+        @MBMGRPCompanyAdd1 = @grpAdd1, @MBMGRPCompanyAdd2 = @grpAdd2, @MBMGRPCompanyAdd3 = @grpAdd3, @MBMGRPCompanyAdd4 = @grpAdd4,
+        @MBMRiskNo = @riskNo, @MBMTransNo = @transNo, @MBMPayNo = @payNo, @MBMPaySeqNo = @paySeqNo, @MBMBankACNo = @bankAccountNo,
+        @MBMClientNo = @clientNo, @MBMClientID = @clientId, @MBMRBAmt = @rbAmount, @MBMPrevInsCom = @prevInsurer, @MBMPrevPlnCode = @prevPlan,
+        @MBMPayRemarks = @payRemarks, @MBMCoPayRB = @coPayRb, @MBMExclusion = @exclusion, @MBMBTBG = @btbg, @MBMPayorPremNet = @payorPremNet,
+        @MBMPayorMcoNet = @payorMcoNet, @MBMPayorMCoGross = @payorMcoGross, @MBMLoadingPrem = @loadingPremium, @MBMFamDiscAmt = @familyDiscAmount,
+        @MBMRenewDiscAmt = @renewalDiscAmount, @MBMPayorPremGross = @payorPremGross, @MBMPOLIssuedDate = @policyIssued, @MBMAllergic = @allergic,
+        @UpdatedBy = @runKey;
 END
 GO
 
--- MBMInfo: member / patient details. No row when the member does not exist; CoverFound = 0 for an unknown supplementary.
-CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Member
-    @mbm nvarchar(30), @cover nvarchar(10)
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageClinical
+    @runKey nvarchar(4000), @memberType nvarchar(4000), @pay nvarchar(4000), @number nvarchar(4000), @policy nvarchar(4000), @plan nvarchar(4000),
+    @ins nvarchar(4000), @warranty nvarchar(4000), @basicPremium decimal(19, 4), @premium decimal(19, 4), @basicMco decimal(19, 4), @mco decimal(19, 4),
+    @balance decimal(19, 4), @visit decimal(19, 4), @dental decimal(19, 4), @specialist decimal(19, 4), @mep decimal(19, 4), @eff datetime = NULL,
+    @exp datetime = NULL, @cardType nvarchar(4000), @invoiced nvarchar(4000), @invoiceNo nvarchar(4000), @invoiceDate datetime = NULL, @invoiceBy nvarchar(4000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT RTRIM(m.MBMNumber) AS MemberNo, @cover AS CoverId,
-        RTRIM(CASE WHEN @cover = N'00' THEN m.MBMName ELSE cp.MBMCName END) AS PatientName,
-        RTRIM(m.MBMPolicyNo) AS PolicyNo,
-        RTRIM(CASE WHEN @cover = N'00' THEN m.MBMIcBcPp ELSE cp.MBMCICBCPPNo END) AS IcNo,
-        RTRIM(m.MBMStatus) AS Status, m.MBMPayorEffDate AS EffDate, m.MBMPayorExpDate AS ExpDate,
-        CAST(CASE WHEN @cover = N'00' OR cp.MBMCNumber IS NOT NULL THEN 1 ELSE 0 END AS bit) AS CoverFound
+    EXEC dbo.TmpUpload_MBMClnOthers @MBMCLNMemberType = @memberType, @PAYCode = @pay, @MBMNumber = @number, @MBMPolNumber = @policy,
+        @MBMCLNStatus = 'A', @MBMCLNDataStatus = 'A', @MBMCLNExpiryStatus = 'N', @PLNType = @plan, @InsType = @ins, @MBMCLNWarranty = @warranty,
+        @MBMCLNBasicPrem = @basicPremium, @MBMCLNPremium = @premium, @MBMCLNBasicMCO = @basicMco, @MBMCLNMCOFee = @mco, @MBMCLNBalLmt = @balance,
+        @MBMCLNVisitLmt = @visit, @MBMDentalLmt = @dental, @MBMSpecLmt = @specialist, @MBMMEPLmt = @mep, @MBMPolEffDate = @eff, @MBMPolExpDate = @exp,
+        @MBMCardType = @cardType, @MBMCInvoiced = @invoiced, @MBMCInvoiceNo = @invoiceNo, @MBMCInvoiceDate = @invoiceDate, @MBMCInvoiceBy = @invoiceBy,
+        @UpdatedBy = @runKey;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageCovered
+    @runKey nvarchar(4000), @rel nvarchar(4000), @number nvarchar(4000), @coverId nvarchar(4000), @dob datetime = NULL, @memberType nvarchar(4000),
+    @name nvarchar(4000), @status nvarchar(4000), @bordx datetime, @batch int, @ic nvarchar(4000), @sex nvarchar(4000), @plan nvarchar(4000),
+    @ageCode nvarchar(4000), @adultChild nvarchar(4000), @annual decimal(19, 4), @basicMco decimal(19, 4), @mco decimal(19, 4),
+    @basicPremium decimal(19, 4), @premium decimal(19, 4), @today datetime, @eff datetime = NULL, @exp datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.TmpUpload_MBMCovPersonsNew @MBMCRELCode = @rel, @MBMCNumber = @number, @MBMCCoverID = @coverId, @MBMCDOB = @dob,
+        @MBMCMemberType = @memberType, @MBMCName = @name, @MBMCStatus = @status, @MBMCBordxDate = @bordx, @MBMCBatchNo = @batch,
+        @MBMCICBCPPNo = @ic, @MBMCSex = @sex, @MBMCPLNCode = @plan, @MBMCAgeband = @ageCode, @MBMCAdultChild = @adultChild,
+        @MBMCAnnualLimit = @annual, @MBMCAvailableLimit = @annual, @MBMCBasicMCO = @basicMco, @MBMCMCO = @mco, @MBMCBasicPremium = @basicPremium,
+        @MBMCPremium = @premium, @MBMCRegDate = @today, @MBMCEffDate = @eff, @MBMCExpDate = @exp, @UpdatedBy = @runKey,
+        @MBMTICNumber = '', @MBMTICCoverID = '';
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageCoveredTwo
+    @runKey nvarchar(4000), @number nvarchar(4000), @coverId nvarchar(4000), @salutation nvarchar(4000), @occupation nvarchar(4000),
+    @workNature nvarchar(4000), @blood nvarchar(4000), @allergic nvarchar(4000), @smoking nvarchar(4000), @alcohol nvarchar(4000),
+    @prevPlan nvarchar(4000), @prevInsurer nvarchar(4000), @payRemarks nvarchar(4000), @exclusion nvarchar(4000), @payNo nvarchar(4000),
+    @paySeqNo nvarchar(4000), @clientNo nvarchar(4000), @clientId nvarchar(4000), @rbAmount decimal(19, 4), @payorPremNet decimal(19, 4),
+    @payorMcoNet decimal(19, 4), @payorMcoGross decimal(19, 4), @otherIc nvarchar(4000), @loadingPremium decimal(19, 4),
+    @familyDiscAmount decimal(19, 4), @renewalDiscAmount decimal(19, 4), @payorPremGross decimal(19, 4), @undExcess decimal(19, 4),
+    @clmNonPayFrom datetime = NULL, @clmNonPayTo datetime = NULL, @policyDisc decimal(19, 4), @renewalDisc decimal(19, 4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.TmpUpload_MBMCovPersonsTwo @MBMCNumber = @number, @MBMCCoverID = @coverId, @MBMCSalutation = @salutation, @MBMCOccupation = @occupation,
+        @MBMCWorkNature = @workNature, @MBMCBloodType = @blood, @MBMCAllergic = @allergic, @MBMCSmoking = @smoking, @MBMCAlcohol = @alcohol,
+        @MBMCPrevPlnCode = @prevPlan, @MBMCPrevInsCom = @prevInsurer, @MBMCPayRemarks = @payRemarks, @MBMCExclusion = @exclusion,
+        @MBMCPayNo = @payNo, @MBMCPaySeqNo = @paySeqNo, @MBMCClientNo = @clientNo, @MBMCClientID = @clientId, @MBMCRBAmt = @rbAmount,
+        @MBMCPayorPremNet = @payorPremNet, @MBMCPayorMcoNet = @payorMcoNet, @MBMCPayorMCoGross = @payorMcoGross, @MBMCIcBcPp2nd = @otherIc,
+        @MBMCLoadingPrem = @loadingPremium, @MBMCFamDiscAmt = @familyDiscAmount, @MBMCRenewDiscAmt = @renewalDiscAmount,
+        @MBMCPayorPremGross = @payorPremGross, @MBMCUndExcess = @undExcess, @MBMCClmNonPayFr = @clmNonPayFrom, @MBMCClmNonPayTo = @clmNonPayTo,
+        @MBMCPolicyDisc = @policyDisc, @MBMCRenewalDisc = @renewalDisc, @UpdatedBy = @runKey;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageCoveredClinical
+    @runKey nvarchar(4000), @number nvarchar(4000), @coverId nvarchar(4000), @mco decimal(19, 4), @basicMco decimal(19, 4), @premium decimal(19, 4),
+    @basicPremium decimal(19, 4), @balance decimal(19, 4), @visit decimal(19, 4), @dental decimal(19, 4), @specialist decimal(19, 4),
+    @mep decimal(19, 4), @today datetime, @user nvarchar(4000), @exp datetime = NULL, @cardType nvarchar(4000), @warranty nvarchar(4000),
+    @plan nvarchar(4000), @invoiceNo nvarchar(4000), @invoiceDate datetime = NULL, @invoiceBy nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.TmpUpload_MBMCovPersonsCis @MBMCNumber = @number, @MBMCCoverID = @coverId, @MBMCCLNMCO = @mco, @MBMCCLNBasicMCO = @basicMco,
+        @MBMCCLNPrem = @premium, @MBMCCLNBasicPrem = @basicPremium, @MBMCCLNBalLmt = @balance, @MBMCCLNVisitLmt = @visit,
+        @MBMCCLNDentalLmt = @dental, @MBMCCLNSpecLmt = @specialist, @MBMCCLNMEPLmt = @mep, @MBMCCLNRegDate = @today, @MBMCCLNRegUser = @user,
+        @MBMCCLNLastUpdateDate = @today, @MBMCCLNLastUpdateUser = @user, @MBMCCLNExpDate = @exp, @MBMCCardType = @cardType,
+        @MBMCCLNWarranty = @warranty, @MBMCCLNStatus = 'A', @MBMCCLNPLNCode = @plan, @MBMCInvoiceNo = @invoiceNo, @MBMCInvoiceDate = @invoiceDate,
+        @MBMCInvoiceBy = @invoiceBy, @UpdatedBy = @runKey;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_StageRefund
+    @runKey nvarchar(4000), @number nvarchar(4000), @coverId nvarchar(4000), @premiumEffective decimal(19, 4), @premiumReduction decimal(19, 4),
+    @mcoEffective decimal(19, 4), @mcoRefund decimal(19, 4), @pay nvarchar(4000), @bordx datetime, @batch int, @hlt nvarchar(4000),
+    @fileName nvarchar(4000), @endtRefNo nvarchar(4000), @cancelDate datetime, @gstAmount decimal(19, 4) = NULL, @gstPercent decimal(19, 4) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC dbo.TmpUpload_MBMMcoRefund_2015 @MBMNumber = @number, @MBMCovID = @coverId, @MBMPREMEffective = @premiumEffective,
+        @MBMPremReduction = @premiumReduction, @MBMMCOEffective = @mcoEffective, @MBMMCORefund = @mcoRefund, @PAYCode = @pay,
+        @MBMBordxDate = @bordx, @MBMBatchNO = @batch, @HLTCode = @hlt, @MBMFileName = @fileName, @MBMENDtRefNo = @endtRefNo,
+        @MBMCancerdate = @cancelDate, @UpdatedBy = @runKey, @MBMGSTAmt = @gstAmount, @MBMGSTPerc = @gstPercent;
+END
+GO
+
+-- ===== Cancellation and reinstatement (written straight to HISDB, as the desktop does) =====
+
+-- Membership to cancel: policy number + payor expiry date, optionally limited to the payor plan (desktop EndtCancelPrincipalData).
+CREATE OR ALTER PROCEDURE genisis.Bordx_FindForCancel
+    @policy nvarchar(4000), @exp datetime, @payorPlan nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.MBMStatus) AS Status, RTRIM(m.MBMPolicyNo) AS PolicyNo, RTRIM(m.MBMIcBcPp) AS Ic,
+        RTRIM(m.MBMName) AS Name, m.MBMPayorExpDate AS ExpiryDate, RTRIM(m.PLNCode) AS PlanCode, m.MBMPayorEffDate AS EffectiveDate,
+        o.MBMPremium AS Premium, o.MBMMCOFee AS Mco
     FROM dbo.MBM m
-    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = m.MBMNumber AND cp.MBMCCoverID = @cover
-    WHERE m.MBMNumber = @mbm;
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    WHERE m.MBMPolicyNo = @policy AND m.MBMPayorExpDate = @exp AND m.MBMStatus <> 'D'
+      AND (@payorPlan IS NULL OR EXISTS (SELECT 1 FROM dbo.PLN p WHERE p.PLNCode = m.PLNCode AND p.PLNPayorPlan = @payorPlan));
 END
 GO
 
--- ReCalculatePrevMBMLmt / the limit part of TransferProcess for one member. @sign = +1 gives the case's approved amount
--- back to the previous member (@giveBack = 1: always applied, the covered person's own plan code is used for the benefit
--- limit lookup), -1 charges the new member (only applied when the amount is not zero).
--- Limit holder: the principal's MBM.MBMAvailableLimit when the plan shares the limit (SuppLimitStatus A) or the patient is
--- the principal; otherwise the covered person's own MBMCAvailableLimit (status B uses cover 01). The benefit balances
--- (cancer / kidney / home nursing) follow the plan's benefit status the same way. The annual limit row is the one in
--- force on the member's payor effective date (the desktop took an arbitrary row of the plan).
-CREATE OR ALTER PROCEDURE genisis.CaseTransfer_MoveLimit
-    @mbm nvarchar(30), @cov nvarchar(10), @sign int, @total money, @cancer money, @kidney money, @home money, @giveBack bit
+CREATE OR ALTER PROCEDURE genisis.Bordx_Cancel
+    @number nvarchar(4000), @today datetime, @user nvarchar(4000), @bordx datetime, @cancelDate datetime, @fileName nvarchar(4000),
+    @policy nvarchar(4000), @ic nvarchar(4000), @name nvarchar(4000), @exp datetime, @plan nvarchar(4000), @batch int
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @hlt nvarchar(4), @ins nvarchar(4), @plan nvarchar(8), @eff datetime;
-    SELECT @hlt = HLTCode, @ins = INSCode, @plan = PLNCode, @eff = MBMPayorEffDate FROM dbo.MBM WHERE MBMNumber = @mbm;
+    UPDATE dbo.MBMTwo SET MBMLastAdjustmentDate = @today, MBMLastUpdateUser = @user, MBMLastEndorseStatus = 'C', MBMENDtBordxDate = @bordx,
+        MBMCancelDate = @cancelDate, MBMENDtEffDate = @cancelDate, MBMFilename = @fileName
+    WHERE MBMNumber = @number;
+    UPDATE genisis.Maint_MBMCrossReference SET MBMStatus = 'C' WHERE MBMNumber = @number;
+    INSERT INTO dbo.MBMAmendHistory (MBMNumber, MBMPolicyNo, MBMIcBcPp, MBMName, MBMExpiryDate, MBMPlanCode, MBMAmendEdtType, MBMAEndtBordxDate,
+        MBMAEndtEffDate, MBMAmendUser, MBMAmendDate, MBMAEndtBatchNo)
+    VALUES (@number, @policy, @ic, @name, @exp, @plan, 'C', @bordx, @cancelDate, @user, @today, @batch);
+    UPDATE dbo.MBM SET MBMStatus = 'C' WHERE MBMNumber = @number;
+END
+GO
 
-    DECLARE @status varchar(1);
-    SELECT TOP (1) @status = SuppLimitStatus FROM dbo.AnnualLimit
-    WHERE PLNCode = @plan AND INSCode = @ins AND HLTCode = @hlt AND AnnualEffDate <= ISNULL(@eff, '19000101')
-    ORDER BY AnnualEffDate DESC;
-    IF @status IS NULL
-        SELECT TOP (1) @status = SuppLimitStatus FROM dbo.AnnualLimit WHERE PLNCode = @plan ORDER BY AnnualEffDate DESC;
-    SET @status = CASE WHEN RTRIM(ISNULL(@status, '')) = '' THEN 'A' ELSE RTRIM(@status) END;
+-- Lapsed membership being reinstated: same policy and payor expiry date (payor ZN excluded, as in the desktop).
+CREATE OR ALTER PROCEDURE genisis.Bordx_FindForReinstate
+    @policy nvarchar(4000), @exp datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(MBMNumber) AS MembershipNo FROM dbo.MBM WHERE PAYCode <> 'ZN' AND MBMPolicyNo = @policy AND MBMPayorExpDate = @exp;
+END
+GO
 
-    IF @giveBack = 1 OR @total <> 0
+CREATE OR ALTER PROCEDURE genisis.Bordx_Reinstate
+    @number nvarchar(4000), @bordx datetime, @mco decimal(19, 4), @premium decimal(19, 4), @reinstateDate datetime, @user nvarchar(4000),
+    @today datetime, @batch int, @fileName nvarchar(4000), @endtRefNo nvarchar(4000), @gstAmount decimal(19, 4) = NULL, @gstPercent decimal(19, 4) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMReinstatement (MBMNumber, MBMCoverID, MBMEndtBordxDate, MBMMCOFee, MBMPremium, MBMLapsedDate, MBMReinstateDate,
+        LastUpdateUSR, LastUpdateDate, MBMEndtBordxBatch, MBMFileName, MBMENDtRefNo, MBMGSTAmt, MBMGSTPerc)
+    VALUES (@number, '00', @bordx, @mco, @premium, NULL, @reinstateDate, @user, @today, @batch, @fileName, @endtRefNo, @gstAmount, @gstPercent);
+    UPDATE dbo.MBM SET MBMStatus = 'A' WHERE MBMNumber = @number;
+END
+GO
+
+-- Reinstatement fees (desktop MemberCallFees): plan settings on the reinstatement date.
+CREATE OR ALTER PROCEDURE genisis.Bordx_ReinstatePlan
+    @plan nvarchar(4000), @hlt nvarchar(4000), @pay nvarchar(4000), @eff datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PLNRoundUpStatus) AS RoundUpStatus, RTRIM(PLNProRate) AS ProRate, RTRIM(PLNPremGenderStatus) AS PremGenderStatus
+    FROM dbo.PLN WHERE PLNCode = @plan AND HLTCode = @hlt AND PLNEffDate <= @eff AND (@hlt <> 'N' OR PAYCode = @pay)
+    ORDER BY PLNEffDate DESC;
+END
+GO
+
+-- ===== Generate ASCII =====
+
+-- Members for the ASCII file: one bordereaux date + batch, or a bordereaux date range optionally limited to a plan-code range.
+CREATE OR ALTER PROCEDURE genisis.Bordx_AsciiMembers
+    @hlt nvarchar(4000), @pay nvarchar(4000), @from datetime, @to datetime, @batch int = NULL, @planFrom nvarchar(4000) = NULL, @planTo nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.MBMMemberType) AS MemberType, RTRIM(m.INSCode) AS InsuredType, RTRIM(m.MBMPolicyNo) AS PolicyNo,
+        m.MBMPayorEffDate AS EffectiveDate, RTRIM(m.MBMIcBcPp) AS Ic, RTRIM(m.MBMName) AS Name, RTRIM(m.PLNCode) AS PlanCode,
+        RTRIM(o.MBMEmployeeNo) AS EmployeeNo, RTRIM(o.MBMGroupCompany) AS GroupCompany, RTRIM(o.MBMPOLSubNo1) AS PolicySubNo,
+        w.MBMPOLIssuedDate AS PolicyIssued, RTRIM(w.MBMTransNo) AS TransNo, RTRIM(w.MBMPayNo) AS PayNo, RTRIM(w.MBMPaySeqNo) AS PaySeqNo,
+        RTRIM(w.MBMClientNo) AS ClientNo, RTRIM(w.MBMClientID) AS ClientId
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthersTwo w ON w.MBMNumber = m.MBMNumber
+    WHERE m.HLTCode = @hlt AND m.PAYCode = @pay AND m.MBMStatus <> 'D' AND m.MBMDataStatus <> 'D'
+      AND m.MBMBordxDate >= @from AND m.MBMBordxDate <= @to AND (@batch IS NULL OR m.MBMBatchNo = @batch)
+      AND (@planFrom IS NULL OR (m.PLNCode >= @planFrom AND m.PLNCode <= @planTo))
+    ORDER BY m.MBMNumber;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Bordx_AsciiCovered
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(c.MBMCRELCode) AS Relationship, RTRIM(c.MBMCName) AS Name, RTRIM(c.MBMCICBCPPNo) AS Ic, RTRIM(c.MBMCNumber) AS MembershipNo,
+        RTRIM(c.MBMCCoverID) AS CoverId, RTRIM(c2.MBMCPAYNo) AS PayNo, RTRIM(c2.MBMCPAYSeqNo) AS PaySeqNo, RTRIM(c2.MBMCClientNO) AS ClientNo,
+        RTRIM(c2.MBMCClientID) AS ClientId
+    FROM dbo.MBMCoveredPersons c
+    LEFT JOIN dbo.MBMCoveredPersonsTwo c2 ON c2.MBMCNumber = c.MBMCNumber AND c2.MBMCCoverID = c.MBMCCoverID
+    WHERE c.MBMCNumber = @number
+    ORDER BY c.MBMCCoverID;
+END
+GO
+
+-- ===== main/170_tracking.sql =====
+-- Membership > Tracking (legacy FrmNewMBMTracking). The desktop passed a concatenated WHERE fragment to dbo.MBMTracking; here every
+-- filter is a typed parameter. genisis.Tracking_CaseText (171_tracking_cases.sql, generated) holds each case's fixed query text.
+
+-- Result sets: payors (with health type), states (MBM.STACode holds the state description, as the desktop's list does), product categories.
+CREATE OR ALTER PROCEDURE genisis.Tracking_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name, RTRIM(HLTCode) AS HealthCode FROM dbo.PAY WHERE PAYCode IS NOT NULL ORDER BY PAYCode;
+    SELECT DISTINCT UPPER(RTRIM(STADescription)) AS Code, UPPER(RTRIM(STADescription)) AS Name FROM dbo.STA WHERE STADescription IS NOT NULL ORDER BY Name;
+    SELECT RTRIM(ProductCode) AS Code, RTRIM(ProductName) AS Name FROM genisis.Maint_ProductCategory WHERE ProductCode IS NOT NULL ORDER BY ProductCode;
+END
+GO
+
+-- Runs one MBMTracking case with the Tracking screen's filters (FrmNewMBMTracking.SearchRecord).
+--   @insuredGroup  0..7 (desktop insured type list), @status 0..6 (desktop status list), @renewal N/P/R/T
+--   @blanks        comma-separated filter keys whose "blank" box is ticked (keys outside the fixed list are ignored)
+--   @memberTypeFilter  DETAIL_C / DETAIL_S (detail listings) or NAME_<P|S|B>_<C|S|BOTH> (General Listing (Prin. Name))
+--   @extra         insured / adult-child restriction of the per-type count columns: I, F, G, H, I_C, I_A, G_C, G_A
+--   @withSuppRegDate  1 for the supplementary detail listings (Supp. registration date filter)
+CREATE OR ALTER PROCEDURE genisis.Tracking_Run
+    @case int,
+    @health nvarchar(10) = NULL, @payor nvarchar(10) = NULL, @insuredGroup nvarchar(1) = NULL, @status nvarchar(1) = NULL,
+    @renewal nvarchar(1) = NULL, @adultChild nvarchar(1) = NULL, @race nvarchar(1) = NULL, @sex nvarchar(1) = NULL,
+    @relationship nvarchar(2) = NULL, @dataStatus nvarchar(1) = NULL, @expired nvarchar(1) = NULL, @premiumMode nvarchar(1) = NULL,
+    @state nvarchar(50) = NULL, @takeOver nvarchar(1) = NULL, @agentCode nvarchar(50) = NULL, @membershipNo nvarchar(30) = NULL,
+    @groupCompany nvarchar(200) = NULL, @labelStatus nvarchar(1) = NULL, @department nvarchar(100) = NULL, @productCategory nvarchar(10) = NULL,
+    @dayInsuredFrom decimal(19, 4) = NULL, @dayInsuredTo decimal(19, 4) = NULL, @ageDaysFrom decimal(19, 4) = NULL, @ageDaysTo decimal(19, 4) = NULL,
+    @delayBordxFrom decimal(19, 4) = NULL, @delayBordxTo decimal(19, 4) = NULL, @delayInvBordxFrom decimal(19, 4) = NULL,
+    @delayInvBordxTo decimal(19, 4) = NULL, @delayRegFrom decimal(19, 4) = NULL, @delayRegTo decimal(19, 4) = NULL,
+    @delayInvDFrom decimal(19, 4) = NULL, @delayInvDTo decimal(19, 4) = NULL, @delayInvEFrom decimal(19, 4) = NULL, @delayInvETo decimal(19, 4) = NULL,
+    @premiumFrom decimal(19, 4) = NULL, @premiumTo decimal(19, 4) = NULL, @mcoFeeFrom decimal(19, 4) = NULL, @mcoFeeTo decimal(19, 4) = NULL,
+    @batchFrom decimal(19, 4) = NULL, @batchTo decimal(19, 4) = NULL,
+    @employeeNoFrom nvarchar(50) = NULL, @employeeNoTo nvarchar(50) = NULL, @policyNoFrom nvarchar(50) = NULL, @policyNoTo nvarchar(50) = NULL,
+    @planFrom nvarchar(10) = NULL, @planTo nvarchar(10) = NULL, @ageBandFrom nvarchar(10) = NULL, @ageBandTo nvarchar(10) = NULL,
+    @postCodeFrom nvarchar(10) = NULL, @postCodeTo nvarchar(10) = NULL, @policyYearFrom nvarchar(10) = NULL, @policyYearTo nvarchar(10) = NULL,
+    @invoiceNoFrom nvarchar(50) = NULL, @invoiceNoTo nvarchar(50) = NULL, @icFrom nvarchar(30) = NULL, @icTo nvarchar(30) = NULL,
+    @effDateFrom date = NULL, @effDateTo date = NULL, @expDateFrom date = NULL, @expDateTo date = NULL,
+    @dateJoinedFrom date = NULL, @dateJoinedTo date = NULL, @dorFrom date = NULL, @dorTo date = NULL, @dobFrom date = NULL, @dobTo date = NULL,
+    @bordxDateFrom date = NULL, @bordxDateTo date = NULL, @invoiceDateFrom date = NULL, @invoiceDateTo date = NULL,
+    @endtEffDateFrom date = NULL, @endtEffDateTo date = NULL, @cancelDateFrom date = NULL, @cancelDateTo date = NULL,
+    @dorSuppFrom date = NULL, @dorSuppTo date = NULL,
+    @blanks nvarchar(2000) = NULL, @memberTypeFilter nvarchar(20) = NULL, @extra nvarchar(5) = NULL, @withSuppRegDate bit = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @prefix nvarchar(max), @suffix nvarchar(max), @w nvarchar(max) = N'';
+    EXEC genisis.Tracking_CaseText @case = @case, @prefix = @prefix OUTPUT, @suffix = @suffix OUTPUT;
+    IF @prefix IS NULL THROW 50001, N'Unknown tracking report case.', 1;
+
+    -- Equality filters.
+    SET @w += CASE WHEN @health IS NOT NULL THEN N' AND HLTCode = @health' ELSE N'' END
+        + CASE WHEN @payor IS NOT NULL THEN N' AND PAYCode = @payor' ELSE N'' END
+        + CASE WHEN @adultChild IS NOT NULL THEN N' AND MBMAdultChild = @adultChild' ELSE N'' END
+        + CASE WHEN @race IS NOT NULL THEN N' AND RACCode = @race' ELSE N'' END
+        + CASE WHEN @sex IS NOT NULL THEN N' AND MBMSex = @sex' ELSE N'' END
+        + CASE WHEN @relationship IS NOT NULL THEN N' AND RELCode = @relationship' ELSE N'' END
+        + CASE WHEN @dataStatus IS NOT NULL THEN N' AND MBMDataStatus = @dataStatus' ELSE N'' END
+        + CASE WHEN @expired IS NOT NULL THEN N' AND MBMExpiredStatus = @expired' ELSE N'' END
+        + CASE WHEN @premiumMode IS NOT NULL THEN N' AND MBMInstallment = @premiumMode' ELSE N'' END
+        + CASE WHEN @state IS NOT NULL THEN N' AND STACode = @state' ELSE N'' END
+        + CASE WHEN @takeOver IS NOT NULL THEN N' AND MBMTakeover = @takeOver' ELSE N'' END
+        + CASE WHEN @agentCode IS NOT NULL THEN N' AND MBMAgentCode = @agentCode' ELSE N'' END
+        + CASE WHEN @membershipNo IS NOT NULL THEN N' AND MBMNumber = @membershipNo' ELSE N'' END
+        + CASE WHEN @groupCompany IS NOT NULL THEN N' AND MBMGroupCompany = @groupCompany' ELSE N'' END
+        + CASE WHEN @labelStatus IS NOT NULL THEN N' AND LabelStatus = @labelStatus' ELSE N'' END
+        + CASE WHEN @department IS NOT NULL THEN N' AND MBMDepartment = @department' ELSE N'' END
+        + CASE WHEN @productCategory IS NOT NULL THEN N' AND PLNProCat = @productCategory' ELSE N'' END;
+
+    -- Coded selections (desktop combo lists).
+    SET @w += CASE @insuredGroup
+            WHEN N'0' THEN N' AND INSCode = ''I''' WHEN N'1' THEN N' AND INSCode = ''F''' WHEN N'2' THEN N' AND INSCode = ''G'''
+            WHEN N'3' THEN N' AND INSCode = ''H''' WHEN N'4' THEN N' AND (INSCode = ''I'' OR INSCode = ''F'')'
+            WHEN N'5' THEN N' AND (INSCode = ''I'' OR INSCode = ''G'')' WHEN N'6' THEN N' AND (INSCode = ''F'' OR INSCode = ''H'')'
+            WHEN N'7' THEN N' AND (INSCode = ''G'' OR INSCode = ''H'')' ELSE N'' END
+        + CASE @status
+            WHEN N'0' THEN N' AND MBMStatus = ''A''' WHEN N'1' THEN N' AND MBMStatus = ''C''' WHEN N'2' THEN N' AND MBMStatus = ''D'''
+            WHEN N'3' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''C'')' WHEN N'4' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''S'')'
+            WHEN N'5' THEN N' AND (MBMStatus = ''A'' OR MBMStatus = ''C'' OR MBMStatus = ''S'')' WHEN N'6' THEN N' AND MBMStatus = ''S''' ELSE N'' END
+        + CASE @renewal
+            WHEN N'P' THEN N' AND (MBMRenewFlag = ''P'')' WHEN N'N' THEN N' AND (MBMRenewFlag IS NULL OR MBMRenewFlag = '''' OR MBMRenewFlag = ''N'')'
+            WHEN N'R' THEN N' AND (MBMRenewFlag = ''R'')' WHEN N'T' THEN N' AND (MBMRenewFlag = ''T'')' ELSE N'' END;
+
+    -- From / to ranges.
+    SELECT @w += CASE WHEN r.FromSet = 1 THEN N' AND ' + r.Col + N' >= @' + r.Param + N'From' ELSE N'' END
+               + CASE WHEN r.ToSet = 1 THEN N' AND ' + r.Col + N' <= @' + r.Param + N'To' ELSE N'' END
+    FROM (VALUES
+        (N'DayInsured', N'dayInsured', IIF(@dayInsuredFrom IS NULL, 0, 1), IIF(@dayInsuredTo IS NULL, 0, 1)),
+        (N'AgeDays', N'ageDays', IIF(@ageDaysFrom IS NULL, 0, 1), IIF(@ageDaysTo IS NULL, 0, 1)),
+        (N'DelayBordx', N'delayBordx', IIF(@delayBordxFrom IS NULL, 0, 1), IIF(@delayBordxTo IS NULL, 0, 1)),
+        (N'DelayInvBordx', N'delayInvBordx', IIF(@delayInvBordxFrom IS NULL, 0, 1), IIF(@delayInvBordxTo IS NULL, 0, 1)),
+        (N'DelayReg', N'delayReg', IIF(@delayRegFrom IS NULL, 0, 1), IIF(@delayRegTo IS NULL, 0, 1)),
+        (N'DelayInvD', N'delayInvD', IIF(@delayInvDFrom IS NULL, 0, 1), IIF(@delayInvDTo IS NULL, 0, 1)),
+        (N'DelayInvE', N'delayInvE', IIF(@delayInvEFrom IS NULL, 0, 1), IIF(@delayInvETo IS NULL, 0, 1)),
+        (N'MBMPremium', N'premium', IIF(@premiumFrom IS NULL, 0, 1), IIF(@premiumTo IS NULL, 0, 1)),
+        (N'MBMMCOFee', N'mcoFee', IIF(@mcoFeeFrom IS NULL, 0, 1), IIF(@mcoFeeTo IS NULL, 0, 1)),
+        (N'MBMBatchNo', N'batch', IIF(@batchFrom IS NULL, 0, 1), IIF(@batchTo IS NULL, 0, 1)),
+        (N'MBMEmployeeNo', N'employeeNo', IIF(@employeeNoFrom IS NULL, 0, 1), IIF(@employeeNoTo IS NULL, 0, 1)),
+        (N'MBMPolicyNo', N'policyNo', IIF(@policyNoFrom IS NULL, 0, 1), IIF(@policyNoTo IS NULL, 0, 1)),
+        (N'PLNCode', N'plan', IIF(@planFrom IS NULL, 0, 1), IIF(@planTo IS NULL, 0, 1)),
+        (N'AGECode', N'ageBand', IIF(@ageBandFrom IS NULL, 0, 1), IIF(@ageBandTo IS NULL, 0, 1)),
+        (N'MBMPostCode', N'postCode', IIF(@postCodeFrom IS NULL, 0, 1), IIF(@postCodeTo IS NULL, 0, 1)),
+        (N'MBMPolicyYear', N'policyYear', IIF(@policyYearFrom IS NULL, 0, 1), IIF(@policyYearTo IS NULL, 0, 1)),
+        (N'MBMInvoiceNo', N'invoiceNo', IIF(@invoiceNoFrom IS NULL, 0, 1), IIF(@invoiceNoTo IS NULL, 0, 1)),
+        (N'MBMIcBcPp', N'ic', IIF(@icFrom IS NULL, 0, 1), IIF(@icTo IS NULL, 0, 1)),
+        (N'MBMPayorEffDate', N'effDate', IIF(@effDateFrom IS NULL, 0, 1), IIF(@effDateTo IS NULL, 0, 1)),
+        (N'MBMPayorExpDate', N'expDate', IIF(@expDateFrom IS NULL, 0, 1), IIF(@expDateTo IS NULL, 0, 1)),
+        (N'MBMFirstJoinedDate', N'dateJoined', IIF(@dateJoinedFrom IS NULL, 0, 1), IIF(@dateJoinedTo IS NULL, 0, 1)),
+        (N'MBMValueDate', N'dor', IIF(@dorFrom IS NULL, 0, 1), IIF(@dorTo IS NULL, 0, 1)),
+        (N'MBMDOB', N'dob', IIF(@dobFrom IS NULL, 0, 1), IIF(@dobTo IS NULL, 0, 1)),
+        (N'MBMBordxDate', N'bordxDate', IIF(@bordxDateFrom IS NULL, 0, 1), IIF(@bordxDateTo IS NULL, 0, 1)),
+        (N'MBMInvoiceDate', N'invoiceDate', IIF(@invoiceDateFrom IS NULL, 0, 1), IIF(@invoiceDateTo IS NULL, 0, 1)),
+        (N'MBMEndtEffDate', N'endtEffDate', IIF(@endtEffDateFrom IS NULL, 0, 1), IIF(@endtEffDateTo IS NULL, 0, 1)),
+        (N'MBMCancelDate', N'cancelDate', IIF(@cancelDateFrom IS NULL, 0, 1), IIF(@cancelDateTo IS NULL, 0, 1)),
+        (N'MBMCRegDate', N'dorSupp', IIF(@withSuppRegDate = 1 AND @dorSuppFrom IS NOT NULL, 1, 0), IIF(@withSuppRegDate = 1 AND @dorSuppTo IS NOT NULL, 1, 0))
+    ) r (Col, Param, FromSet, ToSet);
+
+    -- "Blank" check boxes. (HISDB runs at a legacy compatibility level, so STRING_SPLIT is not available; keys are matched with
+    -- CHARINDEX against a fixed list and never concatenated into the SQL.)
+    DECLARE @blankList nvarchar(2002) = N',' + REPLACE(ISNULL(@blanks, N''), N' ', N'') + N',';
+    DECLARE @blankClauses TABLE (BlankKey nvarchar(50) PRIMARY KEY, Clause nvarchar(200));
+    INSERT INTO @blankClauses VALUES
+        (N'health', N'(HLTCode IS NULL OR HLTCode = '''')'), (N'payor', N'(PAYCode IS NULL OR PAYCode = '''')'),
+        (N'insuredGroup', N'(INSCode IS NULL OR INSCode = '''')'), (N'memberTypeBlank', N'(MBMMemberType IS NULL OR MBMMemberType = '''')'),
+        (N'adultChild', N'(MBMAdultChild IS NULL OR MBMAdultChild = '''')'), (N'race', N'(RACCode IS NULL OR RACCode = '''')'),
+        (N'sex', N'(MBMSex IS NULL OR MBMSex = '''')'), (N'relationship', N'(RELCode IS NULL OR RELCode = '''')'),
+        (N'dataStatus', N'(MBMDataStatus IS NULL OR MBMDataStatus = '''')'), (N'status', N'(MBMStatus IS NULL OR MBMStatus = '''')'),
+        (N'expired', N'(MBMExpiredStatus IS NULL OR MBMExpiredStatus = '''')'), (N'renewal', N'(MBMRenewFlag IS NULL OR MBMRenewFlag = '''')'),
+        (N'premiumMode', N'(MBMInstallment IS NULL OR MBMInstallment = '''')'), (N'state', N'(STACode IS NULL OR STACode = '''')'),
+        (N'takeOver', N'(MBMTakeover IS NULL OR MBMTakeover = '''')'), (N'agentCode', N'(MBMAgentCode IS NULL OR MBMAgentCode = '''')'),
+        (N'membershipNo', N'(MBMNumber IS NULL OR MBMNumber = '''')'), (N'policyNo', N'(MBMPolicyNo IS NULL OR MBMPolicyNo = '''')'),
+        (N'groupCompany', N'(MBMGroupCompany IS NULL OR MBMGroupCompany = '''')'), (N'plan', N'(PLNCode IS NULL OR PLNCode = '''')'),
+        (N'ageBand', N'(AGECode IS NULL OR AGECode = '''')'), (N'employeeNo', N'(MBMEmployeeNo IS NULL OR MBMEmployeeNo = '''')'),
+        (N'dayInsured', N'(DayInsured IS NULL)'), (N'ageDays', N'(AgeDays IS NULL)'), (N'delayBordx', N'(DelayBordx IS NULL)'),
+        (N'delayInvBordx', N'(DelayInvBordx IS NULL)'), (N'delayReg', N'(DelayReg IS NULL)'), (N'delayInvD', N'(DelayInvD IS NULL)'),
+        (N'delayInvE', N'(DelayInvE IS NULL)'), (N'premium', N'(MBMPremium IS NULL)'), (N'mcoFee', N'(MBMMCOFee IS NULL)'),
+        (N'effDate', N'(MBMPayorEffDate IS NULL OR MBMPayorEffDate = '''')'), (N'expDate', N'(MBMPayorExpDate IS NULL OR MBMPayorExpDate = '''')'),
+        (N'dateJoined', N'(MBMFirstJoinedDate IS NULL OR MBMFirstJoinedDate = '''')'), (N'dor', N'(MBMValueDate IS NULL OR MBMValueDate = '''')'),
+        (N'dob', N'(MBMDOB IS NULL OR MBMDOB = '''')'), (N'bordxDate', N'(MBMBordxDate IS NULL OR MBMBordxDate = '''')'),
+        (N'batch', N'(MBMBatchNo IS NULL OR MBMBatchNo = '''')'), (N'postCode', N'(MBMPostCode IS NULL OR MBMPostCode = '''')'),
+        (N'policyYear', N'(MBMPolicyYear IS NULL OR MBMPolicyYear = '''')'), (N'invoiceNo', N'(MBMInvoiceNo IS NULL OR MBMInvoiceNo = '''')'),
+        (N'invoiceDate', N'(MBMInvoiceDate IS NULL OR MBMInvoiceDate = '''')'), (N'ic', N'(MBMIcBcPp IS NULL OR MBMIcBcPp = '''')'),
+        (N'labelStatus', N'(LabelStatus IS NULL OR LabelStatus = '''')'), (N'department', N'(MBMDepartment IS NULL OR MBMDepartment = '''')'),
+        (N'productCategory', N'(PLNProCat IS NULL OR PLNProCat = '''')'), (N'endtEffDate', N'(MBMEndtEffDate IS NULL OR MBMEndtEffDate = '''')'),
+        (N'cancelDate', N'(MBMCancelDate IS NULL OR MBMCancelDate = '''')'), (N'dorSupp', N'(MBMCRegDate IS NULL OR MBMCRegDate = '''')');
+    SELECT @w += N' AND ' + c.Clause FROM @blankClauses c
+    WHERE CHARINDEX(N',' + c.BlankKey + N',', @blankList) > 0 AND (c.BlankKey <> N'dorSupp' OR @withSuppRegDate = 1);
+
+    -- Member type selection of the detail listings and of General Listing (Prin. Name).
+    IF @memberTypeFilter IS NOT NULL
     BEGIN
-        IF @status = 'A' OR @cov = N'00'
-            UPDATE dbo.MBM SET MBMAvailableLimit = ISNULL(MBMAvailableLimit, 0) + @sign * @total WHERE MBMNumber = @mbm;
-        ELSE
-        BEGIN
-            DECLARE @holder nvarchar(10) = CASE WHEN @status = 'B' THEN N'01' ELSE @cov END;
-            UPDATE dbo.MBMCoveredPersons SET MBMCAvailableLimit = ISNULL(MBMCAvailableLimit, 0) + @sign * @total
-            WHERE MBMCNumber = @mbm AND MBMCCoverID = @holder;
-            IF @giveBack = 1
-            BEGIN
-                DECLARE @coveredPlan nvarchar(8) = (SELECT TOP (1) RTRIM(MBMCPLNCode) FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @mbm AND MBMCCoverID = @holder);
-                IF ISNULL(@coveredPlan, N'') <> N'' SET @plan = @coveredPlan;
-            END
-        END
+        DECLARE @memberClause nvarchar(200) = CASE @memberTypeFilter
+            WHEN N'DETAIL_C' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''C'')'
+            WHEN N'DETAIL_S' THEN N'(MBMMemberType = ''Q'')'
+            WHEN N'NAME_P_C' THEN N'MBMMemberType = ''P'' AND MBMCCoverID = ''00'''
+            WHEN N'NAME_P_S' THEN N'MBMMemberType = ''Q'' AND MBMCCoverID = ''00'''
+            WHEN N'NAME_P_BOTH' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''Q'') AND MBMCCoverID = ''00'''
+            WHEN N'NAME_S_C' THEN N'MBMMemberType = ''C'''
+            WHEN N'NAME_S_S' THEN N'MBMMemberType = ''S'''
+            WHEN N'NAME_S_BOTH' THEN N'(MBMMemberType = ''S'' OR MBMMemberType = ''C'')'
+            WHEN N'NAME_B_C' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''C'')'
+            WHEN N'NAME_B_S' THEN N'(MBMMemberType = ''Q'' OR MBMMemberType = ''S'')'
+            WHEN N'NAME_B_BOTH' THEN N'(MBMMemberType = ''P'' OR MBMMemberType = ''Q'')' END;
+        IF @memberClause IS NULL THROW 50003, N'Unknown tracking member type filter.', 1;
+        SET @w += N' AND ' + @memberClause;
     END
 
-    DECLARE @benefitStatus varchar(1);
-    SELECT TOP (1) @benefitStatus = SuppALBStatus FROM dbo.BnfAnnLmt
-    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND ALBEffDate <= ISNULL(@eff, '19000101')
-    ORDER BY ALBEffDate DESC;
-    DECLARE @benefitHolder nvarchar(6) = CASE WHEN RTRIM(ISNULL(@benefitStatus, '')) = 'B' THEN N'01' ELSE @cov END;
-
-    UPDATE dbo.MBMBnfLmt
-    SET MBMCancerBalLmt = ISNULL(MBMCancerBalLmt, 0) + @sign * @cancer,
-        MBMKidneyBalLmt = ISNULL(MBMKidneyBalLmt, 0) + @sign * @kidney,
-        MBMHomeNCBalLmt = ISNULL(MBMHomeNCBalLmt, 0) + @sign * @home
-    WHERE MBMNumber = @mbm AND MBMCoveredID = @benefitHolder;
-END
-GO
-
--- TransferProcess. The API has already checked the target member / cover and status; the existence checks here only
--- protect the data. Result: 0 transferred, 1 case not found, 2 target member / cover not found, 3 the case is already on
--- that member / cover, 4 the previous member is not on the member table (nothing to give the limit back to).
--- Returns the approved total that moved.
-CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Apply
-    @cas nvarchar(15), @newMbm nvarchar(30), @newCov nvarchar(10), @userCode nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @oldMbm nvarchar(30), @oldCov nvarchar(10);
-    SELECT @oldMbm = RTRIM(MBMNumber), @oldCov = RTRIM(MBMPatientCovID) FROM dbo.CAS WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas;
-    IF @oldMbm IS NULL BEGIN SELECT 1 AS Result, CAST(0 AS money) AS Moved; RETURN; END
-    IF NOT EXISTS (SELECT 1 FROM dbo.MBM WHERE MBMNumber = @newMbm)
-       OR (@newCov <> N'00' AND NOT EXISTS (SELECT 1 FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @newMbm AND MBMCCoverID = @newCov))
-    BEGIN SELECT 2 AS Result, CAST(0 AS money) AS Moved; RETURN; END
-    IF @oldMbm = @newMbm AND @oldCov = @newCov BEGIN SELECT 3 AS Result, CAST(0 AS money) AS Moved; RETURN; END
-    IF NOT EXISTS (SELECT 1 FROM dbo.MBM WHERE MBMNumber = @oldMbm) BEGIN SELECT 4 AS Result, CAST(0 AS money) AS Moved; RETURN; END
-
-    -- What the case has been approved for, summed over every claim version (CLMTotalApproved) and the
-    -- cancer / kidney / home nursing benefit amounts (stored as text on ClaimApprove).
-    DECLARE @total money = ISNULL((SELECT SUM(CLMTotalApproved) FROM genisis.WS_Claim WHERE CASNumber = @cas), 0);
-    DECLARE @cancer money, @kidney money, @home money;
-    SELECT @cancer = ISNULL(SUM(genisis.Util_SafeDecimal(CLMIndCancerTreatment)), 0),
-        @kidney = ISNULL(SUM(genisis.Util_SafeDecimal(CLMIndKidneyDial)), 0),
-        @home = ISNULL(SUM(genisis.Util_SafeDecimal(CLMHomeNCAmt)), 0)
-    FROM genisis.WS_ClaimApprove WHERE CASNumber = @cas;
-
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
-    DECLARE @note nvarchar(500) = N'~TransMBM by : ' + @userCode + N' Date : ' + CONVERT(nvarchar(8), GETDATE(), 112) + N','
-        + @oldMbm + N'-' + @oldCov + N'->' + @newMbm + N'-' + @newCov;
-
-    UPDATE genisis.Maint_CASCrossReference
-    SET TransRemarks = RIGHT(ISNULL(TransRemarks, N'') + @note, 2000), MBMNumber = @newMbm, MBMPatientCovID = @newCov
-    WHERE CASNumber = @cas;
-    UPDATE dbo.CAS
-    SET MBMNumber = @newMbm, MBMPatientCovID = @newCov, CASLastUpdateUser = @userCode, CASLastUpdateDate = @today
-    WHERE CASNumber = @cas;
-
-    EXEC genisis.CaseTransfer_MoveLimit @oldMbm, @oldCov, 1, @total, @cancer, @kidney, @home, 1;
-    EXEC genisis.CaseTransfer_MoveLimit @newMbm, @newCov, -1, @total, @cancer, @kidney, @home, 0;
-
-    SELECT 0 AS Result, @total AS Moved;
-END
-GO
-
--- ===== main/210_case_listing.sql =====
--- Case > Inpatient Case Listing (legacy mnuAppCase -> FrmWksBordx, "Select Worksheets for Bordx"): search the worksheets
--- that are waiting for a bordx (HISWorkSheet views, through the genisis.WS_* synonyms) and generate the bordx.
--- Replaces the raw SQL text FrmWksBordx built for WorksheetTrackingListing / WorksheetTrackingListing2 / UpdateRecord /
--- SaveCLMBordx and the Medix.bas GenerateCLMBordxNo sequence read-then-update (which could hand out a number twice).
-
--- SearchRecord + WorksheetTrackingListing(2). @scan = 1: one worksheet (case number, optionally a claim version);
--- 0: a case number range. @ib = 1 reads the IB payor view. Dates are inclusive; @doaEmpty / @dodEmpty keep only
--- worksheets with no admission / discharge date; @mhBordx = 1 keeps CLMMHBordx = 'Y' (Bordx Status "Yes").
-CREATE OR ALTER PROCEDURE genisis.CaseListing_Search
-    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @version int = NULL, @ib bit = 0,
-    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0,
-    @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0, @mhBordx bit = 0, @max int = 5000
-AS
-BEGIN
-    SET NOCOUNT ON;
-    IF @ib = 1
-        SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CLMTotalApproved AS AppAmt,
-            CASDateAdmitted AS Doa, CASDischargeDate AS Dod, RTRIM(INVPayTo) AS CashType, RTRIM(MBMPatientCovID) AS CoverId,
-            RTRIM(MBMCName) AS CoveredName, RTRIM(HOSName) AS Hospital, CLMPayableByMedix2H AS HosAmt, RTRIM(MBMName) AS MemberName,
-            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(PLNCode) AS PlanCode, RTRIM(ICDCode1) AS IcdCode, RTRIM(MBMBTBG) AS Btbg,
-            RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability, RTRIM(HLTCode) AS HltType
-        FROM genisis.WS_PendingBordxIB
-        WHERE ClaimStatus <> N'R'
-          AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
-          AND (@scan = 0 OR @version IS NULL OR ClaimVersion = @version)
-          AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
-          AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
-          AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
-          AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
-          AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL) AND (@dodEmpty = 0 OR CASDischargeDate IS NULL)
-          AND (@mhBordx = 0 OR CLMMHBordx = 'Y')
-        ORDER BY CASNumber, ClaimVersion;
-    ELSE
-        SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CLMTotalApproved AS AppAmt,
-            CASDateAdmitted AS Doa, CASDischargeDate AS Dod, RTRIM(INVPayTo) AS CashType, RTRIM(MBMPatientCovID) AS CoverId,
-            RTRIM(MBMCName) AS CoveredName, RTRIM(HOSName) AS Hospital, CLMPayableByMedix2H AS HosAmt, RTRIM(MBMName) AS MemberName,
-            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(PLNCode) AS PlanCode, RTRIM(ICDCode1) AS IcdCode, RTRIM(MBMBTBG) AS Btbg,
-            RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability, RTRIM(HLTCode) AS HltType
-        FROM genisis.WS_PendingBordx
-        WHERE ClaimStatus <> N'R'
-          AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
-          AND (@scan = 0 OR @version IS NULL OR ClaimVersion = @version)
-          AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
-          AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
-          AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
-          AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
-          AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL) AND (@dodEmpty = 0 OR CASDischargeDate IS NULL)
-          AND (@mhBordx = 0 OR CLMMHBordx = 'Y')
-        ORDER BY CASNumber, ClaimVersion;
-END
-GO
-
--- One pending worksheet as the bordx needs it: the values the selection rules check, who is paid (INVPayTo, BTBG) and the
--- three amounts a bordx can sum (CmdBordx_Click picks one by BTBG / INVPayTo). No row when it is not (or no longer) pending.
-CREATE OR ALTER PROCEDURE genisis.CaseListing_Item
-    @cas nvarchar(30), @version int
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT TOP (1) p.CaseNo, p.ClaimVersion, p.Payor, p.Dod, p.Hospital, p.GroupCompany, p.InsuredType, p.Claimability, p.HltType,
-        p.CashType, p.Btbg, c.CLMPayableByMedix2H AS Payable2H, c.CLMPayableByMedix2M AS Payable2M,
-        c.CLMTotalApproved AS TotalApproved, ISNULL(c.CLMCaseMgmtFees, 0) AS CaseMgmtFees
-    FROM (
-        SELECT RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CASDischargeDate AS Dod, RTRIM(HOSName) AS Hospital,
-            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability,
-            RTRIM(HLTCode) AS HltType, RTRIM(INVPayTo) AS CashType, RTRIM(MBMBTBG) AS Btbg
-        FROM genisis.WS_PendingBordx WHERE CASNumber = @cas AND ClaimVersion = @version AND ClaimStatus <> N'R'
-        UNION ALL
-        SELECT RTRIM(CASNumber), ClaimVersion, RTRIM(PAYCode), CASDischargeDate, RTRIM(HOSName), RTRIM(MBMGroupCompany),
-            RTRIM(INSCode), RTRIM(CASClaimability), RTRIM(HLTCode), RTRIM(INVPayTo), RTRIM(MBMBTBG)
-        FROM genisis.WS_PendingBordxIB WHERE CASNumber = @cas AND ClaimVersion = @version AND ClaimStatus <> N'R'
-    ) p
-    INNER JOIN genisis.WS_Claim c ON c.CASNumber = p.CaseNo AND c.ClaimVersion = p.ClaimVersion;
-END
-GO
-
--- GenerateCLMBordxNo: <payor health type><payor code><7-digit sequence per payor code>. The number is taken atomically.
-CREATE OR ALTER PROCEDURE genisis.CaseListing_NextBordxNo
-    @pay nvarchar(8)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @hlt nvarchar(4) = (SELECT RTRIM(HLTCode) FROM dbo.PAY WHERE PAYCode = @pay);
-    DECLARE @seq nvarchar(20);
-    UPDATE genisis.WS_BordxSEQ WITH (UPDLOCK, ROWLOCK)
-    SET @seq = CLMBordxNo = RIGHT(N'0000000' + CAST(CAST(CLMBordxNo AS int) + 1 AS nvarchar(10)), 7)
-    WHERE PAYCode = @pay;
-    IF @@ROWCOUNT = 0
+    -- Per insured / adult-child count columns (Bordx and MCO invoice "INS Type & MBM Type", Branch by Agent).
+    IF @extra IS NOT NULL
     BEGIN
-        SET @seq = N'0000001';
-        INSERT genisis.WS_BordxSEQ (PAYCode, CLMBordxNo, HLTCode) VALUES (@pay, @seq, @hlt);
+        DECLARE @extraClause nvarchar(200) = CASE @extra
+            WHEN N'I' THEN N'INSCode = ''I''' WHEN N'F' THEN N'INSCode = ''F''' WHEN N'G' THEN N'INSCode = ''G''' WHEN N'H' THEN N'INSCode = ''H'''
+            WHEN N'I_C' THEN N'INSCode = ''I'' AND MBMAdultChild = ''C''' WHEN N'I_A' THEN N'INSCode = ''I'' AND MBMAdultChild = ''A'''
+            WHEN N'G_C' THEN N'INSCode = ''G'' AND MBMAdultChild = ''C''' WHEN N'G_A' THEN N'INSCode = ''G'' AND MBMAdultChild = ''A''' END;
+        IF @extraClause IS NULL THROW 50004, N'Unknown tracking count column.', 1;
+        SET @w += N' AND ' + @extraClause;
     END
-    SELECT ISNULL(@hlt, N'') + @pay + @seq AS BordxNo;
+
+    -- Payors starting with Z are internal test payors and never reported.
+    SET @w += N' AND SUBSTRING(PAYCode, 1, 1) <> ''Z''';
+
+    DECLARE @sql nvarchar(max) = @prefix + @w + N' ' + @suffix;
+    EXEC sp_executesql @sql,
+        N'@health nvarchar(10), @payor nvarchar(10), @adultChild nvarchar(1), @race nvarchar(1), @sex nvarchar(1), @relationship nvarchar(2),
+          @dataStatus nvarchar(1), @expired nvarchar(1), @premiumMode nvarchar(1), @state nvarchar(50), @takeOver nvarchar(1), @agentCode nvarchar(50),
+          @membershipNo nvarchar(30), @groupCompany nvarchar(200), @labelStatus nvarchar(1), @department nvarchar(100), @productCategory nvarchar(10),
+          @dayInsuredFrom decimal(19, 4), @dayInsuredTo decimal(19, 4), @ageDaysFrom decimal(19, 4), @ageDaysTo decimal(19, 4),
+          @delayBordxFrom decimal(19, 4), @delayBordxTo decimal(19, 4), @delayInvBordxFrom decimal(19, 4), @delayInvBordxTo decimal(19, 4),
+          @delayRegFrom decimal(19, 4), @delayRegTo decimal(19, 4), @delayInvDFrom decimal(19, 4), @delayInvDTo decimal(19, 4),
+          @delayInvEFrom decimal(19, 4), @delayInvETo decimal(19, 4), @premiumFrom decimal(19, 4), @premiumTo decimal(19, 4),
+          @mcoFeeFrom decimal(19, 4), @mcoFeeTo decimal(19, 4), @batchFrom decimal(19, 4), @batchTo decimal(19, 4),
+          @employeeNoFrom nvarchar(50), @employeeNoTo nvarchar(50), @policyNoFrom nvarchar(50), @policyNoTo nvarchar(50),
+          @planFrom nvarchar(10), @planTo nvarchar(10), @ageBandFrom nvarchar(10), @ageBandTo nvarchar(10), @postCodeFrom nvarchar(10),
+          @postCodeTo nvarchar(10), @policyYearFrom nvarchar(10), @policyYearTo nvarchar(10), @invoiceNoFrom nvarchar(50), @invoiceNoTo nvarchar(50),
+          @icFrom nvarchar(30), @icTo nvarchar(30), @effDateFrom date, @effDateTo date, @expDateFrom date, @expDateTo date,
+          @dateJoinedFrom date, @dateJoinedTo date, @dorFrom date, @dorTo date, @dobFrom date, @dobTo date, @bordxDateFrom date, @bordxDateTo date,
+          @invoiceDateFrom date, @invoiceDateTo date, @endtEffDateFrom date, @endtEffDateTo date, @cancelDateFrom date, @cancelDateTo date,
+          @dorSuppFrom date, @dorSuppTo date',
+        @health = @health, @payor = @payor, @adultChild = @adultChild, @race = @race, @sex = @sex, @relationship = @relationship,
+        @dataStatus = @dataStatus, @expired = @expired, @premiumMode = @premiumMode, @state = @state, @takeOver = @takeOver, @agentCode = @agentCode,
+        @membershipNo = @membershipNo, @groupCompany = @groupCompany, @labelStatus = @labelStatus, @department = @department,
+        @productCategory = @productCategory, @dayInsuredFrom = @dayInsuredFrom, @dayInsuredTo = @dayInsuredTo, @ageDaysFrom = @ageDaysFrom,
+        @ageDaysTo = @ageDaysTo, @delayBordxFrom = @delayBordxFrom, @delayBordxTo = @delayBordxTo, @delayInvBordxFrom = @delayInvBordxFrom,
+        @delayInvBordxTo = @delayInvBordxTo, @delayRegFrom = @delayRegFrom, @delayRegTo = @delayRegTo, @delayInvDFrom = @delayInvDFrom,
+        @delayInvDTo = @delayInvDTo, @delayInvEFrom = @delayInvEFrom, @delayInvETo = @delayInvETo, @premiumFrom = @premiumFrom,
+        @premiumTo = @premiumTo, @mcoFeeFrom = @mcoFeeFrom, @mcoFeeTo = @mcoFeeTo, @batchFrom = @batchFrom, @batchTo = @batchTo,
+        @employeeNoFrom = @employeeNoFrom, @employeeNoTo = @employeeNoTo, @policyNoFrom = @policyNoFrom, @policyNoTo = @policyNoTo,
+        @planFrom = @planFrom, @planTo = @planTo, @ageBandFrom = @ageBandFrom, @ageBandTo = @ageBandTo, @postCodeFrom = @postCodeFrom,
+        @postCodeTo = @postCodeTo, @policyYearFrom = @policyYearFrom, @policyYearTo = @policyYearTo, @invoiceNoFrom = @invoiceNoFrom,
+        @invoiceNoTo = @invoiceNoTo, @icFrom = @icFrom, @icTo = @icTo, @effDateFrom = @effDateFrom, @effDateTo = @effDateTo,
+        @expDateFrom = @expDateFrom, @expDateTo = @expDateTo, @dateJoinedFrom = @dateJoinedFrom, @dateJoinedTo = @dateJoinedTo,
+        @dorFrom = @dorFrom, @dorTo = @dorTo, @dobFrom = @dobFrom, @dobTo = @dobTo, @bordxDateFrom = @bordxDateFrom, @bordxDateTo = @bordxDateTo,
+        @invoiceDateFrom = @invoiceDateFrom, @invoiceDateTo = @invoiceDateTo, @endtEffDateFrom = @endtEffDateFrom, @endtEffDateTo = @endtEffDateTo,
+        @cancelDateFrom = @cancelDateFrom, @cancelDateTo = @cancelDateTo, @dorSuppFrom = @dorSuppFrom, @dorSuppTo = @dorSuppTo;
 END
 GO
 
--- UpdateRecord: mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
--- case remarks. The remark goes into the first remarks page that has room, following the desktop's page order
--- (CASRemarks.CASORemarks, CASORemarksTwo, CASRemarksTwo.CASORemarks, CASORemarksTwo, CASRemarkThree.CASRemarks, CASRemarksFive);
--- the lengths decide the page exactly as UpdateRecord did.
-CREATE OR ALTER PROCEDURE genisis.CaseListing_Apply
-    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15)
+-- ===== main/171_tracking_cases.sql =====
+-- GENERATED by tools/Generate-TrackingCases.ps1 from dbo.MBMTracking. Do not edit by hand; rerun the script instead.
+-- Fixed query text of each MBMTracking case: prefix (SELECT ... FROM view WHERE ...) and suffix (GROUP BY / ORDER BY).
+CREATE OR ALTER PROCEDURE genisis.Tracking_CaseText
+    @case int, @prefix nvarchar(max) OUTPUT, @suffix nvarchar(max) OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
-
-    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N'
-    WHERE CASNumber = @cas AND ClaimVersion = @version;
-    UPDATE genisis.WS_ClaimInvoice SET INVBordxRefNo = @bordxNo, INVBordxed = 1
-    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
-    UPDATE dbo.CAS SET CASPending = 'N' WHERE CASNumber = @cas;
-    UPDATE genisis.Maint_CASCrossReference SET CASPending = 'N' WHERE CASNumber = @cas;
-
-    DECLARE @add nvarchar(max) = N'~' + NCHAR(10) + CONVERT(nvarchar(10), GETDATE(), 103) + N'         BORDX DONE BY ' + @userCode
-        + N' -  ' + @bordxNo + REPLICATE(N' ', 44) + @userCode + N' ';
-
-    DECLARE @l1 int = 0, @l2 int = 0, @l3 int = 0, @l4 int = 0, @l5 int = 0;
-    SELECT @l1 = LEN(ISNULL(CASORemarks, N'') + N'x') - 1, @l2 = LEN(ISNULL(CASORemarksTwo, N'') + N'x') - 1 FROM dbo.CASRemarks WHERE CASNumber = @cas;
-    SELECT @l3 = LEN(ISNULL(CASORemarks, N'') + N'x') - 1, @l4 = LEN(ISNULL(CASORemarksTwo, N'') + N'x') - 1 FROM dbo.CASRemarksTwo WHERE CASNumber = @cas;
-    SELECT @l5 = LEN(ISNULL(CASRemarks, N'') + N'x') - 1 FROM dbo.CASRemarkThree WHERE CASNumber = @cas;
-
-    IF @l5 >= 1800 AND @l5 <= 3500
-        UPDATE dbo.CASRemarkThree SET CASRemarksFive = ISNULL(CASRemarksFive, N'') + @add WHERE CASNumber = @cas;
-    ELSE IF (@l5 <> 0 AND @l5 <= 1800) OR @l4 >= 1800
-        UPDATE dbo.CASRemarkThree SET CASRemarks = ISNULL(CASRemarks, N'') + @add WHERE CASNumber = @cas;
-    ELSE IF (@l4 <> 0 AND @l4 <= 1800) OR @l3 >= 1800
-        UPDATE dbo.CASRemarksTwo SET CASORemarksTwo = ISNULL(CASORemarksTwo, N'') + @add WHERE CASNumber = @cas;
-    ELSE IF (@l3 <> 0 AND @l3 <= 1800) OR @l2 >= 1800
-        UPDATE dbo.CASRemarksTwo SET CASORemarks = ISNULL(CASORemarks, N'') + @add WHERE CASNumber = @cas;
-    ELSE IF (@l2 <> 0 AND @l2 <= 1800) OR @l1 >= 1800
-        UPDATE dbo.CASRemarks SET CASORemarksTwo = ISNULL(CASORemarksTwo, N'') + @add WHERE CASNumber = @cas;
-    ELSE IF @l1 <> 0 AND @l1 < 1800
-        UPDATE dbo.CASRemarks SET CASORemarks = ISNULL(CASORemarks, N'') + @add WHERE CASNumber = @cas;
-END
-GO
-
--- SaveCLMBordx: the Bordx row. Status C when the claims are paid to the hospital (INVPayTo H), R otherwise.
-CREATE OR ALTER PROCEDURE genisis.CaseListing_SaveBordx
-    @bordxNo nvarchar(40), @amount money, @claims int, @status char(1), @userCode nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    INSERT genisis.WS_Bordx (BordxRefNo, BordxPAYCode, BordxDate, BordxBy, BordxClaimAmt, BordxNoClaims, BordxStatus)
-    VALUES (@bordxNo, SUBSTRING(@bordxNo, 2, 2), CAST(CAST(GETDATE() AS date) AS datetime), @userCode, @amount, @claims, @status);
-END
-GO
-
--- ===== main/220_case_ascii.sql =====
--- Case > Claim ASCII (legacy frmNewClaimAscii) and Case > Case ASCII (legacy frmCaseASCII): the rows of the fixed-width
--- payor files, the daily batch number and the "exported" flags. Replaces the raw @strAppend dbo.Case_ClaimAscii modes
--- (1, 2, 4, 5), Medix.bas GetCLMAsciiBatch / GetCASAsciiBatch (read-then-update) and dbo.Case_CLMAscUpdate.
-
--- Medix.bas GetCLMAsciiBatch / GetCASAsciiBatch: the next 5-digit batch number of a payor for a day, taken atomically.
--- @kind = CLM (HISWorkSheet.CLMAsciiSEQ) or CAS (dbo.CASAsciiSEQ).
-CREATE OR ALTER PROCEDURE genisis.Ascii_NextBatch
-    @kind char(3), @pay nvarchar(8), @date datetime
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @day datetime = CAST(CAST(@date AS date) AS datetime), @n nvarchar(10);
-    IF @kind = 'CLM'
-    BEGIN
-        UPDATE genisis.WS_CLMAsciiSEQ WITH (UPDLOCK, ROWLOCK)
-        SET @n = SEQBatchNo = RIGHT(N'00000' + CAST(CAST(SEQBatchNo AS int) + 1 AS nvarchar(10)), 5)
-        WHERE SEQPayCode = @pay AND SEQBatchDate = @day;
-        IF @@ROWCOUNT = 0
-        BEGIN
-            SET @n = N'00001';
-            INSERT genisis.WS_CLMAsciiSEQ (SEQPayCode, SEQBatchDate, SEQBatchNo) VALUES (@pay, @day, @n);
-        END
-    END
-    ELSE
-    BEGIN
-        UPDATE dbo.CASAsciiSEQ WITH (UPDLOCK, ROWLOCK)
-        SET @n = SEQBatchNo = RIGHT(N'00000' + CAST(CAST(SEQBatchNo AS int) + 1 AS nvarchar(10)), 5)
-        WHERE SEQPayCode = @pay AND SEQBatchDate = @day;
-        IF @@ROWCOUNT = 0
-        BEGIN
-            SET @n = N'00001';
-            INSERT dbo.CASAsciiSEQ (SEQPayCode, SEQBatchDate, SEQBatchNo) VALUES (@pay, @day, @n);
-        END
-    END
-    SELECT @n AS BatchNo;
-END
-GO
-
--- PrincipalASCII (accepted cases, Case_ClaimAscii mode 1): worksheets with a bordx dated in the range for the payor.
--- The "to" dates are inclusive of the whole day: the desktop compared with <= 'to date' (midnight), which dropped the
--- cases registered later on the last day because CaseRegDate carries the time.
--- @reprint = 0 keeps the claims not exported yet (CLMBordxWSASCII N), 1 the ones already exported (Y).
--- @wsStatus: 0 = new and amended claims (CLMBordxWSStatus A or N), 1 = deleted claims (D).
-CREATE OR ALTER PROCEDURE genisis.AsciiClaim_Accepted
-    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime, @reprint bit, @wsStatus char(1)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT * FROM genisis.WS_CLMReport
-    WHERE BordxRefNo IS NOT NULL AND BordxDate >= @dateFrom AND BordxDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
-      AND CLMBordxWSASCII = CASE WHEN @reprint = 1 THEN N'Y' ELSE N'N' END
-      AND ((@wsStatus = '0' AND CLMBordxWSStatus IN (N'A', N'N')) OR (@wsStatus = '1' AND CLMBordxWSStatus = N'D'))
-    ORDER BY BordxRefNo, CASNumber, ClaimVersion;
-END
-GO
-
--- PrincipalASCIIRejectCase (Case_ClaimAscii mode 4): repudiated cases (second claimability letter R) registered in the range.
-CREATE OR ALTER PROCEDURE genisis.AsciiClaim_Rejected
-    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT * FROM genisis.WS_CLMReport
-    WHERE SUBSTRING(CASClaimability, 2, 1) = N'R' AND CaseRegDate >= @dateFrom AND CaseRegDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
-    ORDER BY CASNumber, ClaimVersion;
-END
-GO
-
--- UpdateWSAscii: the worksheet has been exported. The desktop flagged every version of the case (Case_CLMAscUpdate is
--- by case number); only the exported version is flagged here.
-CREATE OR ALTER PROCEDURE genisis.AsciiClaim_MarkExported
-    @cas nvarchar(30), @version int
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE genisis.WS_Claim SET CLMBordxWSASCII = N'Y' WHERE CASNumber = @cas AND ClaimVersion = @version;
-END
-GO
-
--- Case ASCII (Case_ClaimAscii mode 5): the cases of the payor registered in the range. @reprint = 1 keeps the cases already
--- exported (CASASCIIGenStatus Y). @endorsement: 0 = every case (the desktop never filtered), 1 = deleted (D), 2 = amended (A) by CASASCIIAmendStatus.
-CREATE OR ALTER PROCEDURE genisis.AsciiCase_Rows
-    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime, @reprint bit, @endorsement char(1)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT * FROM genisis.WS_CLMReportCas
-    WHERE CaseRegDate >= @dateFrom AND CaseRegDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
-      AND (@reprint = 0 OR CASASCIIGenStatus = N'Y')
-      AND (@endorsement = '0' OR (@endorsement = '1' AND CASASCIIAmendStatus = N'D') OR (@endorsement = '2' AND CASASCIIAmendStatus = N'A'))
-    ORDER BY CASNumber;
-END
-GO
-
--- The case has been exported (the desktop's UpdateCASAscii called a procedure that does not exist, so reprint never worked).
-CREATE OR ALTER PROCEDURE genisis.AsciiCase_MarkExported
-    @cas nvarchar(15)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE dbo.CASOthersTwo SET CASASCIIGenStatus = N'Y' WHERE CASNumber = @cas;
+    SET @prefix = CASE @case
+    WHEN 1 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 2 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 3 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalP,SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 4 THEN N'SELECT PAYCode, HLTCode, PrinAGECode, COUNT(MBMNumber) AS TotalS,SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 5 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalP,SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 6 THEN N'SELECT PAYCode, HLTCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 7 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 8 THEN N'SELECT HLTCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 9 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 10 THEN N'SELECT HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 11 THEN N'SELECT PAYCode, HLTCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 12 THEN N'SELECT PAYCode, HLTCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 13 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 14 THEN N'SELECT PAYCode, INSCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 15 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 16 THEN N'SELECT PAYCode, INSCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 17 THEN N'SELECT PAYCode, MBMAgentCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 18 THEN N'SELECT PAYCode, MBMAgentCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 19 THEN N'SELECT MBMAgentCode, PAYCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 20 THEN N'SELECT MBMAgentCode, PAYCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 21 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 22 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 23 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 24 THEN N'SELECT PAYCode, MBMAgentCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 25 THEN N'SELECT PAYCode, MBMAgentCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross, SUM(MBMAccessFee) AS EAFee From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 26 THEN N'SELECT PAYCode, MBMAgentCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 27 THEN N'SELECT PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 28 THEN N'SELECT PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 29 THEN N'SELECT TOP 20 PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 30 THEN N'SELECT TOP 20 PAYCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 31 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, MBMMemberType, PLNCode, MBMCCoverID, HLTCode, MBMAgentCode, MBMStatus, MBMAccessFee, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMPremium, DayInsured, PAYCode From View_MBM_Search2 Where 0 = 0'
+    WHEN 32 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, MBMMemberType, PLNCode, MBMCCoverID, HLTCode, MBMAgentCode, MBMStatus, MBMAccessFee, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMPremium, DayInsured, PAYCode, RElCode, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 33 THEN N'SELECT MBMValueDate, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 34 THEN N'SELECT MBMValueDate, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 35 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMBordxDate, MBMBatchNo, MBMPremium, MBMMemberType, MBMStatus, MBMCCoverID, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMAccessFee From View_MBM_Search2 Where 0 = 0'
+    WHEN 36 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMBordxDate, MBMBatchNo, MBMPremium, MBMCCoverID, MBMMemberType, MBMStatus, MBMCCoverID, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMAccessFee From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 37 THEN N'SELECT PAYCode, MBMBordxDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 38 THEN N'SELECT PAYCode, MBMBordxDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 39 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIC, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''C'''
+    WHEN 40 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIA, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''A'''
+    WHEN 41 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalF, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''F'''
+    WHEN 42 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGC, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''C'''
+    WHEN 43 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGA, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''A'''
+    WHEN 44 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalH, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where INSCode = ''H'''
+    WHEN 45 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalFS, SUM(MBMMCOFee) AS MCOFee From View_MBM_Supplementary2 Where INSCode = ''F'''
+    WHEN 46 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalHS, SUM(MBMMCOFee) AS MCOFee From View_MBM_Supplementary2 Where INSCode = ''H'''
+    WHEN 47 THEN N'SELECT PAYCode, MBMBordxDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 48 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIC, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''C'''
+    WHEN 49 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalIA, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''I'' AND MBMAdultChild = ''A'''
+    WHEN 50 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalF, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''F'''
+    WHEN 51 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalFS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where INSCode = ''F'''
+    WHEN 52 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGC, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''C'''
+    WHEN 53 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalGA, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''G'' AND MBMAdultChild = ''A'''
+    WHEN 54 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalH, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where INSCode = ''H'''
+    WHEN 55 THEN N'SELECT PAYCode, MBMBordxDate, COUNT(MBMNumber) AS TotalHS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where INSCode = ''H'''
+    WHEN 56 THEN N'SELECT PAYCode, MBMBordxDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 57 THEN N'SELECT PAYCode, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 58 THEN N'SELECT PAYCode, MBMBordxDate, MBMBatchNo, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 59 THEN N'SELECT HLTCode, BRNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 60 THEN N'SELECT HLTCode, BRNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 61 THEN N'SELECT BRNCode, MBMAgentCode From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 62 THEN N'SELECT BRNCode, MBMAgentCode From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 63 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 64 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 65 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 66 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 67 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 68 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 69 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 70 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 71 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '') AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 72 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (MBMAgentCode = '' OR MBMAgentCode IS NULL)'
+    WHEN 73 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0 AND (BRNCode IS NULL OR BRNCode = '')'
+    WHEN 74 THEN N'SELECT BRNCode, MBMAgentCode, COUNT(CASNumber) AS TotalClaim, SUM(CLMTotalApproved) AS AppAmt From VIEW_MBMClaim_Search Where 0 = 0'
+    WHEN 75 THEN N'SELECT HLTCode, PAYCode, BRNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 76 THEN N'SELECT HLTCode, PAYCode, BRNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 77 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMDOB, MBMBordxDate, MBMValueDate, MBMInvoiceDate, MBMMemberType, MBMStatus, MBMPayorEffDate, MBMPayorExpDate, MBMRenewFlag, PAYCode, DayInsured, AgeDays, DelayBordx, DelayReg, DelayInvD, DelayInvE, DelayInvBordx, RELCode, MBMCCoverID From View_MBM_Search2 Where 0 = 0'
+    WHEN 78 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMDOB, MBMBordxDate, MBMValueDate, MBMInvoiceDate, MBMMemberType, MBMStatus, MBMPayorEffDate, MBMPayorExpDate, MBMRenewFlag, PAYCode, DayInsured, AgeDays, DelayBordx, DelayReg, DelayInvD, DelayInvE, DelayInvBordx, RELCode, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 79 THEN N'SELECT MBMNumber, MBMPolicyNo, MBMName, MBMPayorEffDate, MBMPayorExpDate, DayInsured, INSCode, PLNCode From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 80 THEN N'SELECT COUNT(MBMNumber) AS TotalP, DayInsured From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 81 THEN N'SELECT DayInsured, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 82 THEN N'SELECT HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 83 THEN N'SELECT HLTCode, INSCode, PrinSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 84 THEN N'SELECT HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 85 THEN N'SELECT PAYCode, HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 86 THEN N'SELECT PAYCode, HLTCode, INSCode, PrinSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 87 THEN N'SELECT PAYCode, HLTCode, INSCode, MBMSex, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 88 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, MBMBatchNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, RElCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment,MBMCostCenter,MBMGroupCategory,MBMSecurityCode,MBMClientType,Subsidiary,MBMRemarks,Remark, MBMInvoiceDate,MBMInvoiceNo From View_MBM_Search2 Where 0 = 0'
+    WHEN 89 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, MBMBatchNo, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment, RELCode, MBMCCoverID,MBMCostCenter,MBMGroupCategory,MBMSecurityCode,MBMClientType,Subsidiary,MBMRemarks,Remark, MBMInvoiceDate,MBMInvoiceNo From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 90 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMExpiredStatus, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDataStatus, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMValueDate, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMIcBcPp, BRNCode,MBMEmployeeNo, MBMDepartment, RELCode, MBMCCoverID, MBMCRegDate,MBMCostCenter,MBMGroupCategory From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 91 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, RELCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment From View_MBM_Search2 Where 0 = 0'
+    WHEN 92 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment, MBMCSex, MBMCAgeband, MBMCDOB, RELCode, MBMCCoverID From View_MBM_Supplementary3 Where 0 = 0'
+    WHEN 93 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCName, INSCode, AGECode, MBMSex, MBMEmployeeNo, PLNCode, MBMGroupCompany, MBMMemberType, MBMStatus, RELCode, MBMCCoverID, MBMDOB, MBMPayorEffDate, MBMPayorExpDate, MBMMCOFee, MBMBasicMCO, MBMAccessFee, MBMPremium, MBMBasicPrem, STACode, MBMBordxDate, RACCode, DayInsured, MBMRenewFlag, PAYCode, MBMDepartment, MBMCSex, MBMCAgeband, MBMCDOB, MBMCRegDate From View_MBM_Supplementary3 Where 0 = 0'
+    WHEN 94 THEN N'Select MBMNumber, MBMName, RElCode, MBMCCoverID, MBMStatus, MBMMemberType, MBMPremium, MBMBasicMCO, MBMMCOFee, MBMBasicPrem, MBMPayorMCONet, MBMPayorMCOGross, MBMPayorPremNet, MBMPayorPremGross From View_MBM_Search2 Where 0 = 0'
+    WHEN 95 THEN N'Select MBMNumber, MBMName, RElCode, MBMCCoverID, MBMStatus, MBMMemberType, MBMPremium, MBMBasicMCO, MBMMCOFee, MBMBasicPrem, MBMPayorMCONet, MBMPayorMCOGross, MBMPayorPremNet, MBMPayorPremGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 96 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3 From View_MBM_Search2 Where 0 = 0'
+    WHEN 97 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3, MBMCCoverID, MBMCRegDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 98 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMAddress1, CTYCode, MBMGroupCompany, MBMMemberType, MBMStatus, MBMCCoverID, MBMPostCode, STACode, MBMRenewFlag, PAYCode, MBMAddress2, MBMAddress3, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 99 THEN N'SELECT PAYCode, MBMExpiredStatus, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 100 THEN N'SELECT PAYCode, MBMExpiredStatus, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 101 THEN N'Select MBMNumber, MBMName, MBMIcBcPp, MBMInstallment, MBMMemberType, MBMStatus, MBMCCoverID, MBMTakeover, MBMPayorEffDate, MBMPayorExpDate, MBMPolicyYear, MBMRenewFlag, MBMFirstJoinedDate From View_MBM_Search2 Where 0 = 0'
+    WHEN 102 THEN N'Select MBMNumber, MBMName, MBMIcBcPp, MBMInstallment, MBMMemberType, MBMStatus, MBMCCoverID, MBMTakeover, MBMPayorEffDate, MBMPayorExpDate, MBMPolicyYear, MBMRenewFlag, MBMFirstJoinedDate, MBMCCoverID From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 103 THEN N'SELECT MBMPolicyYear, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 104 THEN N'SELECT MBMPolicyYear, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 105 THEN N'SELECT PAYCode, MBMInstallment, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 106 THEN N'SELECT PAYCode, MBMInstallment, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 107 THEN N'SELECT PAYCode, MBMRenewFlag, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 108 THEN N'SELECT PAYCode, MBMRenewFlag, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 109 THEN N'SELECT PAYCode, MBMTakeover, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 110 THEN N'SELECT PAYCode, MBMTakeover, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 111 THEN N'SELECT HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 112 THEN N'SELECT HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 113 THEN N'SELECT PAYCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 114 THEN N'SELECT PAYCode, HLTCode, INSCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 115 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 116 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 117 THEN N'SELECT PAYCode, MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 118 THEN N'SELECT PAYCode, MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 119 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 120 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 121 THEN N'SELECT PAYCode, MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 122 THEN N'SELECT PAYCode, MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 123 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 124 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 125 THEN N'SELECT PAYCode, MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 126 THEN N'SELECT PAYCode, MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 127 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate,MBMGroupCompany From View_MBM_Search2 Where 0 = 0'
+    WHEN 128 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate, RELCode,MBMGroupCompany From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 129 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMMemberType, MBMBordxDate, MBMBatchNo, MBMCCoverID, MBMStatus, MBMInvoiceNo, MBMInvoiceDate, MBMMCOFee, MBMValueDate, RELCode From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 130 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 131 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 132 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 133 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBMS, SUM(MBMMCOFEE) AS MCOFEE From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 134 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMPremium) AS Premium From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 135 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBMS, SUM(MBMPremium) AS Premium From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 136 THEN N'SELECT HLTCode, PAYCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 137 THEN N'SELECT HLTCode, PAYCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 138 THEN N'SELECT PAYCode, SUM(MBMMCOFee) AS MBMMCOFee, SUM(MBMBasicMCO) AS MBMBasicMCO, SUM(MBMPayorMCOGross) AS MBMPayorMCOGross, SUM(MBMPayorMCONet) AS MBMPayorMCONet, SUM(MBMPremium) AS MBMPremium, SUM(MBMBasicPrem) AS MBMBasicPrem, SUM(MBMPayorPremGross) AS MBMPayorPremGross, SUM(MBMPayorPremNet) AS MBMPayorPremNet From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 139 THEN N'SELECT PAYCode, SUM(MBMMCOFee) AS MBMMCOFee, SUM(MBMBasicMCO) AS MBMBasicMCO, SUM(MBMPayorMCOGross) AS MBMPayorMCOGross, SUM(MBMPayorMCONet) AS MBMPayorMCONet, SUM(MBMPremium) AS MBMPremium, SUM(MBMBasicPrem) AS MBMBasicPrem, SUM(MBMPayorPremGross) AS MBMPayorPremGross, SUM(MBMPayorPremNet) AS MBMPayorPremNet From VIEW_MBM_Supplementary2 Where 0 = 0'
+    WHEN 140 THEN N'SELECT PAYCompanyName, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(CLMTotalApproved) AS CLMTotalApproved From VIEW_MBM_Search4 Where (INSCode = ''G'' OR INSCode = ''H'')'
+    WHEN 141 THEN N'SELECT PAYCompanyName, MBMGroupCompany, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary4 Where (INSCode = ''G'' OR INSCode = ''H'')'
+    WHEN 142 THEN N'SELECT HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 143 THEN N'SELECT HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 144 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 145 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 146 THEN N'SELECT HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 147 THEN N'SELECT HLTCode, INSCode, PLNCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 148 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 149 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, PrinAGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 150 THEN N'SELECT HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 151 THEN N'SELECT PAYCode, HLTCode, INSCode, PLNCode, AGECode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFee) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 152 THEN N'SELECT PAYCode, MBMPolicyNo, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 153 THEN N'SELECT PAYCode, MBMPolicyNo, MBMGroupCompany, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 154 THEN N'SELECT HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 155 THEN N'SELECT HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 156 THEN N'SELECT PAYCode, HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 157 THEN N'SELECT PAYCode, HLTCode, INSCode, RACCode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 158 THEN N'SELECT PAYCode, HLTCode, RELCode, AGECode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From VIEW_MBM_Search3 Where 0 = 0'
+    WHEN 159 THEN N'SELECT PAYCode, HLTCode, RELCode, AGECode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where RELCode <> ''P'''
+    WHEN 160 THEN N'SELECT PAYCode, HLTCode, INSCode, RELCode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From VIEW_MBM_Search3 Where 0 = 0'
+    WHEN 161 THEN N'SELECT PAYCode, HLTCode, INSCode, RELCode, COUNT(DISTINCT MBMNumber) AS TotalP, COUNT(MBMNumber) AS TotalS From View_MBM_Supplementary2 Where RELCode <> ''P'''
+    WHEN 162 THEN N'SELECT HLTCode, STACode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 163 THEN N'SELECT HLTCode, STACode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 164 THEN N'SELECT PAYCode, HLTCode, STACode, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 165 THEN N'SELECT PAYCode, HLTCode, STACode, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 166 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 167 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 168 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, MBMDepartment, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 169 THEN N'SELECT HLTCode, PAYCode, MBMGroupCompany, MBMDepartment, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 170 THEN N'SELECT PLNProCat, ProductNameCat, COUNT(MBMNumber) AS TotalP, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMAccessFee) AS EAFee, SUM(MBMPremium) AS PremiumGross From VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 171 THEN N'SELECT PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMMCOFEE) AS MCOGross, SUM(MBMPremium) AS PremiumGross From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 172 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 173 THEN N'SELECT MONTH(MBMPayorEffDate) AS Month, YEAR(MBMPayorEffDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 174 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 175 THEN N'SELECT MONTH(MBMPayorExpDate) AS Month, YEAR(MBMPayorExpDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 176 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 177 THEN N'SELECT MONTH(MBMValueDate) AS Month, YEAR(MBMValueDate) AS Year, PLNProCat, ProductName, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 178 THEN N'SELECT MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 179 THEN N'SELECT MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 180 THEN N'SELECT PAYCode, MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 181 THEN N'SELECT PAYCode, MONTH(MBMInvoiceDate) AS Month, YEAR(MBMInvoiceDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 182 THEN N'SELECT * From CLN Where 0 = 0'
+    WHEN 183 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Search2 Where 0 = 0'
+    WHEN 184 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 185 THEN N'Select MBMNumber, MBMPolicyNo, MBMName, MBMCCoverID, MBMBordxDate, MBMInvoiceDate, MBMCardSentDate, MBMPayorEffDate, BRNCode, MBMAgentCode, MBMStatus, MBMMemberType From View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 186 THEN N'SELECT MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 187 THEN N'SELECT MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 188 THEN N'SELECT PAYCode, MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalP, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross, SUM(MBMAccessFee) AS EAFee FROM VIEW_MBM_Search2 Where 0 = 0'
+    WHEN 189 THEN N'SELECT PAYCode, MONTH(MBMBordxDate) AS Month, YEAR(MBMBordxDate) AS Year, COUNT(MBMNumber) AS TotalS, SUM(MBMPremium) AS PremiumGross, SUM(MBMMCOFee) AS MCOGross FROM View_MBM_Supplementary2 Where 0 = 0'
+    WHEN 190 THEN N'SELECT PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search2_MX Where 0 = 0'
+    WHEN 191 THEN N'SELECT case when coverid=''00'' then ''00'' else ''01'' end as cc,PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM, SUM(MBMMCOFEE) AS MCOFEE From VIEW_MBM_Search_MCO Where 0 = 0'
+    WHEN 192 THEN N'SELECT case when coverid=''00'' then ''Principal'' else ''Dependent'' end as cc, PAYCode, MBMInvoiceNo, MBMInvoiceDate, COUNT(MBMNumber) AS TotalMBM,SUM(MBMMCOFEE) AS MCOFEE into #temp From VIEW_MBM_Search_MCO Where 0 = 0'
+    END;
+    SET @suffix = CASE @case
+    WHEN 1 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 2 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 3 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 4 THEN N'GROUP BY PAYCode, HLTCode, PrinAGECode'
+    WHEN 5 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 6 THEN N'GROUP BY PAYCode, HLTCode, AGECode'
+    WHEN 7 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 8 THEN N'GROUP BY HLTCode, INSCode, PrinAGECode'
+    WHEN 9 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 10 THEN N'GROUP BY HLTCode, INSCode, AGECode'
+    WHEN 11 THEN N'GROUP BY PAYCode, HLTCode, INSCode, AGECode'
+    WHEN 12 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PrinAGECode'
+    WHEN 13 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 14 THEN N'GROUP BY PAYCode, INSCode, PrinAGECode'
+    WHEN 15 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 16 THEN N'GROUP BY PAYCode, INSCode, AGECode'
+    WHEN 17 THEN N'GROUP BY PAYCode, MBMAgentCode, HLTCode, INSCode'
+    WHEN 18 THEN N'GROUP BY PAYCode, MBMAgentCode, HLTCode, INSCode'
+    WHEN 19 THEN N'GROUP BY MBMAgentCode, PAYCode'
+    WHEN 20 THEN N'GROUP BY MBMAgentCode, PAYCode'
+    WHEN 21 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 22 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 23 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 24 THEN N'GROUP BY PAYCode, MBMAgentCode, INSCode, PLNCode'
+    WHEN 25 THEN N'GROUP BY PAYCode, MBMAgentCode, RACCode'
+    WHEN 26 THEN N'GROUP BY PAYCode, MBMAgentCode, RACCode'
+    WHEN 27 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 28 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 29 THEN N'GROUP BY PAYCode, MBMAgentCode'
+    WHEN 30 THEN N'GROUP BY PAYCode, MBMAgentCode ORDER BY PremiumGross Desc'
+    WHEN 31 THEN N''
+    WHEN 32 THEN N''
+    WHEN 33 THEN N'GROUP BY MBMValueDate, MBMBordxDate, MBMBatchNo'
+    WHEN 34 THEN N'GROUP BY MBMValueDate, MBMBordxDate, MBMBatchNo'
+    WHEN 35 THEN N''
+    WHEN 36 THEN N''
+    WHEN 37 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 38 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 39 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 40 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 41 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 42 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 43 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 44 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 45 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 46 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 47 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 48 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 49 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 50 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 51 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 52 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 53 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 54 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 55 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 56 THEN N'GROUP BY PAYCode, MBMBordxDate'
+    WHEN 57 THEN N'GROUP BY PAYCode, MBMBordxDate, MBMBatchNo'
+    WHEN 58 THEN N'GROUP BY PAYCode, MBMBordxDate, MBMBatchNo'
+    WHEN 59 THEN N'GROUP BY HLTCode, BRNCode'
+    WHEN 60 THEN N'GROUP BY HLTCode, BRNCode'
+    WHEN 61 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 62 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 63 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 64 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 65 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 66 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 67 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 68 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 69 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 70 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 71 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 72 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 73 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 74 THEN N'GROUP BY BRNCode, MBMAgentCode'
+    WHEN 75 THEN N'GROUP BY HLTCode, PAYCode, BRNCode'
+    WHEN 76 THEN N'GROUP BY HLTCode, PAYCode, BRNCode'
+    WHEN 77 THEN N''
+    WHEN 78 THEN N''
+    WHEN 79 THEN N''
+    WHEN 80 THEN N'GROUP BY DayInsured'
+    WHEN 81 THEN N'GROUP BY DayInsured'
+    WHEN 82 THEN N'GROUP BY HLTCode, INSCode, MBMSex'
+    WHEN 83 THEN N'GROUP BY HLTCode, INSCode, PrinSex'
+    WHEN 84 THEN N'GROUP BY HLTCode, INSCode, MBMSex'
+    WHEN 85 THEN N'GROUP BY PAYCode, HLTCode, INSCode, MBMSex'
+    WHEN 86 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PrinSex'
+    WHEN 87 THEN N'GROUP BY PAYCode, HLTCode, INSCode, MBMSex'
+    WHEN 88 THEN N''
+    WHEN 89 THEN N''
+    WHEN 90 THEN N''
+    WHEN 91 THEN N''
+    WHEN 92 THEN N''
+    WHEN 93 THEN N''
+    WHEN 94 THEN N''
+    WHEN 95 THEN N''
+    WHEN 96 THEN N''
+    WHEN 97 THEN N''
+    WHEN 98 THEN N''
+    WHEN 99 THEN N'GROUP BY PAYCode, MBMExpiredStatus, INSCode'
+    WHEN 100 THEN N'GROUP BY PAYCode, MBMExpiredStatus, INSCode'
+    WHEN 101 THEN N''
+    WHEN 102 THEN N''
+    WHEN 103 THEN N'GROUP BY MBMPolicyYear'
+    WHEN 104 THEN N'GROUP BY MBMPolicyYear'
+    WHEN 105 THEN N'GROUP BY PAYCode, MBMInstallment'
+    WHEN 106 THEN N'GROUP BY PAYCode, MBMInstallment'
+    WHEN 107 THEN N'GROUP BY PAYCode, MBMRenewFlag, INSCode'
+    WHEN 108 THEN N'GROUP BY PAYCode, MBMRenewFlag, INSCode'
+    WHEN 109 THEN N'GROUP BY PAYCode, MBMTakeover, INSCode'
+    WHEN 110 THEN N'GROUP BY PAYCode, MBMTakeover, INSCode'
+    WHEN 111 THEN N'GROUP BY HLTCode, INSCode'
+    WHEN 112 THEN N'GROUP BY HLTCode, INSCode'
+    WHEN 113 THEN N'GROUP BY PAYCode, HLTCode, INSCode'
+    WHEN 114 THEN N'GROUP BY PAYCode, HLTCode, INSCode'
+    WHEN 115 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 116 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 117 THEN N'GROUP BY PAYCode, MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 118 THEN N'GROUP BY PAYCode, MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate)'
+    WHEN 119 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 120 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 121 THEN N'GROUP BY PAYCode, MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 122 THEN N'GROUP BY PAYCode, MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate)'
+    WHEN 123 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 124 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 125 THEN N'GROUP BY PAYCode, MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 126 THEN N'GROUP BY PAYCode, MONTH(MBMValueDate), YEAR(MBMValueDate)'
+    WHEN 127 THEN N''
+    WHEN 128 THEN N''
+    WHEN 129 THEN N''
+    WHEN 130 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 131 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 132 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 133 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 134 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 135 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 136 THEN N'GROUP BY HLTCode, PAYCode'
+    WHEN 137 THEN N'GROUP BY HLTCode, PAYCode'
+    WHEN 138 THEN N'GROUP BY PAYCode'
+    WHEN 139 THEN N'GROUP BY PAYCode'
+    WHEN 140 THEN N'GROUP BY PAYCompanyName, MBMGroupCompany'
+    WHEN 141 THEN N'GROUP BY PAYCompanyName, MBMGroupCompany'
+    WHEN 142 THEN N'GROUP BY HLTCode, INSCode, PLNCode'
+    WHEN 143 THEN N'GROUP BY HLTCode, INSCode, PLNCode'
+    WHEN 144 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode'
+    WHEN 145 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode'
+    WHEN 146 THEN N'GROUP BY HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 147 THEN N'GROUP BY HLTCode, INSCode, PLNCode, PrinAGECode'
+    WHEN 148 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 149 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, PrinAGECode'
+    WHEN 150 THEN N'GROUP BY HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 151 THEN N'GROUP BY PAYCode, HLTCode, INSCode, PLNCode, AGECode'
+    WHEN 152 THEN N'GROUP BY PAYCode, MBMPolicyNo, MBMGroupCompany'
+    WHEN 153 THEN N'GROUP BY PAYCode, MBMPolicyNo, MBMGroupCompany'
+    WHEN 154 THEN N'GROUP BY HLTCode, INSCode, RACCode'
+    WHEN 155 THEN N'GROUP BY HLTCode, INSCode, RACCode'
+    WHEN 156 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RACCode'
+    WHEN 157 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RACCode'
+    WHEN 158 THEN N'GROUP BY PAYCode, HLTCode, RELCode, AGECode'
+    WHEN 159 THEN N'GROUP BY PAYCode, HLTCode, RELCode, AGECode'
+    WHEN 160 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RELCode'
+    WHEN 161 THEN N'GROUP BY PAYCode, HLTCode, INSCode, RELCode'
+    WHEN 162 THEN N'GROUP BY HLTCode, STACode'
+    WHEN 163 THEN N'GROUP BY HLTCode, STACode'
+    WHEN 164 THEN N'GROUP BY PAYCode, HLTCode, STACode'
+    WHEN 165 THEN N'GROUP BY PAYCode, HLTCode, STACode'
+    WHEN 166 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany'
+    WHEN 167 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany'
+    WHEN 168 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany, MBMDepartment'
+    WHEN 169 THEN N'GROUP BY HLTCode, PAYCode, MBMGroupCompany, MBMDepartment'
+    WHEN 170 THEN N'GROUP BY PLNProCat,ProductNameCat'
+    WHEN 171 THEN N'GROUP BY PLNProCat, ProductName'
+    WHEN 172 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate), PLNProCat, ProductName'
+    WHEN 173 THEN N'GROUP BY MONTH(MBMPayorEffDate), YEAR(MBMPayorEffDate), PLNProCat, ProductName'
+    WHEN 174 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate), PLNProCat, ProductName'
+    WHEN 175 THEN N'GROUP BY MONTH(MBMPayorExpDate), YEAR(MBMPayorExpDate), PLNProCat, ProductName'
+    WHEN 176 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate), PLNProCat, ProductName'
+    WHEN 177 THEN N'GROUP BY MONTH(MBMValueDate), YEAR(MBMValueDate), PLNProCat, ProductName'
+    WHEN 178 THEN N'GROUP BY MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 179 THEN N'GROUP BY MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 180 THEN N'GROUP BY PAYCode, MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 181 THEN N'GROUP BY PAYCode, MONTH(MBMInvoiceDate), YEAR(MBMInvoiceDate)'
+    WHEN 182 THEN N''
+    WHEN 183 THEN N''
+    WHEN 184 THEN N''
+    WHEN 185 THEN N''
+    WHEN 186 THEN N'GROUP BY MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 187 THEN N'GROUP BY MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 188 THEN N'GROUP BY PAYCode, MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 189 THEN N'GROUP BY PAYCode, MONTH(MBMBordxDate), YEAR(MBMBordxDate)'
+    WHEN 190 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate'
+    WHEN 191 THEN N'GROUP BY PAYCode, MBMInvoiceNo, MBMInvoiceDate,case when coverid=''00'' then ''00'' else ''01'' end'
+    WHEN 192 THEN N'GROUP BY case when coverid=''00'' then ''Principal'' else ''Dependent'' end,PAYCode, MBMInvoiceNo, MBMInvoiceDate Select [PAYCode], Sum(coalesce(Principal_amt,0)) as Principal_amt, Sum(coalesce(Dependent_amt,0)) as Dependent_amt, Sum(coalesce(Principal_mbmcnt,0)) as Principal_mbmcnt, Sum(coalesce(Dependent_mbmcnt,0)) as Dependent_mbmcnt, MBMInvoiceNo, MBMInvoiceDate from ( Select [PAYCode],MBMInvoiceNo, MBMInvoiceDate ,Sum(MCOFEE) as MCOFEE ,Sum(TotalMBM) as TotalMBM ,[MCOFEE_amt]=[CC]+''_amt'' ,[TotalMBM_cnt]=[CC]+''_mbmcnt'' from #temp group by PAYCode,[CC],MBMInvoiceNo, MBMInvoiceDate )NN PIVOT (Sum(MCOFEE) for [MCOFEE_amt] IN (Principal_amt,Dependent_amt)) As PV1 PIVOT (Sum(TotalMBM) for [TotalMBM_cnt] IN (Principal_mbmcnt,Dependent_mbmcnt)) As PV2 group by [PAYCode],MBMInvoiceNo, MBMInvoiceDate Drop table #temp'
+    END;
 END
 GO
 

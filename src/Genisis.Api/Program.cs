@@ -1,7 +1,6 @@
 using FluentValidation;
 using Genisis.Api.Auth;
-using Genisis.Api.Case;
-using Genisis.Api.Common;
+using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -24,6 +23,17 @@ builder.Services.AddScoped<Genisis.Api.Plans.SpecialNoteService>();
 builder.Services.AddScoped<Genisis.Api.Plans.BenefitLimitService>();
 builder.Services.AddScoped<Genisis.Api.Plans.MgmtFeeService>();
 builder.Services.AddScoped<Genisis.Api.Plans.McoFeeService>();
+builder.Services.AddScoped<Genisis.Api.Benefits.IBenefitService, Genisis.Api.Benefits.BenefitService>();
+builder.Services.AddScoped<Genisis.Api.Mma.IMmaService, Genisis.Api.Mma.MmaService>();
+builder.Services.AddScoped<Genisis.Api.Adjustment.IAdjustmentService, Genisis.Api.Adjustment.AdjustmentService>();
+builder.Services.AddScoped<Genisis.Api.Adjustment.IAdjustmentQueryService, Genisis.Api.Adjustment.AdjustmentQueryService>();
+builder.Services.Configure<Genisis.Api.Membership.DocumentOptions>(builder.Configuration.GetSection(Genisis.Api.Membership.DocumentOptions.SectionName));
+builder.Services.AddSingleton<Genisis.Api.Membership.IPolicyWordingStore, Genisis.Api.Membership.PolicyWordingStore>();
+builder.Services.AddScoped<Genisis.Api.Membership.IEnquiryTabsService, Genisis.Api.Membership.EnquiryTabsService>();
+builder.Services.AddScoped<Genisis.Api.Bordx.BordxAsciiExporter>();
+builder.Services.AddScoped<Genisis.Api.Bordx.IBordxService, Genisis.Api.Bordx.BordxService>();
+builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingRepository, Genisis.Api.Tracking.TrackingRepository>();
+builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingService, Genisis.Api.Tracking.TrackingService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();
@@ -53,7 +63,9 @@ builder.Services.AddAuthorization(options =>
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 
-builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>());
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

@@ -10,6 +10,8 @@ public static class AccessRight
     public const int MembershipRegistration = 1;
     public const int MembershipAdjustment = 2;
     public const int MembershipEnquiry = 3;
+    public const int MembershipUploadBordx = 4;
+    public const int MembershipTracking = 14;
 
     /// <summary>Maintenance > Plan uses the same position as Registration in the desktop menu.</summary>
     public const int PlanMaintenance = 1;
@@ -17,6 +19,9 @@ public static class AccessRight
     /// <summary>Maintenance > Benefits also checks position 1 in the desktop menu (mnuBenefits_Click).</summary>
     public const int BenefitsMaintenance = 1;
 
+    /// <summary>Maintenance > Entity (mnuAgent_Click) and Maintenance > Accounts (MaintenanceAccounts_Click) check position 1 too.</summary>
+    public const int EntityMaintenance = 1;
+    public const int AccountsMaintenance = 1;
     /// <summary>Case > Inquiry (frmCaseInquiry) checks position 7 in mdiMain.</summary>
     public const int CaseEnquiry = 7;
 
@@ -63,6 +68,8 @@ public class RequireAccessAttribute(int position, params int[] alternatives) : A
     public void OnAuthorization(AuthorizationFilterContext context)
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true) return;
+        if (!AccessRight.Has(context.HttpContext.User, position))
+            context.Result = new ObjectResult(Genisis.Api.Common.Errors.Problems.Create(context.HttpContext, StatusCodes.Status403Forbidden, "Forbidden", "Access Denied!")) { StatusCode = StatusCodes.Status403Forbidden };
         if (!Positions.Any(p => AccessRight.Has(context.HttpContext.User, p)))
             context.Result = new ObjectResult(new { message = "Access Denied!" }) { StatusCode = StatusCodes.Status403Forbidden };
     }

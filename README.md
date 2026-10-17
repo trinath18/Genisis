@@ -116,6 +116,14 @@ The update runs in one transaction (the desktop ran ~15 uncommitted writes acros
 "Upd &Add" button (no handler in the desktop), the SOAP device push, and client-side folder browsing (replaced by
 document list/upload/download endpoints). See `docs/case-adjustment-migration.md` for the full mapping.
 
+## Case screens (Panel Hospitals, Non-Disclosure, Pay & Claim, MMA/CPT, Audit Review, Transfer, Listing, Claim/Case ASCII)
+
+Nine more Case menu items are served under `/api/case/{panel-hospitals,non-disclosure,pay-claim,mma-cpt,audit-review,transfer,listing,claim-ascii,case-ascii}`
+(plus `GET /api/case/payors`). Writes run in one transaction across HISDB / HISMaintenance / HISWorkSheet through synonyms. The two ASCII exports write the
+payor file to `Ascii:ClaimFolder` / `Ascii:CaseFolder` (default `ClaimASCI` / `CaseASCII` under `Documents:RootPath`) and the UI downloads it.
+Endpoint-by-endpoint mapping, SQL objects, access positions and every deliberate difference from the desktop are in
+[../docs/case-remaining-screens-backend.md](../docs/case-remaining-screens-backend.md).
+
 ## Database procedures
 
 The API uses stored procedures in a `genisis` schema. Before starting a new version, run `sql/genisis-main.sql` on the
@@ -129,8 +137,19 @@ main database and `sql/genisis-maintenance.sql` on the maintenance database in S
 
 Produces `publish\Genisis\Genisis.Api.exe` with the UI in `wwwroot`. No .NET install is needed on the target PC.
 
+## Logging and errors
+
+Serilog writes to the console and to `logs/genisis-.log` (daily, 30 files; configure in the `Serilog` section). Every request is logged with its status, time and user; sign-ins are audited.
+Controllers do not catch exceptions: services throw `NotFoundException` / `ConflictException` / `BusinessRuleException` (400 / 404 / 409 with the message to show) and
+`ApiExceptionHandler` maps database errors (too-long text, deadlock, timeout, missing procedures) and hides everything else behind "Server error. Check the API log for details."
+See [../docs/exception-handling-and-logging.md](../docs/exception-handling-and-logging.md).
+
 ## Tests
 
 ```
 dotnet test
 ```
+
+Unit, service (fake repositories), integration (`WebApplicationFactory`) and architecture tests need no database; the database tests run when `GENISIS_TEST_MAINDB`
+(and `GENISIS_TEST_MAINTENANCE`, `GENISIS_TEST_WORKSHEET`) are set and roll every write back. CI: `.github/workflows/ci.yml`.
+Start with [../docs/onboarding.md](../docs/onboarding.md) and [../docs/architecture.md](../docs/architecture.md).

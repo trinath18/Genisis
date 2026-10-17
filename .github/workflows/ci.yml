@@ -1,0 +1,67 @@
+name: API CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Genisis.sln
+
+      - name: Build (warnings are errors; XML docs are mandatory in the layered code)
+        run: dotnet build Genisis.sln --no-restore -c Release -warnaserror
+
+      - name: Formatting (whitespace) of the layered code
+        run: >
+          dotnet format whitespace Genisis.sln --verify-no-changes --no-restore
+          --include src/Genisis.Api/Common src/Genisis.Api/Data src/Genisis.Api/Case/Ascii src/Genisis.Api/Case/AuditReview
+          src/Genisis.Api/Case/Listing src/Genisis.Api/Case/Lookups src/Genisis.Api/Case/Mma src/Genisis.Api/Case/NonDisclosure
+          src/Genisis.Api/Case/PanelHospitals src/Genisis.Api/Case/PayClaim src/Genisis.Api/Case/Transfer
+
+      - name: Test (unit, integration and architecture tests; the database tests skip themselves without GENISIS_TEST_MAINDB)
+        run: dotnet test Genisis.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-test-results
+          path: TestResults
+
+  database-tests:
+    name: Database tests (self-hosted runner with access to the development SQL Server)
+    if: ${{ vars.GENISIS_DB_RUNNER == 'true' }}
+    runs-on: [self-hosted, windows]
+    needs: build-and-test
+    env:
+      GENISIS_TEST_MAINDB: ${{ secrets.GENISIS_TEST_MAINDB }}
+      GENISIS_TEST_MAINTENANCE: ${{ secrets.GENISIS_TEST_MAINTENANCE }}
+      GENISIS_TEST_WORKSHEET: ${{ secrets.GENISIS_TEST_WORKSHEET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test against the real databases (every write runs in a rolled-back transaction)
+        run: dotnet test Genisis.sln -c Release --logger "trx;LogFileName=db-results.trx" --results-directory TestResults
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-db-test-results
+          path: TestResults

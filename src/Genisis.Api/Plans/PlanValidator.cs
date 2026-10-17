@@ -14,6 +14,8 @@ public static class PlanValidator
         _ => [],
     };
 
+    /// <summary>Checks a plan request in the desktop's order and returns the first message, or null.</summary>
+    /// <param name="r">The plan request.</param>
     /// <param name="update">Editing one existing row: No of Plan Code is only used to generate new codes, so it is not checked.</param>
     public static string? Validate(PlanCreateRequest r, bool update = false)
     {

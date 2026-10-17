@@ -74,7 +74,7 @@ public class CaseRegistrationRequest
 
 public record CaseRegistrationResult(string CaseNumber);
 
-public class CaseRegistrationException(string message) : Exception(message);
+public class CaseRegistrationException(string message) : Genisis.Api.Common.BusinessRuleException(message);
 
 /// <summary>Required-field checks of NewCaseAddmission, in the desktop order and with its messages.</summary>
 public static class CaseRegistrationValidator

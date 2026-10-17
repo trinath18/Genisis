@@ -8,7 +8,7 @@ namespace Genisis.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(DbConnections db, TokenService tokens) : ControllerBase
+public class AuthController(DbConnections db, TokenService tokens, ILogger<AuthController> log) : ControllerBase
 {
     public record LoginRequest(string UserCode, string Password);
     public record ChangePasswordRequest(string UserCode, string Password, string NewPassword);
@@ -24,13 +24,20 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
 
         var usr = await FindActiveUser(request.UserCode);
         if (usr is null)
+        {
+            log.LogWarning("Login refused: unknown or inactive user {UserCode} from {RemoteIp}", Shorten(request.UserCode), RemoteIp);
             return Unauthorized(new { message = "Invalid User Name!! Please enter again.." });
+        }
         if (!LegacyCrypt.Matches(request.Password ?? "", usr.USRPassword))
+        {
+            log.LogWarning("Login refused: wrong password for {UserCode} from {RemoteIp}", usr.USRCode.Trim(), RemoteIp);
             return Unauthorized(new { message = "Invalid Password!! Please enter again.." });
+        }
         if (usr.USRLogonCHGStatus?.Trim() == "1")
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { message = "You are required to change your password", mustChangePassword = true });
 
+        log.LogInformation("{UserCode} logged in from {RemoteIp}", usr.USRCode.Trim(), RemoteIp);
         return Ok(CreateSession(usr));
     }
 
@@ -43,12 +50,16 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
 
         var usr = await FindActiveUser(request.UserCode);
         if (usr is null || !LegacyCrypt.Matches(request.Password ?? "", usr.USRPassword))
+        {
+            log.LogWarning("Password change refused for {UserCode} from {RemoteIp}", Shorten(request.UserCode), RemoteIp);
             return Unauthorized(new { message = "Invalid User Name or Password" });
+        }
 
         await using var conn = db.Maintenance();
         await conn.ProcScalarAsync<int>("genisis.User_ChangePassword",
             new { pwd = LegacyCrypt.Encrypt(request.NewPassword).ToUpperInvariant(), code = usr.USRCode });
 
+        log.LogInformation("{UserCode} changed the password from {RemoteIp}", usr.USRCode.Trim(), RemoteIp);
         return Ok(CreateSession(usr));
     }
 
@@ -60,6 +71,10 @@ public class AuthController(DbConnections db, TokenService tokens) : ControllerB
         userName = User.FindFirst("name")?.Value,
         access = User.FindFirst(TokenService.AccessClaim)?.Value,
     });
+
+    private string? RemoteIp => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    private static string Shorten(string? userCode) => (userCode ?? "").Trim() is { Length: > 30 } text ? text[..30] : (userCode ?? "").Trim();
 
     private async Task<UsrRow?> FindActiveUser(string userCode)
     {

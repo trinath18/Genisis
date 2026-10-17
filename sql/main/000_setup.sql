@@ -4,6 +4,9 @@
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
+-- The worksheet and payment databases are optional: the screens that read them need them, the synonyms are skipped when absent.
+DECLARE @WorkSheetDb sysname = N'HISWorkSheet';
+DECLARE @PaymentDb sysname = N'HISPayment';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -42,7 +45,21 @@ FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCate
     (N'Maint_CASLG', N'CASLG'), (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'),
     (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'), (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'),
     (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason')) v (s, t);
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'),
+    (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_MMAFees', N'MMAFees')) v (s, t);
+EXEC (@sql);
+
+SET @sql = N'';
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(d) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'WS_Claim', @WorkSheetDb, N'Claim'), (N'WS_ClaimInvoice', @WorkSheetDb, N'ClaimInvoice'),
+    (N'WS_ClaimApprove', @WorkSheetDb, N'ClaimApprove'), (N'WS_Bordx', @WorkSheetDb, N'Bordx'),
+    (N'WS_BordxSEQ', @WorkSheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorkSheetDb, N'CLMAsciiSEQ'),
+    (N'WS_PendingBordx', @WorkSheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorkSheetDb, N'VIEW_WS_PendingBordxIB'),
+    (N'WS_CLMReport', @WorkSheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorkSheetDb, N'VIEW_CLMReportCasNew'),
+    (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
+WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N').';
 GO

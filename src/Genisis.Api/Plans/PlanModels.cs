@@ -72,4 +72,4 @@ public class PlanSearch
     public string? DisIndicator { get; set; }
 }
 
-public class PlanException(string message) : Exception(message);
+public class PlanException(string message) : Genisis.Api.Common.BusinessRuleException(message);

@@ -7,13 +7,8 @@ namespace Genisis.Api.Auth;
 /// <summary>Menu access positions in USR.USRAccess (legacy VB6 CheckAccess).</summary>
 public static class AccessRight
 {
-    public const int MembershipRegistration = 1;
-    public const int MembershipAdjustment = 2;
-    public const int MembershipEnquiry = 3;
-    public const int MembershipUploadBordx = 4;
-    public const int MembershipTracking = 14;
 
-    /// <summary>Maintenance > Plan uses the same position as Registration in the desktop menu.</summary>
+    /// <summary>Maintenance > Plan checks position 1 in the desktop menu (MaintenancePlan_Click).</summary>
     public const int PlanMaintenance = 1;
 
     /// <summary>Maintenance > Benefits also checks position 1 in the desktop menu (mnuBenefits_Click).</summary>

@@ -129,7 +129,7 @@ public class ReadProcedureTests
     }
 
     [Fact]
-    public async Task Login_and_enquiry_procedures_run()
+    public async Task Login_procedure_runs()
     {
         var maintenance = Environment.GetEnvironmentVariable("GENISIS_TEST_MAINTENANCE");
         if (MainDb is null || maintenance is null) return;
@@ -140,17 +140,5 @@ public class ReadProcedureTests
             var user = await m.QuerySingleAsync("genisis.User_GetActive", new { code }, commandType: System.Data.CommandType.StoredProcedure);
             Assert.Equal(code, (string)user.USRCode);
         }
-        var db = new Genisis.Api.Data.DbConnections(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MainDb"] = MainDb, ["ConnectionStrings:Maintenance"] = maintenance }).Build());
-        var c = new Genisis.Api.Controllers.MembershipController(db, new Genisis.Api.Membership.EnquiryTabsService(db,
-            new Genisis.Api.Membership.PolicyWordingStore(Microsoft.Extensions.Options.Options.Create(new Genisis.Api.Membership.DocumentOptions()))));
-        object? Value(Microsoft.AspNetCore.Mvc.IActionResult r) => Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(r).Value;
-        var found = Assert.IsAssignableFrom<System.Collections.IList>(Value(await c.Search("UBHA0077475", "number")));
-        Assert.NotEmpty(found);
-        const string member = "UBHA0077475*05";
-        foreach (var r in new[] { await c.Get(member), await c.Adjustments(member), await c.MemberHistory(member), await c.Account(member), await c.Notes(member) })
-            Assert.NotNull(Value(r));
-        var history = Value(await c.MemberHistory(member))!;
-        Assert.NotEmpty((System.Collections.IEnumerable)history.GetType().GetProperty("principal")!.GetValue(history)!);
     }
 }

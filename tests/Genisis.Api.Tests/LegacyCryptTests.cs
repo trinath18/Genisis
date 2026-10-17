@@ -29,10 +29,10 @@ public class LegacyCryptTests
 public class AccessRightTests
 {
     [Theory]
-    [InlineData("111", AccessRight.MembershipEnquiry, true)]
-    [InlineData("110", AccessRight.MembershipEnquiry, false)]
-    [InlineData("11", AccessRight.MembershipEnquiry, false)]
-    [InlineData(null, AccessRight.MembershipRegistration, false)]
+    [InlineData("0000001", AccessRight.CaseEnquiry, true)]
+    [InlineData("1111110", AccessRight.CaseEnquiry, false)]
+    [InlineData("111111", AccessRight.CaseEnquiry, false)]
+    [InlineData(null, AccessRight.PlanMaintenance, false)]
     public void Has_reads_position(string? access, int position, bool expected) =>
         Assert.Equal(expected, AccessRight.Has(access, position));
 }

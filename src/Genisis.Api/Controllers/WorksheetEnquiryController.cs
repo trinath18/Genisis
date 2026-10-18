@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Genisis.Api.Controllers;
 
-/// <summary>Worksheet > Worksheet Enquiry (legacy frmWorksheetEnq): a read-only view of a saved worksheet.</summary>
+/// <summary>
+/// Worksheet > Worksheet Enquiry (legacy frmWorksheetEnq): a read-only view of a saved worksheet. Worksheet Adjustment shows a worksheet through the same
+/// endpoints, so either right opens them.
+/// </summary>
 [Route("api/worksheet/enquiry")]
-[RequireAccess(AccessRight.WorksheetEnquiry)]
+[RequireAccess(AccessRight.WorksheetEnquiry, AccessRight.WorksheetAdjustment)]
 public class WorksheetEnquiryController(EnquiryService service) : ApiControllerBase
 {
     /// <summary>cmdSearchCase_Click: the cases that match the text.</summary>

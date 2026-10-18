@@ -1,3 +1,4 @@
+using Genisis.Api.Worksheet.Adjustment;
 using Genisis.Api.Worksheet.Engine;
 using Genisis.Api.Worksheet.Enquiry;
 using Genisis.Api.Worksheet.Lookups;
@@ -21,6 +22,9 @@ public static class WorksheetServiceCollectionExtensions
 
         services.AddSingleton<IWorksheetEngineRepository, WorksheetEngineRepository>();
         services.AddScoped<WorksheetEngineService>();
+
+        services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
+        services.AddScoped<WorksheetAdjustmentService>();
 
         services.AddSingleton<IEnquiryRepository, EnquiryRepository>();
         services.AddScoped<EnquiryService>();

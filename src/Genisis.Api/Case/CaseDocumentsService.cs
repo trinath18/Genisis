@@ -213,17 +213,22 @@ public class CaseDocumentsService(DbConnections db, CaseRegistrationService regi
 
     /// <summary>The adjustment cmdLG_Click after frmGLMenu: re-issue the GL of the same purpose or take a new LG
     /// sequence, close the open GL of another purpose, write CASLG with the request details and mark the case
-    /// "GL ISSUED" — all in one transaction — then notify the member and build the letter.</summary>
-    public async Task<CaseGLResult> IssueGLAsync(string cas, CaseGLRequest req, string userCode, string userName)
+    /// "GL ISSUED" — all in one transaction — then notify the member and build the letter. With <paramref name="worksheetVersion"/> it is Worksheet Adjustment's
+    /// Final LG (cmdFinalLG_Click): the form's patient, hospital and admission checks are the caller's, and in place of "GL ISSUED" the same transaction gives the
+    /// version's invoices the LG number and marks the case "FINAL GL Issued" with its worksheet done.</summary>
+    public async Task<CaseGLResult> IssueGLAsync(string cas, CaseGLRequest req, string userCode, string userName, int? worksheetVersion = null)
     {
         cas = cas.Trim();
         var r = req.Form;
         var (_, _, lastPurpose) = await GLDefaultsAsync(cas);
         if (CaseGLRules.Validate(req, lastPurpose) is { } error) throw new CaseRegistrationException(error);
         if (S(r.MbmNumber).Length == 0) throw new CaseRegistrationException("Please Enter Membership Information");
-        if (S(r.CoverId).Length == 0) throw new CaseRegistrationException("Please Enter Patient Information");
-        if (S(r.HospitalCode).Length == 0) throw new CaseRegistrationException("Please Enter Hospital Information");
-        if (r.DateAdmitted is null) throw new CaseRegistrationException("Please Enter Admission Date");
+        if (worksheetVersion is null)
+        {
+            if (S(r.CoverId).Length == 0) throw new CaseRegistrationException("Please Enter Patient Information");
+            if (S(r.HospitalCode).Length == 0) throw new CaseRegistrationException("Please Enter Hospital Information");
+            if (r.DateAdmitted is null) throw new CaseRegistrationException("Please Enter Admission Date");
+        }
 
         await using var main = db.MainDb();
         await main.OpenAsync();
@@ -262,8 +267,11 @@ public class CaseDocumentsService(DbConnections db, CaseRegistrationService regi
                     LGRequestBy = S(req.RequestBy), LGFaxDate = req.FaxDate?.Date, LGFaxTime = S(req.FaxTime),
                     LGDelayReason = S(req.DelayReason), LGPurpose = purpose,
                 }, tx, commandType: CommandType.StoredProcedure);
-                await main.ExecuteAsync("genisis.CaseAdj_SetProgress", new { cas, isLGIssued = "1", progress = "GL ISSUED" },
-                    tx, commandType: CommandType.StoredProcedure);
+                if (worksheetVersion is { } version)
+                    await main.ExecuteAsync("genisis.WorksheetFinalLg_Mark", new { cas, version, lgNumber }, tx, commandType: CommandType.StoredProcedure);
+                else
+                    await main.ExecuteAsync("genisis.CaseAdj_SetProgress", new { cas, isLGIssued = "1", progress = "GL ISSUED" },
+                        tx, commandType: CommandType.StoredProcedure);
                 await tx.CommitAsync();
             }
             catch (Exception ex)

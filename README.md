@@ -244,7 +244,7 @@ Nine more Case menu items are served under `/api/case/{panel-hospitals,non-discl
 (plus `GET /api/case/payors`). Writes run in one transaction across HISDB / HISMaintenance / HISWorkSheet through synonyms. The two ASCII exports write the
 payor file to `Ascii:ClaimFolder` / `Ascii:CaseFolder` (default `ClaimASCI` / `CaseASCII` under `Documents:RootPath`) and the UI downloads it.
 Endpoint-by-endpoint mapping, SQL objects, access positions and every deliberate difference from the desktop are in
-[../docs/case-remaining-screens-backend.md](../docs/case-remaining-screens-backend.md).
+[docs/case-remaining-screens-backend.md](docs/case-remaining-screens-backend.md).
 
 ## Database procedures
 
@@ -264,7 +264,7 @@ Produces `publish\Genisis\Genisis.Api.exe` with the UI in `wwwroot`. No .NET ins
 Serilog writes to the console and to `logs/genisis-.log` (daily, 30 files; configure in the `Serilog` section). Every request is logged with its status, time and user; sign-ins are audited.
 Controllers do not catch exceptions: services throw `NotFoundException` / `ConflictException` / `BusinessRuleException` (400 / 404 / 409 with the message to show) and
 `ApiExceptionHandler` maps database errors (too-long text, deadlock, timeout, missing procedures) and hides everything else behind "Server error. Check the API log for details."
-See [../docs/exception-handling-and-logging.md](../docs/exception-handling-and-logging.md).
+See [docs/exception-handling-and-logging.md](docs/exception-handling-and-logging.md).
 
 ## Tests
 
@@ -274,4 +274,4 @@ dotnet test
 
 Unit, service (fake repositories), integration (`WebApplicationFactory`) and architecture tests need no database; the database tests run when `GENISIS_TEST_MAINDB`
 (and `GENISIS_TEST_MAINTENANCE`, `GENISIS_TEST_WORKSHEET`) are set and roll every write back. CI: `.github/workflows/ci.yml`.
-Start with [../docs/onboarding.md](../docs/onboarding.md) and [../docs/architecture.md](../docs/architecture.md).
+Start with [docs/onboarding.md](docs/onboarding.md) and [docs/architecture.md](docs/architecture.md).

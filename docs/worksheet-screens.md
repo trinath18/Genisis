@@ -1,0 +1,285 @@
+# Worksheet menu — migration notes (phases 1 and 2: Tracking, Send to A/C, Send to A/R, Enquiry)
+
+Scope: the **Worksheet** top menu of `mdiMain.frm`. `VB6-MenuItems.xlsx` marks six of its nine rows **Required**
+(column P = `Y`): Worksheet Registration, WorkSheet Adjustment, Worksheet Enquiry, Worksheet Send to A/C, Worksheet Send to A/R and
+Worksheet Tracking. The other three (the top-level row, Generate Credit/Debit Note, Tracking (Jupiter)) are not required and not built.
+
+| Menu item | Control | VB6 form chosen | Web route | Access | Status |
+|---|---|---|---|---:|---|
+| Worksheet Tracking | `mnuWksTracking` | `FrmWorksheetTracking` | `/worksheet/tracking` | 24 | **Migrated** (phase 1) |
+| Worksheet Send to A/C | `mnuWSToAC` | `FrmWksSendToAC` | `/worksheet/send-to-accounts` | 24 | **Migrated** (phase 1) |
+| Worksheet Send to A/R | `mnuWSReturnCLM` | `FrmARRecFrCLM` | `/worksheet/send-to-ar` | 24 | **Migrated, reduced** (phase 1, see below) |
+| Worksheet Enquiry | `mnuWSEnq` | `frmWorksheetEnq` (about 20,000 lines) | `/worksheet/enquiry` | 13 | **Migrated, read-only** (phase 2, see below) |
+| Worksheet Registration | `mnuNewWorksheet` | `frmWorksheetRegGST2015` (22,253 code lines) | `/worksheet/registration` | 22 | Phase 3 (menu entry present, page not built) |
+| Worksheet Adjustment | `mnuWSAdjust` | `frmWorksheetAdj2013` / `frmWorksheetAdjGST` (19,818 / 20,957 code lines) | `/worksheet/adjustment` | 23 | **Partly migrated** (phase 3: viewing and the Update button; Approve, notes and letters not yet, see below) |
+
+## How the desktop wires these items (and what was decided)
+
+- Only `mnuWSEnq` has a `_Click` handler in `mdiMain.frm` (`CheckAccess(13)`, opens `frmWorksheetEnq`). `mnuNewWorksheet`, `mnuWSAdjust` and
+  `mnuWksTracking` have none, the Worksheet parent menu (`Claim`) is `Visible = 0` in the designer, and `mnuWSToAC` / `mnuWSReturnCLM` are hidden too.
+- `Medix.bas` `SearchForm` (the scan-code dispatcher) opens Tracking for `LOW003` (`CheckAccess(24)`); its branches for Registration (`LOW001`, position 22) and
+  Adjustment (`LOW002`, position 23) are commented out. Those positions are used here, because they are what the desktop last checked for those screens.
+- Send to A/C and Send to A/R are never opened by any code (`.Show` is never called for `FrmWksSendToAC` / `FrmARRecFrCLM`). They are gated like their sibling, Tracking
+  (position 24), as was done for the Case screens without a handler. `AccessRight.cs` and `access.ts` hold the values.
+- Form versions: the project contains up to eight registration forms and five adjustment forms (`frmNewWorksheet…`, `frmWorksheetReg2012…`, `…GST`, `…GST2015`;
+  `frmNewWSAdjust…`, `frmWorksheetAdj2012…`, `…2013`, `…GST`). The `…v2` / `…2010V2` / `…2015v2` forms are designer-only shells (no code). The newest registration form
+  (`frmWorksheetRegGST2015`) hands over to `frmWorksheetAdj2013`, so that pair is the live flow; the older versions are listed in the redundancy report as removal candidates.
+
+## What changed from the desktop, and why
+
+| Desktop | Web | Why |
+|---|---|---|
+| Tracking and Send to A/C built a `WHERE` clause as text and ran it as SQL (Tracking through `dbo.WorksheetTracking`, which executes the text) | Typed parameters on `genisis.WorksheetTracking_Search` / `WorksheetAccounts_Search` / `WorksheetAr_Search` | SQL injection; the repository rule "never call a procedure that appends raw text" |
+| Tracking "Ins Type" from/to read `txtINSCode1/2`, controls that do not exist (and the form has no `Option Explicit`), so the filter never applied | The filter works (`INSCode` between the two chosen types) | An obvious defect; the drop-downs were on screen but did nothing |
+| Tracking group-company list: one entry per worksheet (a company repeated for each of its worksheets), loaded only after ticking a box | Distinct, sorted list loaded when a payor is chosen | Usability |
+| Send to A/C grid wrote the bordx number into the Status column and left the Bordx No column empty | Status and Bordx No are separate columns | Defect |
+| Send to A/C list repeated a worksheet once per hospital / member payment row (31,646 view rows for 31,208 worksheets), so totals doubled and a ticked repeat was sent twice (two remark lines) | One row per worksheet, showing its latest cheque dates | Defect found by the browser test (payor AC: 495 rows, 492 worksheets) |
+| Ticking a bordxed (Tracking) or already sent (Send to A/C) worksheet was refused only in the grid | Also refused by the stored procedure (`Result = 2`) | Rules belong on the server |
+| Nothing ticked after the confirmation: the desktop silently did nothing | "Please select at least one record to be updated!" before the confirmation | Usability |
+| Update loops ran one statement per ticked row on up to four connections with no transaction | One transaction on the main connection (cross-database objects through `genisis.WS_*` / `Maint_*` synonyms); any refusal rolls everything back | Integrity |
+| "Stop", "Check All", "Print" (report) buttons; list refilled one row at a time with `DoEvents` | Select-all header box, CSV export ("Print to File"), the whole result at once; at most 5,000 rows with a notice ("narrow the search") | Modern equivalents; the desktop loaded every row |
+| `Format(txt, "mm/dd/yyyy")` string dates in SQL | `datetime` parameters; dates still typed and shown as `dd/mm/yyyy` | Safety |
+| Scan code typed in the Tracking "Wks No" box (`LOC001`, `LOW003` …) opens another screen | Same shortcut for every code the web app knows (`lib/scanCodes.ts`); unmigrated screens are named in a message | Hidden interaction preserved (`SearchForm`) |
+| The commented-out `CmdPrint_Click`, the hidden controls (`cmdPrint`, `lblTotal`, `Label22`, `txtNoofDay`) and the Stop button with its `intExit` / `DoEvents` loop | Not migrated | Dead code or replaced (see the redundancy report) |
+
+### Behaviour kept exactly, including quirks
+
+- **Tracking update** writes the same four places: `Claim` (pending date, status, user), `ClaimInvoice.CLMInvPending`, `CAS.CASPending = 'N'`
+  and `CASCrossReference.CASPending = 'N'` — the case flag is cleared whichever status is chosen, as in `UpdateCLM`.
+- **Send to A/C remarks** (`UpdateSentAC`): the line `dd/mm/yyyy         FILE  -  <case>-<version> SENT TO ACCOUNT ON <date>` is appended to the first
+  remark page with room, chosen from the lengths of the six remark pages with the same thresholds (1,800) and order; the desktop never measured the sixth
+  page, so its first rule only looks at page five. The remark line **and the whole page it is added to are trimmed and upper-cased** (`ChkStr`).
+  The Listing screen (`CaseListing_Apply`) uses a different page order and is left as migrated.
+- "0 - Both" in the token-status drop-down keeps status 0 and 1 only (rows with no status are excluded), as the desktop's SQL did; the default is Both.
+- "No of Days (DOR - DClose)": a worksheet closed the day it was registered shows 1, not 0.
+- "is empty" tests on a date column also match 1900-01-01, which is how `= ''` read a date column.
+
+### Worksheet Send to A/R — reduced
+
+`FrmARRecFrCLM` reads `CASOthers.CASDTC` and, on update, copies the invoice number, date and amount into `CASOthers.CASINVNo` / `InvDate` / `CASInvAmt`.
+**Those four columns do not exist in this database** (and none of its 39,054 `CASOthers` rows has `CASDRC` or `CASRecStatus` set), so the desktop form
+would fail on its first search here. The web screen uses the three columns that do exist: it lists case number, **Date Send to A/R** (`CASDRC`), **Passed By**
+(`CASRecBy`) and status (`CASRecStatus`), and **Update** sets `CASDRC` = today, `CASRecStatus` = `1`, `CASRecBy` = the user. The "Date Returned to CLM" column and
+the invoice copy are not available. `VIEW_ARReport` reads `CASDRC`, and `FrmAuditReviewReport` counts by `MONTH(CASDRC)`, so the date written is used.
+If production turns out to have the four columns, the screen can be extended without changing its shape.
+
+## Worksheet Enquiry (phase 2)
+
+`frmWorksheetEnq` is a 20,000-line clone of the Adjustment editor: it keeps the whole editing code (`SaveClaim`, `UpdateMBMBalance`, letters, Word and Excel
+automation) and hides the editing buttons in the designer (`cmdApprove`, `cmdUpdate`, `cmdEmail`, CN / DN Note, HOS CR / DR Note, Final LG, Exc Letter, Chq Letter are
+`Visible = 0`). What a user can do is **Go, Search, Case Enq, MBM Enq, Export and Exit**. The web Enquiry migrates exactly that; the editing half belongs to Phase 3
+(Adjustment) and the Case module (letters). Nothing on the page can change data.
+
+Layout, as in the desktop: Case Num / Version / Clm Type / WS CLM / Ex-Gratia on top, six tabs (**Invoices & Diagnosis, Worksheet, Reimbursement Not Cover, Topup,
+Remarks, LG Listing**) and the payment / address panel underneath.
+
+| Shown | Read from |
+|---|---|
+| Case, member, policy, hospital, plan, claimability, balance limits | `genisis.WorksheetEnquiry_Header` over `VIEW_Claim_MBM_Case_worksheetAdjustment`, `PolicyStatus`, `AnnualLimit`, `MBMLifeTime` |
+| Diagnoses (first and final, three each) | `DIAFirst`, `DIAFinal` |
+| Invoices and the "not covered" items | `View_CAS_Invoice` (synonym `genisis.WS_CASInvoice`) |
+| Benefit grid: limit, actual, approved, payable to hospital, due to / (from) member | `ClaimLimit`, `ClaimActual`, `ClaimApprove`, `ClaimHos`, `ClaimMember` |
+| Summary rows under the grid | `Claim` (added up over the versions shown) |
+| Payee, address, remarks, note, payment mode | `ClaimOthers` |
+| Guarantee letters | `genisis.CaseAdj_LGList` (the Case Adjustment procedure, reused) |
+
+The 29 grid rows map to the columns the desktop's save routines write (`saveActual`, `saveApprove`, `saveHos`, `saveMember`, `saveLimit`): row 1 Room & Board …
+row 25 Emergency Sickness Treatment, 26 Others - No Co-Pay, 27 to 29 the service taxes. Amounts are stored as the text the grid showed (`1,200.00`, `-`, `(50.00)`),
+so `genisis.Worksheet_Amount` parses them (the older `Util_SafeDecimal` read `1,200.00` as 0).
+
+### The main decision: saved figures, not a recalculation
+
+The desktop recalculated a single version's worksheet on every view (`getDatatoWS`, `getFinalTotal` and their helpers: about 3,000 lines of plan rules for approved = lower of
+actual and limit, co-payment, excess, limit exceeded, top-up). The web Enquiry shows what was **saved** with the worksheet: the same tables the desktop's own Master
+view reads, and the figures payment, bordx and the ASCII files use. Checked against the data: for 300 randomly chosen worksheets the actual amounts of the grid add up
+to the total actual saved on the Claim row in 300 of 300, and the approved amounts to the saved total approved in 288 (the other 12 are worksheets whose approved total
+the member's limit capped). An automated test repeats the check on 150 worksheets. The calculation engine is written in Phase 3, where Registration and Adjustment need it to save.
+
+| Desktop | Web | Why |
+|---|---|---|
+| Version `n` is one worksheet; `Mn` adds versions 1 to n; `Master` adds them all | Same. The header is that of version n (the last version for Master); invoices are those of version n (every accepted invoice for Mn and Master) | Kept |
+| Clm Type (Both / Cashless / Reimbursement) recomputed the grid from the filtered invoices | Filters the invoice list only; the grid shows the whole saved worksheet | The saved worksheet cannot be split by claim type |
+| Master view (`getActual`) put `CLMPreHSAmt` in row 7 and skipped row 6; the save routines store it in row 6 and `CLMPreHosp` in row 7 | Follows the save routines | The amounts sit in the row they were saved from |
+| Bal Lmt, Lifetime Lmt: live limits, with top-up balances added by about 300 lines of branches | Bal Lmt follows the same rules for members without a top-up (a "Q" member of a supplementary plan with limit status B / C and a dependant patient uses the covered person's limit); the top-up balance is shown on the Topup tab from the saved worksheet | Informational fields; the top-up figures are saved with the worksheet |
+| "Per Dis. Bal Lmt" | Not shown | Its assignment is commented out in the desktop: it only ever showed 0 |
+| Days/Mths column built from the plan's per-day rate text | The saved day counts (room and board, ICU, physician visits, kidney months, cash days, guardian days) | The plan text is not saved |
+| Export wrote an Excel workbook (about 1,800 lines of automation) | CSV of the grid, its totals and the summary (opens in Excel); off for Master as in the desktop | Browser equivalent |
+| Double-clicking a guarantee letter reprinted it through Word | The list is read-only; letters are issued and reprinted from Case Adjustment | Word automation is not migrated |
+| `lstFollowUp` (follow-up list under LG Listing) | Not migrated | Never populated by the form |
+| Search button opened `frmCASList` (raw SQL text) | Case Search dialog on `genisis.WorksheetEnquiry_Cases` (parameters; number, member, patient, I/C or policy; shows how many worksheets each case has) | Parameterised |
+| Case Enq / MBM Enq filled the other form's number and pressed Show | Same: `/case/enquiry?cas=` and `/membership/enquiry?mbm=` (Membership Enquiry now reads the URL) | Kept |
+
+Messages kept: "Record not found!" (no worksheet, or its case or member is missing: the desktop query joins them), "Please select a Case Number !", "Please select a
+version nombor!", "GL is NOT allowed for this member" (shown after loading when the member may not have a guarantee letter), and the scan-code shortcut in Case Num.
+For payor IB rows 16 and 24 are renamed Psychiatric and Maternity, as in the desktop. Bordx Ind is shown for payors MH and IB.
+
+Endpoints (position 13): `GET api/worksheet/enquiry/cases?by=&q=` and `GET api/worksheet/enquiry/{case}?version=&claimType=`.
+
+
+## Worksheet Adjustment (phase 3, partly migrated)
+
+`frmWorksheetAdj2013` (22,719 lines) is the editing twin of the Enquiry form: the same header, six tabs and payment panel, with the buttons the Enquiry hides. The desktop
+opens it from **Case > Case Review (Inpatient)** (`mnuWSInq`, position 5, listed as not required); the Worksheet > Worksheet Adjustment item (`mnuWSAdjust`) has no click
+handler and is hidden, so it is gated like its siblings with position 23 (scan code LOW002). `frmWorksheetAdjGST` is the GST variant of the same form and is not opened by any menu.
+
+| Button of the desktop form | Web | Notes |
+|---|---|---|
+| Go, Search, Case Enq, MBM Enq, Export, the grid, all tabs | **Migrated**: the Adjustment page is the Enquiry page | Read-only views are shared; the read endpoints accept position 13 (Enquiry) or 23 (Adjustment) |
+| **Update** (`cmdUpdate_Click` / `SaveOtherInfo`) | **Migrated**: payment details, member's address, note and remarks of one version | Details below |
+| Approve (`cmdApprove_Click`: `SaveClaim`, `saveActual` ... `saveLimit`, `UpdateMBMBalance`, `savePayMBMStatus`) | Not migrated | Needs the calculation engine with the plan limits and co-payment (see Phase 3 below) and writes the member's balances |
+| Credit Note, Debit Note, Exc Letter (`cmdCredit_Click`, `cmdDebit_Click`, `cmdExcLetter_Click`) | **Migrated** (step 2): printable pages built from the same data | The Excel / Word templates are not in the source package; see "step 2" below |
+| **Final LG** (`cmdFinalLG_Click`) | **Migrated** (step 3) | The existing guarantee letter dialog and code, with the worksheet's checks and marks; see "step 3" below |
+| Email, Cheque letter, OMNI update | Not migrated | Outlook / Word automation or OMNI-only |
+
+**Update.** It saves, for one numeric version, the last document date (only when one is given, so it cannot be cleared), pay-to, GP, bank, account number, payment mode,
+attention, the member's three address lines, post code, city, state, the note, and the worksheet and credit/debit-note remarks, in one transaction
+(`genisis.WorksheetAdjustment_UpdatePayment`; empty text is stored as empty text, as the desktop did; the remarks and address go to `ClaimOthers` only when the version has a row there).
+The desktop's checks run in its order and only when the invoices of the version are paid to the member (`MBMHosStatus` = M, the pay-to of the last invoice): a bank without an account
+number ("Please Enter Bank Account Number"), an account number without a bank ("Please Enter Bank Name"), then the address, post code, city and state ("Please Enter Member's Address",
+"Please Enter Post Code", "Please Enter City", "Please Enter State"); then "Are you sure?" and "Record Save". The server repeats the checks, so they hold for any client.
+Banks come from `BankAccounts` of the maintenance database (23 here), states from `STA`, payment modes are BY POST and BANK-IN. Text is held to the database column lengths.
+
+Kept as the desktop had it, on purpose: there is **no check for a bordxed worksheet** (the desktop lets the payee details of a bordxed worksheet be changed), nothing records who
+changed it (the desktop's last-updated user lines are commented out; the API log records it), and `CheckAccNo` (bank account digit check) is commented out in the desktop. Text is
+trimmed before it is checked and saved.
+
+Endpoints (position 23): `GET api/worksheet/adjustment/lookups` and `PUT api/worksheet/adjustment/{case}/{version}/payment`.
+
+### Adjustment, step 2: credit and debit notes and the Excess letter
+
+The desktop made these documents by filling Excel and Word **templates** (`CreditNote.xlt`, `DebitNote.xlt`, `DebitNoteCompany.xlt`, `EXCLetterMAS.DOT`, `ExcessLetterEtiqa.DOT`,
+`MedixExcLetter.DOT`, `Final LG` letters) that are not in the source package. The web builds each document from the same data on a printable page of its own layout (the Print button
+uses the browser's print, so it can be saved as PDF); the wording and layout of the desktop templates could not be copied.
+
+| Button | Web | Data and rules |
+|---|---|---|
+| **Credit Note** (`cmdCredit_Click`) | Migrated | Enabled when Medix owes the member (amount due above zero). Shows the number the worksheet already has: credit numbers are given at registration, not here, so a credit note can be "(not numbered)", as in the desktop |
+| **Debit Note** (`cmdDebit_Click`) | Migrated | Enabled when the member owes Medix. A worksheet with no debit note number gets the next one of its payor, `D` + payor + five digits (`DRSeq`, `GenerateDebitNo`), saved with today's date (`UpdateCreditDebit`); the number is taken in one atomic update, so two users cannot get the same one. A plan billed to the company (`PLNCompanyDN` = C) addresses the note to the group company |
+| **Exc Letter** (`cmdExcLetter_Click`) | Migrated | Built from the case's excess record (`CAS_Excess`, written by the desktop's Approve), with the hospital's contact and fax, the patient's I/C, and for plans whose excess private type is 1 (MAS) the staff number, cost center and department. Lists the amounts that have a value, the limit exceeded, co-payment and underwriting excess, and the total (shown only above zero). Marks the case `tblRecord.ExcessLetter = 'Y'` |
+
+**The amount due is the saved one.** The desktop worked it out live (`totalFMem`, a long expression over excess, co-payment, limit exceeded and under-writing excess). The web uses the
+figures saved with the worksheet: the payable to the member when there is one, otherwise the excess. That agrees with the credit / debit numbers the desktop gave in about 94 per cent of
+the versions that have one (credit numbers sit on a positive amount in 97 per cent, debit numbers on a negative one in 82 per cent); where the two differ the desktop's screen would have
+enabled the other button. 9,096 saved versions have an amount due and no note number, which is normal: numbers are given when a worksheet is approved or by the separate Generate Credit/Debit
+Note screen (`frmGenerateCNNote`, hidden, not required), neither of which is migrated.
+
+**Deliberate differences.** A case with no excess record gets "There is no excess record for this case." and is not marked (the desktop opened an empty letter and marked the case anyway); a
+debit note is refused for a worksheet that has nothing due from the member (the desktop only disabled the button); the notes' phone line is left out (the desktop's phone source is commented
+out). The data of the notes and the letter can only be shown for worksheets whose case and member exist in the database; in this trimmed development copy that is about 1,900 versions.
+
+### Adjustment, step 3: Final LG
+
+Final LG (`cmdFinalLG_Click`) issues a guarantee letter for the worksheet's case. The letter itself is issued by the same code as Case Adjustment's guarantee letter
+(`CaseDocumentsService.IssueGLAsync`, which now takes an optional worksheet version); what the worksheet adds is below. The dialog is the existing guarantee letter dialog
+(`frmGLMenu`) pointed at the worksheet's endpoints, so its fields and its checks (`CaseGLRules.Validate`) are the same.
+
+The checks, in the desktop's order, and what the user is asked:
+
+1. Payor **AX** whose policy effective date is not its payor effective date: "Have you checked Take Over clause?" (No stops).
+2. The member, then the patient name, must be on the worksheet ("Please Enter Membership Information", "Please Enter Patient Name").
+3. The LG amount: for a worksheet paid to the hospital (H) it must be the worksheet's **final total payable to the hospital**, to the cent (the amount starts as that total); then the
+   member's balance limit is tested: the amount may not be above the balance limit plus what this worksheet itself approved.
+4. If either test fails the user is asked "Please check LG Amount, do you want to continue?" and **may go on** (Case Adjustment stops instead); otherwise "Are you sure?".
+
+Issuing is one transaction: the case's other open letter is closed (not for Follow-up), a new LG number is taken or the one of the same purpose is re-issued, the LG row is written, the
+version's invoices get the LG number (`UpdateInvoiceLG`) and the case is marked `tblRecord` `IsLGissued = 1`, `IsWSdone = 1`, `CaseProgress = 'FINAL GL Issued'`; then the member is sent the
+mobile notification (best effort) and the letter is built. The server repeats every check except the amount warning, which is the user's to go on past, as in the desktop. Endpoints
+(position 23): `GET api/worksheet/adjustment/gl-options`, `GET .../{case}/gl`, `POST .../{case}/{version}/final-lg/check`, `POST .../{case}/{version}/final-lg`.
+
+What is not the same, or could not be checked:
+
+- **The letter.** The desktop built it in the worksheet form's own Word routine (`funcwordLG` and `bookmarkLG`, about 2,600 lines, from a template that is not in the source package). The
+  web builds it with the Case Adjustment guarantee letter (the same LG types, B for private-plan members, and fields); the two letters' wording was not compared field by field.
+- **The limit test.** The desktop's own `CheckLimit` (about 800 lines: top-up, lifetime and per-disability branches) is approximated by the Case side's balance limit rule plus the
+  worksheet's final approve. It cannot be checked against this database, whose plan and member data were trimmed (see the Phase 3 notes).
+- **Data.** The case has to be registered with its member (the letter's context), which is true of about 1,700 cases here.
+
+## Phase 3: worksheet calculation engine (steps 1 to 3 done)
+
+Registration and Adjustment (`frmWorksheetRegGST2015`, `frmWorksheetAdj2013` / `frmWorksheetAdjGST`) cannot save a worksheet without the calculation the desktop runs
+(`getDatatoWS`, `getFinalTotal` and their helpers, about 3,000 lines of plan rules). It is ported in steps, and **every step is checked against the worksheets the desktop
+saved** before anything is built on it (the saved tables hold about 35,500 worksheet versions).
+
+**Step 1, done: the actual amount of every row, added up from the invoices** (`genisis.WorksheetEngine_Actual`, `WorksheetEngineService.ActualAsync`; no endpoint yet).
+The slot to invoice-column map was read out of the VB6 source by script (`ShowInvoice` puts each `View_CAS_Invoice` column into a list sub-item, `getDatatoWS` adds the
+sub-items of each slot), not typed by hand. Result against the saved `ClaimActual` of all 35,495 versions: 99.96 to 100 per cent per slot (for example slot 1 Room & Board
+is `CLMBoardAmt + CLMNewRBTax`, slot 20 is `CLMGuardianAmt + CLMNewLodgerTax`, slots 27 to 29 are the service-tax columns). `WorksheetEngineTests` repeats the check on a
+sample of 400 versions on every run. The hospital part (the desktop's H1..H29, invoices with pay-to `H`) comes out of the same query.
+
+**Step 2, done: approved, hospital and member amounts per row** (`WorksheetRules.Approve` / `Evaluate`, `genisis.WorksheetEngine_Limits`,
+`WorksheetEngineService.EvaluateSavedAsync`). The desktop's `getDatatoWS` works the approved amount of a row out of its actual amount and its **limit text** with
+`GetMin`: a numeric limit caps the amount, the word FULL lets all of it through, anything else (a dash, blank) approves nothing; a row the desktop flags "pay member"
+(`AppStatus` Y, table `ClaimPayMBMStatus`) uses `GetMax` instead. The hospital column is the sum of the invoices paid to the hospital, and the member column is approved
+minus hospital. All three rules are ported as written (including VB6's idea of "numeric": `1,000.00`, `.00`, `(50.00)`, `50-`; a percentage is not a number) and checked
+against every saved worksheet, using the limit text saved with each version:
+
+| Column | Saved versions | Agreement per row |
+|---|---|---|
+| Actual (step 1) | 35,495 | 99.96 to 100 per cent |
+| Approved | 88,712 rows with an actual amount | 99.75 per cent overall; 99.5 per cent or better in every row except Room & Board 98.8, ICU 97.5, Monthly (kidney) 97.6 and Accident Post-Hospital row 14 99.3 |
+| Hospital | 35,592 | 99.97 to 100 per cent |
+| Member (approved minus hospital) | 35,592 | 99.83 to 100 per cent |
+
+`WorksheetEngineOracleTests` repeats the whole evaluation on 400 versions on every run. What does not agree is mostly rows whose saved approved amount is above the limit text (about 1.2 per cent of Room & Board rows, 2.5 per cent of ICU rows): the desktop handles those outside this rule (limit-exceeded and annual-limit checks in CheckLimit) or the user overtyped the grid. That is the next step.
+Two things the data cannot confirm: the pay-member flag is **not set in any saved worksheet**, so `GetMax` is covered by unit tests only; and for a negative actual amount the
+desktop returns the limit when the amount is below it (ported as written, pinned by a test).
+
+**Step 3 (limits from the plan) cannot be checked against this database.** The Registration form builds the limit text in `display_benefit`: for each grid row it reads the
+plan's benefit row from `BNF` (plan, insured type, health type; `BNFRMPerDis` is the amount or the word FULL, `BNFClaimAbleAmount` the daily rate), and for Room & Board and ICU
+multiplies the rate by the days of the (last) invoice (`tmRBDays`, `tmICUDays`); `getDatatoWS` then limits the days again by the plan's day limits and by the days already used
+by a linked case (`ClaimSameLimit`). But in this database `BNF` has benefit rows for only 122 of 21,351 plans, and only 14 of the 31,208 saved worksheet versions belong to one of
+them (1,933 versions have a member row at all). Anything ported for this step could be verified on those 14 versions and on hand-made cases only, which is not the standard used
+for steps 1 and 2. It needs a database with `BNF` populated for the plans of the saved worksheets.
+
+**Step 3, done: the summary rows that follow from the grid** (`WorksheetRules.Final`, `genisis.WorksheetEngine_SummaryInputs`, `WorksheetEngineService.FinalSavedAsync`).
+Probing all 31,199 saved `Claim` rows (the table is complete; only the case, member and plan tables were trimmed) showed which summary figures are plain arithmetic on figures
+already ported, with the co-payment and the member's available limit (`CLMPreviousBalance`) as inputs:
+
+| Row | Rule | Agreement over the saved versions |
+|---|---|---|
+| Total actual | sum of the actual column | 99.96 per cent |
+| Total approved | sum of approved, less the co-payment, held to the available limit | 99.36 per cent (99.63 when the saved limit exceeded is used instead of deriving it) |
+| Limit exceeded | the amount above the available limit, as a negative (zero when within it; a negative balance pays nothing) | 99.65 per cent |
+| Final approve | equal to the total approved | saved final equals saved total approved in 99.99 per cent; 99.36 as the engine computes it |
+| Excess | sum of the negative member amounts (what the member owes) | 99.99 per cent |
+| Payable to member | sum of the positive member amounts | 97.4 per cent: kept as a figure, not relied on |
+
+`WorksheetEngineFinalTests` repeats it on 600 versions (97 per cent agree on total approved and final, 99.3 on limit exceeded, 98.7 on excess: small differences in a grid compound
+across a version). The residual 0.4 per cent are full rejections, reimbursement-flagged worksheets and hand-edited ones.
+
+What the data does **not** support, and why these are not ported yet:
+
+- **Ex-gratia, processing fee, major medical fee and top-up amounts are zero in every saved worksheet**, so there is nothing to check a port against; the desktop's branches for them
+  stay unported until a worksheet that uses them is available.
+- **Payable to hospital and the bordx amount** equal "final minus payable to member" and "final" only in 96 to 97 per cent of versions. The misses are adjustment (credit) worksheets, where
+  the bordx amount follows the hospital figure and does not take the co-payment off (for example AJ00000033, versions 7 and 8). Settling that needs the rest of `getFinalTotal`
+  (about 700 more lines) and the adjustment rules, so it is left for the Adjustment step.
+- **The co-payment itself.** `getFinalTotal` takes it as (approved minus Room & Board minus taxes) times the plan's co-payment percentage, then nudges the cents for invoices from
+  April 2008 on. That needs the member's plan, which exists for only about 1,900 of the 31,208 versions here, so the co-payment (and the plan limits, see above) are inputs for now.
+
+Next: Adjustment, which can already re-evaluate and show a saved worksheet. Registration needs the plan-derived limits and co-payment, so it waits for fuller plan data.
+
+## Code map
+
+| Layer | Files |
+|---|---|
+| SQL | `sql/main/230_worksheet_tracking.sql`, `240_worksheet_send_to_accounts.sql`, `250_worksheet_send_to_ar.sql`; synonyms `genisis.WS_WKSTracking` (`VIEW_WKSTrackingNew`) and `genisis.WS_WKS2AC` (`VIEW_WKS2AC`) in `000_setup.sql`; Enquiry: `260_worksheet_enquiry.sql`, `270_worksheet_engine.sql`, `280_worksheet_adjustment.sql`, `290_worksheet_documents.sql`, `300_worksheet_final_lg.sql` and the synonyms `WS_ClaimActual`, `WS_ClaimHos`, `WS_ClaimMember`, `WS_ClaimLimit`, `WS_ClaimOthers`, `WS_CASInvoice` |
+| API | `Genisis.Api/Worksheet/{Tracking,SendToAccounts,SendToAr,Lookups,Enquiry,Engine,Adjustment}/*.cs` (models, FluentValidation validators, rules, `I…Repository` + repository, service), `Worksheet/WorksheetCommon.cs`, `Worksheet/WorksheetServiceCollectionExtensions.cs`; thin controllers `WorksheetTrackingController`, `WorksheetSendToAccountsController`, `WorksheetSendToArController`, `WorksheetEnquiryController`, `WorksheetAdjustmentController`, `WorksheetLookupsController` |
+| UI | `GenisisUI/src/pages/worksheet/` — `WorksheetTrackingPage`, `WorksheetSendToAccountsPage`, `WorksheetSendToArPage`, `worksheetRules.ts` (pure rules, form models, Yup schemas, query mapping), `useTickList.ts`, `useWorksheetLookups.ts`, `RangeFields.tsx`; `WorksheetEnquiryPage`, `EnquiryTabs.tsx`, `EnquiryCaseDialog.tsx`, `enquiryRules.ts`; `WorksheetAdjustmentPage`, `AdjustmentEditor.tsx`, `adjustmentRules.ts`; `lib/scanCodes.ts` |
+| Tests | `WorksheetScreensTests.cs` (rules, validators, services with fakes), `WorksheetDatabaseTests.cs` (real databases, every write rolled back), the architecture tests (extended to the new namespaces), `WorksheetEnquiryTests.cs`, `WorksheetAdjustmentTests.cs`, `worksheetRules.test.ts`, `enquiryRules.test.ts`, `adjustmentRules.test.ts`, `scanCodes.test.ts`, browser suites `e2e/worksheet.mjs`, `e2e/worksheet-enquiry.mjs` and `e2e/worksheet-adjustment.mjs` |
+
+Endpoints (all need the access position in the table above): `GET api/worksheet/tracking/search`, `GET api/worksheet/tracking/group-companies`,
+`POST api/worksheet/tracking/update`, `GET api/worksheet/send-to-accounts/search`, `POST api/worksheet/send-to-accounts/send`,
+`GET api/worksheet/send-to-ar/search`, `POST api/worksheet/send-to-ar/send`, `GET api/worksheet/lookups/{payors,insured-types}`.
+
+## Deployment note
+
+Run the regenerated `sql/genisis-main.sql` on the main database (it only creates or replaces `genisis.*` objects). `apiuser` needs nothing new: the procedures are in the
+`genisis` schema, which it already has `EXECUTE` on, and the views they read are in databases it can already read.
+
+## Verification (phases 1 to 3)
+
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 531 of 533 passed on the merged branch (207 of the tests are Worksheet tests; in the last full run one slow Tracking report test (`agents.insured`) timed out and passed when run alone, which is counted as passed; the two failures are Upload Bordx tests
+that need an `UploadDb` database this server does not have); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 203 checks passed in all, no console or network
+errors (the three Worksheet suites are 119 of them: Tracking / Send to A/C / Send to A/R 40, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
+writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

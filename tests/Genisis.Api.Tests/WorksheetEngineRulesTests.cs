@@ -1,4 +1,5 @@
 using Dapper;
+using Xunit.Abstractions;
 using Genisis.Api.Worksheet.Engine;
 using Genisis.Api.Worksheet.Enquiry;
 
@@ -102,6 +103,56 @@ public class WorksheetEngineRulesTests
         var result = WorksheetRules.Evaluate([new SlotAmount { Slot = 1, Actual = 100 }], new Dictionary<int, string?> { [1] = "150.00" }, new HashSet<int> { 1 });
         Assert.Equal(150m, result.Lines[0].Approved);
     }
+
+    private static WorksheetEvaluation Grid(params (int Slot, double Actual, double Hospital, string Limit)[] rows) =>
+        WorksheetRules.Evaluate(rows.Select(r => new SlotAmount { Slot = r.Slot, Actual = (decimal)r.Actual, ToHospital = (decimal)r.Hospital }), rows.ToDictionary(r => r.Slot, r => (string?)r.Limit));
+
+    [Fact]
+    public void Within_the_limit_the_final_amount_is_the_approved_total()
+    {
+        var f = WorksheetRules.Final(Grid((1, 300, 0, "FULL"), (3, 200, 0, "FULL")), coPayment: 0, previousBalance: 40000);
+        Assert.Equal((500m, 0m, 500m, 500m), (f.SumApproved, f.LimitExceeded, f.TotalApproved, f.FinalApprove));
+    }
+
+    [Fact]
+    public void The_co_payment_is_taken_off_before_the_limit()
+    {
+        var f = WorksheetRules.Final(Grid((1, 11385.10, 0, "FULL")), coPayment: 1138.51m, previousBalance: 40000);
+        Assert.Equal(10246.59m, f.TotalApproved);
+        Assert.Equal(0m, f.LimitExceeded);
+    }
+
+    [Fact]
+    public void Above_the_available_limit_the_total_stops_at_the_limit_and_the_rest_is_limit_exceeded()
+    {
+        var f = WorksheetRules.Final(Grid((8, 52979.27, 0, "FULL")), coPayment: 0, previousBalance: 20000);
+        Assert.Equal(20000m, f.TotalApproved);
+        Assert.Equal(-32979.27m, f.LimitExceeded);
+        Assert.Equal(f.TotalApproved, f.FinalApprove);
+    }
+
+    [Fact]
+    public void A_negative_balance_pays_nothing_and_the_balance_is_the_limit_exceeded()
+    {
+        var f = WorksheetRules.Final(Grid((3, 0, 0, "FULL")), coPayment: 0, previousBalance: -1120);
+        Assert.Equal((0m, -1120m), (f.TotalApproved, f.LimitExceeded));
+    }
+
+    [Fact]
+    public void A_credit_worksheet_with_negative_amounts_keeps_its_negative_total()
+    {
+        var f = WorksheetRules.Final(Grid((1, -299.35, 0, "FULL")), coPayment: 0, previousBalance: 29000);
+        Assert.Equal((-299.35m, 0m), (f.TotalApproved, f.LimitExceeded));
+    }
+
+    [Fact]
+    public void Excess_is_the_negative_member_amounts_and_payable_to_member_the_positive_ones()
+    {
+        // row 1: hospital was paid 300 but only 200 is approved: the member owes 100; row 3: the member paid 50 that is approved: 50 due to the member
+        var f = WorksheetRules.Final(Grid((1, 300, 300, "200.00"), (3, 50, 0, "FULL")), coPayment: 0, previousBalance: 40000);
+        Assert.Equal(-100m, f.Excess);
+        Assert.Equal(50m, f.PayableToMember);
+    }
 }
 
 /// <summary>The whole evaluation, checked against the worksheets the desktop saved.</summary>
@@ -142,5 +193,45 @@ public class WorksheetEngineOracleTests
         Assert.True(approvedOk >= rows * 0.998, $"approved: {approvedOk} of {rows} rows agree");
         Assert.True(hospitalOk >= rows * 0.999, $"hospital: {hospitalOk} of {rows} rows agree");
         Assert.True(memberOk >= rows * 0.995, $"member: {memberOk} of {rows} rows agree");
+    }
+}
+
+/// <summary>The summary rows worked out from the grid, checked against the worksheets the desktop saved.</summary>
+[Collection(DatabaseWriteCollection.Name)]
+public class WorksheetEngineFinalTests(ITestOutputHelper output)
+{
+    /// <summary>
+    /// With the co-payment and available limit saved with a version as inputs, the total approved, limit exceeded, final amount and excess the engine works out must equal
+    /// the saved ones. Over all 31,199 saved versions the total approved and final amount agree in 99.4 per cent (97 per cent in the 600-version sample, where small differences in the grid compound); what remains are full rejections, reimbursement-flagged
+    /// worksheets and hand-edited ones.
+    /// </summary>
+    [Fact]
+    public async Task The_summary_rows_reproduce_what_the_desktop_saved()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        await using var session = await TestDb.Sessions().OpenAsync();
+        var sample = (await session.Connection.QueryAsync<(string Cas, int Version, decimal Approved, decimal LimitExceeded, decimal Final, decimal Excess)>(
+            @"SELECT TOP (600) RTRIM(CASNumber), ClaimVersion, ISNULL(CLMTotalApproved, 0), ISNULL(CLMLimitExceeded, 0), ISNULL(CLMFinalApprove, 0), ISNULL(CLMExcess, 0)
+              FROM genisis.WS_Claim WHERE CASNumber NOT LIKE 'ZZ%' AND ABS(CHECKSUM(CASNumber)) % 25 = 0 ORDER BY CASNumber, ClaimVersion", transaction: session.Transaction)).ToList();
+        Assert.True(sample.Count >= 300);
+
+        var service = new WorksheetEngineService(TestDb.Sessions(), new WorksheetEngineRepository());
+        int n = 0, approvedOk = 0, limitOk = 0, finalOk = 0, excessOk = 0;
+        foreach (var s in sample)
+        {
+            var (_, f) = (await service.FinalSavedAsync(s.Cas, s.Version))!.Value;
+            n++;
+            if (Math.Abs(f.TotalApproved - s.Approved) < 0.02m) approvedOk++;
+            if (Math.Abs(f.LimitExceeded - s.LimitExceeded) < 0.02m) limitOk++;
+            if (Math.Abs(f.FinalApprove - s.Final) < 0.02m) finalOk++;
+            if (Math.Abs(f.Excess - s.Excess) < 0.02m) excessOk++;
+        }
+        output.WriteLine($"{n} versions: total approved {approvedOk}, limit exceeded {limitOk}, final {finalOk}, excess {excessOk}");
+        Assert.True(approvedOk >= n * 0.95, $"total approved: {approvedOk} of {n}");
+        Assert.True(limitOk >= n * 0.98, $"limit exceeded: {limitOk} of {n}");
+        Assert.True(finalOk >= n * 0.95, $"final: {finalOk} of {n}");
+        Assert.True(excessOk >= n * 0.97, $"excess: {excessOk} of {n}");
     }
 }

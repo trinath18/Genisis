@@ -5850,6 +5850,18 @@ BEGIN
 END
 GO
 
+-- Worksheet calculation engine, step 3: the inputs of the summary rows that come from the plan and the member: the co-payment (getFinalTotal's CoPayApp) and the
+-- member's available limit before the worksheet (CLMPreviousBalance), as saved with the version.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_SummaryInputs
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(CLMCoPayRB, 0) AS CoPayment, ISNULL(CLMPreviousBalance, 0) AS PreviousBalance
+    FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+END
+GO
+
 PRINT N'Done.';
 GO
 SET NOEXEC OFF;

@@ -31,7 +31,8 @@ public static class SqlScripts
         foreach (var file in Directory.GetFiles(Path.Combine(Root, "sql", part), "*.sql").Order(StringComparer.Ordinal))
             sb.Append($"\n-- ===== {part}/{Path.GetFileName(file)} =====\n").Append(Normalize(File.ReadAllText(file)).TrimEnd('\n')).Append('\n');
         sb.Append("\nPRINT N'Done.';\nGO\nSET NOEXEC OFF;\nGO\n");
-        return sb.ToString();
+        // The header above is a raw string literal, so it takes this source file's line endings (CRLF on Windows checkouts).
+        return Normalize(sb.ToString());
     }
 
     public static string Normalize(string s) => s.Replace("\r\n", "\n");
@@ -141,7 +142,8 @@ public class ReadProcedureTests
         }
         var db = new Genisis.Api.Data.DbConnections(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:MainDb"] = MainDb, ["ConnectionStrings:Maintenance"] = maintenance }).Build());
-        var c = new Genisis.Api.Controllers.MembershipController(db);
+        var c = new Genisis.Api.Controllers.MembershipController(db, new Genisis.Api.Membership.EnquiryTabsService(db,
+            new Genisis.Api.Membership.PolicyWordingStore(Microsoft.Extensions.Options.Options.Create(new Genisis.Api.Membership.DocumentOptions()))));
         object? Value(Microsoft.AspNetCore.Mvc.IActionResult r) => Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(r).Value;
         var found = Assert.IsAssignableFrom<System.Collections.IList>(Value(await c.Search("UBHA0077475", "number")));
         Assert.NotEmpty(found);

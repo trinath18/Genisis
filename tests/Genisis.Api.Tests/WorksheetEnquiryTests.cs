@@ -138,7 +138,7 @@ public class WorksheetEnquiryTests
         public List<EnquiryBenefit> Benefits = [];
         public List<EnquiryDiagnosis> Diagnoses = [];
         public List<EnquiryLgRow> Lgs = [];
-        public (int From, int To)? BenefitRange;
+        public (int From, int To)? BenefitRange, SummaryRange;
         public int? HeaderVersion, InvoiceVersion, OthersVersion;
         public string? InvoicePayTo;
         public EnquiryCaseSearch? Search;
@@ -173,6 +173,12 @@ public class WorksheetEnquiryTests
             return Task.FromResult(Benefits);
         }
 
+        public Task<EnquirySummary> SummaryAsync(IDbSession session, string caseNo, int fromVersion, int toVersion)
+        {
+            SummaryRange = (fromVersion, toVersion);
+            return Task.FromResult(new EnquirySummary { FinalApprove = 7 });
+        }
+
         public Task<EnquiryOthers?> OthersAsync(IDbSession session, string caseNo, int version)
         {
             OthersVersion = version;
@@ -193,6 +199,8 @@ public class WorksheetEnquiryTests
 
         Assert.Equal("2", result.SelectedVersion);
         Assert.Equal((2, 2), repository.BenefitRange);
+        Assert.Equal((2, 2), repository.SummaryRange);
+        Assert.Equal(7, result.Summary.FinalApprove);
         Assert.Equal(2, repository.HeaderVersion);
         Assert.Equal(2, repository.InvoiceVersion);
         Assert.Equal(2, repository.OthersVersion);
@@ -208,6 +216,7 @@ public class WorksheetEnquiryTests
 
         Assert.Equal("M2", result.SelectedVersion);
         Assert.Equal((1, 2), repository.BenefitRange);
+        Assert.Equal((1, 2), repository.SummaryRange);
         Assert.Equal(2, repository.HeaderVersion);
         Assert.Null(repository.InvoiceVersion);
     }

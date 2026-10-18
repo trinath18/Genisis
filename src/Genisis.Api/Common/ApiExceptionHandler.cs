@@ -14,6 +14,13 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> log) : IExc
     /// <summary>SQL Server error numbers this handler recognises.</summary>
     private const int StringTruncated = 8152, DuplicateKeyTruncation = 2628, Deadlock = 1205, Timeout = -2;
 
+    /// <summary>
+    /// The exceptions this handler answers: the Case / Worksheet screens' <see cref="BusinessRuleException"/> family and deadlocks. Everything else
+    /// (the membership screens' <see cref="Errors.BusinessRuleException"/>, other SQL errors, unexpected errors) is left to
+    /// <see cref="Errors.ProblemDetailsExceptionHandler"/>, which is registered after this handler.
+    /// </summary>
+    public static bool Owns(Exception exception) => exception is BusinessRuleException or SqlException { Number: Deadlock };
+
     /// <summary>The status and message an exception is answered with.</summary>
     public static (int Status, string Message) Map(Exception exception) => exception switch
     {
@@ -35,6 +42,7 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> log) : IExc
     /// <inheritdoc />
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        if (!Owns(exception)) return false;
         var (status, message) = Map(exception);
         if (status >= StatusCodes.Status500InternalServerError)
             log.LogError(exception, "Unhandled error processing {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);

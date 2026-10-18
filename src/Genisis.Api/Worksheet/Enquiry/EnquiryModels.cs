@@ -417,7 +417,7 @@ public record EnquirySummary
     /// <summary>Total approved.</summary>
     public decimal TotalApproved { get; set; }
 
-    /// <summary>Co-payment R&B.</summary>
+    /// <summary>Co-payment R&amp;B.</summary>
     public decimal CoPayRb { get; set; }
 
     /// <summary>Total excess.</summary>

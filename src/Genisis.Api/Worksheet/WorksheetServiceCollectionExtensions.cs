@@ -25,6 +25,8 @@ public static class WorksheetServiceCollectionExtensions
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();
+        services.AddSingleton<IDocumentsRepository, DocumentsRepository>();
+        services.AddScoped<WorksheetDocumentsService>();
 
         services.AddSingleton<IEnquiryRepository, EnquiryRepository>();
         services.AddScoped<EnquiryService>();

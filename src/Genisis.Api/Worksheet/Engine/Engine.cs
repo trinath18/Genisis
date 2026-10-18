@@ -165,7 +165,7 @@ public sealed class WorksheetEngineRepository : IWorksheetEngineRepository
 
     /// <inheritdoc />
     public Task<SavedSummaryInputs?> SummaryInputsAsync(IDbSession session, string caseNo, int version) =>
-        session.Connection.ProcSingleAsync<SavedSummaryInputs?>("genisis.WorksheetEngine_SummaryInputs", new { cas = caseNo, version }, session.Transaction);
+        session.Connection.ProcFirstOrDefaultAsync<SavedSummaryInputs>("genisis.WorksheetEngine_SummaryInputs", new { cas = caseNo, version }, session.Transaction);
 }
 
 /// <summary>

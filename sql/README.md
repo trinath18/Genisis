@@ -31,6 +31,7 @@ against the same database.
 | `main/260_worksheet_enquiry.sql` | Worksheet > Worksheet Enquiry (saved worksheet, read-only) |
 | `main/270_worksheet_engine.sql` | Worksheet calculation engine, steps 1 and 2: actual amounts from the invoices, the saved limit text and the summary inputs (used by Registration and Adjustment, in progress) |
 | `main/280_worksheet_adjustment.sql` | Worksheet > Worksheet Adjustment: the Update button (payment details and remarks), bank / state lists |
+| `main/290_worksheet_documents.sql` | Worksheet > Worksheet Adjustment: credit / debit note (debit number from `DRSeq`) and the Excess letter data |
 | `main/130_mma.sql` | Maintenance > Entity (Procedures, Look Up Table) and Maintenance > Accounts; tables in the maintenance database |
 | `main/140_adjustment.sql` | Membership > Adjustment (all endorsement types) |
 | `main/150_enquiry_tabs.sql` | Membership > Enquiry: HIS Benefits, Acc History, Fees, Non Disclosure, Policy Terms, LT Limit, Policy Wording, T/O Claims, WS |

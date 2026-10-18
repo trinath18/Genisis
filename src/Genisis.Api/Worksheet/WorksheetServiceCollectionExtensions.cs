@@ -1,3 +1,4 @@
+using Genisis.Api.Worksheet.Engine;
 using Genisis.Api.Worksheet.Enquiry;
 using Genisis.Api.Worksheet.Lookups;
 using Genisis.Api.Worksheet.SendToAccounts;
@@ -17,6 +18,9 @@ public static class WorksheetServiceCollectionExtensions
     {
         services.AddSingleton<IWorksheetLookupRepository, WorksheetLookupRepository>();
         services.AddScoped<WorksheetLookupService>();
+
+        services.AddSingleton<IWorksheetEngineRepository, WorksheetEngineRepository>();
+        services.AddScoped<WorksheetEngineService>();
 
         services.AddSingleton<IEnquiryRepository, EnquiryRepository>();
         services.AddScoped<EnquiryService>();

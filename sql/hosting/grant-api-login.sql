@@ -110,3 +110,25 @@ END
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.CaseEnquiryNotes TO ' + @q + N';';
 EXEC (@s);
 GO
+
+-- ===== CISDB (clinical database; optional: skipped when it does not exist)
+-- Read-only: the API reaches it through the genisis.Cis_* synonyms (plan, annual limit, premium, MCO, visit limit and CIS case reads); nothing writes to it.
+GO
+IF DB_ID(N'CISDB') IS NOT NULL
+BEGIN
+    DECLARE @cisSql nvarchar(max) = N'USE CISDB;
+DECLARE @login sysname = N''apiuser'', @q sysname, @s nvarchar(max) = N'''';
+SET @q = QUOTENAME(@login);
+IF USER_ID(@login) IS NULL
+BEGIN
+    SET @s = N''CREATE USER '' + @q + N'' FOR LOGIN '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datareader'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datareader ADD MEMBER '' + @q;
+    EXEC (@s);
+END';
+    EXEC (@cisSql);
+END
+GO

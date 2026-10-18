@@ -308,7 +308,7 @@ public class CaseDocumentsService(DbConnections db, CaseRegistrationService regi
                 new
                 {
                     memberId, mbm, cover = S(info.MBMPatientCovID),
-                    msg = $"Notification Alert From MediExpress!{S(info.LGPurpose)} GL Issued on {info.LGDate:dd/MM.yyyy}",
+                    msg = $"Notification Alert From Genisis!{S(info.LGPurpose)} GL Issued on {info.LGDate:dd/MM.yyyy}",
                     dt = info.LGDate, purpose = S(info.LGPurpose), lgNumber,
                 });
         }
@@ -473,9 +473,9 @@ public class CaseDocumentsService(DbConnections db, CaseRegistrationService regi
         var hasLg = await maint.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM dbo.CASLG WHERE CASENo = @cas",
             new { cas = f["caseNo"] }) > 0;
         if (hasLg)
-            f["ldDesc"] = "MediExpress has facilitated your admission and settled your hospitalization charges amounting to " +
+            f["ldDesc"] = "Genisis has facilitated your admission and settled your hospitalization charges amounting to " +
                 "RM2,500.00. We enclose a copy of the bill for your records. We would be pleased if you could let us have " +
-                "your payment to MediExpress(M) Sdn. Bhd. within 14 days herewith.";
+                "your payment to Genisis Sdn. Bhd. within 14 days herewith.";
         return details;
     }
 

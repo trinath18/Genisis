@@ -57,8 +57,9 @@ public class CaseRegistrationService(DbConnections db, ILogger<CaseRegistrationS
         if (rows.Count == 0) return null;
         var m = rows[0];
         string pay = S(m["PAYCode"]), ins = S(m["INSCode"]), plan = S(m["PLNCode"]), hlt = S(m["HLTCode"]);
-        var eff = D(m["MBMPayorEffDate"]) ?? DateTime.MinValue;
-        var exp = D(m["MBMPayorExpDate"]) ?? DateTime.MinValue;
+        // Many members (registered through the web, imported) have no payor period. A missing date stays null: DateTime.MinValue cannot be sent to a datetime parameter.
+        var eff = D(m["MBMPayorEffDate"]);
+        var exp = D(m["MBMPayorExpDate"]);
         var agentCode = S(m["MBMAgentCode"]);
 
         using var grid = await conn.ProcMultipleAsync("genisis.CaseReg_MemberExtras", new
@@ -93,17 +94,23 @@ public class CaseRegistrationService(DbConnections db, ILogger<CaseRegistrationS
             agentLabel = $"Alert... Agent Details : {agentName.Trim()}({agentCode})";
             alerts.Add(new(agentLabel, true));
         }
-        if (pay == "XL" && (now - eff).TotalDays <= 90) alerts.Add(new("90 days Non-Cashless!", true));
+        if (pay == "XL" && eff is { } effective && (now - effective).TotalDays <= 90) alerts.Add(new("90 days Non-Cashless!", true));
 
         var canRegister = true;
         string? expiryLabel = null;
-        if (exp < now)
+        if (exp is not { } expiry)
+        {
+            alerts.Add(new("Membership has no policy period (effective / expiry date is missing). A case cannot be registered until it is set.", true));
+            expiryLabel = "No policy period";
+            canRegister = false;
+        }
+        else if (expiry < now)
         {
             alerts.Add(new("Membership has been expired!", true));
             expiryLabel = "Expired";
             canRegister = false;
         }
-        else if ((exp - now).TotalDays <= 30) expiryLabel = "< 30 Days to Expiry";
+        else if ((expiry - now).TotalDays <= 30) expiryLabel = "< 30 Days to Expiry";
 
         var polStatus = S(m["MBMSuspendStatus"]) == "Y" ? "S" : S(m["MBMStatus"]);
         if (polStatus == "S")
@@ -135,7 +142,7 @@ public class CaseRegistrationService(DbConnections db, ILogger<CaseRegistrationS
 
         return new CaseMemberView(m, polStatus, annualLimit, patients, members, principalExclusion?.Trim(),
             last?.PLNStartAge, last?.PLNEndAge, last?.PLNPolicyWording?.Trim(), agentLabel,
-            (now - eff).TotalDays <= 30, expiryLabel, canRegister, S(m["MBMTerminateStatus"]) != "Y" && glAllowed, alerts, now);
+            eff is { } active && (now - active).TotalDays <= 30, expiryLabel, canRegister, S(m["MBMTerminateStatus"]) != "Y" && glAllowed, alerts, now);
     }
 
     public async Task<CaseHospitalInfo?> HospitalAsync(SqlConnection conn, string hospitalCode, string pay, string? policyNo, SqlTransaction? tx = null) =>

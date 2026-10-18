@@ -45,6 +45,17 @@ public static class AccessRight
     public const int PanelHospitals = 7;
     public const int MmaCpt = 1;
 
+    // Worksheet menu. Registration (22) and Adjustment (23) are the positions the desktop's SearchForm scan codes LOW001 / LOW002
+    // checked (the branches are commented out in Medix.bas); Tracking (24) is LOW003; Enquiry (13) is mnuWSEnq_Click.
+    // Send to A/C and Send to A/R have no click handler and are hidden in the desktop: gated like Tracking, the closest sibling.
+    // Keep in step with GenisisUI/src/auth/access.ts.
+    public const int WorksheetRegistration = 22;
+    public const int WorksheetAdjustment = 23;
+    public const int WorksheetTracking = 24;
+    public const int WorksheetEnquiry = 13;
+    public const int WorksheetSendToAccounts = 24;
+    public const int WorksheetSendToAr = 24;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

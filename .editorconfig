@@ -64,3 +64,12 @@ dotnet_diagnostic.CS1591.severity = error
 
 [src/Genisis.Api/Controllers/{PayorsController,PanelHospitalsController,CaseNonDisclosureController,CasePayClaimController,CaseMmaController,CaseAuditReviewController,CaseTransferController,CaseListingController,ClaimAsciiController,CaseAsciiController}.cs]
 dotnet_diagnostic.CS1591.severity = error
+
+[src/Genisis.Api/Worksheet/*.cs]
+dotnet_diagnostic.CS1591.severity = error
+
+[src/Genisis.Api/Worksheet/{Tracking,SendToAccounts,SendToAr,Lookups,Enquiry}/*.cs]
+dotnet_diagnostic.CS1591.severity = error
+
+[src/Genisis.Api/Controllers/{WorksheetLookupsController,WorksheetTrackingController,WorksheetSendToAccountsController,WorksheetSendToArController,WorksheetEnquiryController}.cs]
+dotnet_diagnostic.CS1591.severity = error

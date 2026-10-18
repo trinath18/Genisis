@@ -7,6 +7,7 @@ using Genisis.Api.Case.Listing;
 using Genisis.Api.Common;
 using Genisis.Api.Controllers;
 using Genisis.Api.Data;
+using Genisis.Api.Worksheet;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -23,13 +24,18 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         typeof(PayorsController), typeof(PanelHospitalsController), typeof(CaseNonDisclosureController), typeof(CasePayClaimController),
         typeof(CaseMmaController), typeof(CaseAuditReviewController), typeof(CaseTransferController), typeof(CaseListingController),
         typeof(ClaimAsciiController), typeof(CaseAsciiController),
+        typeof(WorksheetLookupsController), typeof(WorksheetTrackingController), typeof(WorksheetSendToAccountsController), typeof(WorksheetSendToArController), typeof(WorksheetEnquiryController),
     ];
 
     private static readonly string[] ScreenNamespaces =
     [
         "Genisis.Api.Case.Ascii", "Genisis.Api.Case.AuditReview", "Genisis.Api.Case.Listing", "Genisis.Api.Case.Lookups", "Genisis.Api.Case.Mma",
         "Genisis.Api.Case.NonDisclosure", "Genisis.Api.Case.PanelHospitals", "Genisis.Api.Case.PayClaim", "Genisis.Api.Case.Transfer",
+        "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry",
     ];
+
+    private static bool IsScreenNamespace(string? ns) =>
+        ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal));
 
     private static string ApiSourceRoot()
     {
@@ -58,7 +64,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
     {
         foreach (var controller in ScreenControllers)
             foreach (var parameter in controller.GetConstructors().Single().GetParameters())
-                Assert.True(parameter.ParameterType.Name.EndsWith("Service", StringComparison.Ordinal) && parameter.ParameterType.Namespace!.StartsWith("Genisis.Api.Case", StringComparison.Ordinal),
+                Assert.True(parameter.ParameterType.Name.EndsWith("Service", StringComparison.Ordinal) && IsScreenNamespace(parameter.ParameterType.Namespace),
                     $"{controller.Name} takes {parameter.ParameterType.Name}");
     }
 
@@ -66,7 +72,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
     public void Screen_services_depend_on_abstractions_not_on_concrete_repositories()
     {
         var services = typeof(Program).Assembly.GetTypes().Where(t => t.Name.EndsWith("Service", StringComparison.Ordinal) && ScreenNamespaces.Contains(t.Namespace)).ToList();
-        Assert.True(services.Count >= 10, "expected the nine screens' services");
+        Assert.True(services.Count >= 15, "expected the services of the Case and Worksheet screens");
         foreach (var service in services)
             foreach (var parameter in service.GetConstructors().Single().GetParameters().Select(p => p.ParameterType))
                 Assert.True(parameter.IsInterface || parameter.Name.EndsWith("Service", StringComparison.Ordinal), $"{service.Name} takes the concrete {parameter.Name}");
@@ -76,7 +82,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
     public void Every_screen_repository_is_behind_an_interface_and_registered()
     {
         var repositories = typeof(Program).Assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false } && t.Name.EndsWith("Repository", StringComparison.Ordinal) && ScreenNamespaces.Contains(t.Namespace)).ToList();
-        Assert.True(repositories.Count >= 9);
+        Assert.True(repositories.Count >= 14);
         foreach (var repository in repositories)
         {
             var contract = repository.GetInterfaces().Single(i => i.Name == "I" + repository.Name);
@@ -91,7 +97,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         using var scope = factory.Services.CreateScope();
         foreach (var controller in ScreenControllers)
             foreach (var method in controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-                foreach (var parameter in method.GetParameters().Where(p => p.ParameterType.IsClass && p.ParameterType.Namespace?.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) == true))
+                foreach (var parameter in method.GetParameters().Where(p => p.ParameterType.IsClass && IsScreenNamespace(p.ParameterType.Namespace)))
                     if (!exempt.Contains(parameter.ParameterType.Name))
                         Assert.True(scope.ServiceProvider.GetService(typeof(IValidator<>).MakeGenericType(parameter.ParameterType)) is not null,
                             $"{controller.Name}.{method.Name} takes {parameter.ParameterType.Name} which has no validator");
@@ -120,6 +126,7 @@ public class ApiExceptionHandlerTests
         Assert.Equal((409, "clash"), ApiExceptionHandler.Map(new ConflictException("clash")));
         Assert.Equal((400, "fix it"), ApiExceptionHandler.Map(new BusinessRuleException("fix it")));
         Assert.Equal((400, "w"), ApiExceptionHandler.Map(new CaseListingException("w")));
+        Assert.Equal((400, "x"), ApiExceptionHandler.Map(new WorksheetException("x")));
     }
 
     [Theory]

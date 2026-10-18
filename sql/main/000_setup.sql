@@ -58,6 +58,9 @@ FROM (VALUES (N'WS_Claim', @WorkSheetDb, N'Claim'), (N'WS_ClaimInvoice', @WorkSh
     (N'WS_BordxSEQ', @WorkSheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorkSheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorkSheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorkSheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorkSheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorkSheetDb, N'VIEW_CLMReportCasNew'),
+    (N'WS_WKSTracking', @WorkSheetDb, N'VIEW_WKSTrackingNew'), (N'WS_WKS2AC', @WorkSheetDb, N'VIEW_WKS2AC'),
+    (N'WS_ClaimActual', @WorkSheetDb, N'ClaimActual'), (N'WS_ClaimHos', @WorkSheetDb, N'ClaimHos'), (N'WS_ClaimMember', @WorkSheetDb, N'ClaimMember'),
+    (N'WS_ClaimLimit', @WorkSheetDb, N'ClaimLimit'), (N'WS_ClaimOthers', @WorkSheetDb, N'ClaimOthers'), (N'WS_CASInvoice', @WorkSheetDb, N'View_CAS_Invoice'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);

@@ -25,6 +25,10 @@ against the same database.
 | `main/200_case_transfer.sql` | Case > Case Transfer |
 | `main/210_case_listing.sql` | Case > Inpatient Case Listing (bordx) |
 | `main/220_case_ascii.sql` | Case > Claim ASCII and Case ASCII |
+| `main/230_worksheet_tracking.sql` | Worksheet > Tracking (and the insured-type list) |
+| `main/240_worksheet_send_to_accounts.sql` | Worksheet > Send to A/C |
+| `main/250_worksheet_send_to_ar.sql` | Worksheet > Send to A/R |
+| `main/260_worksheet_enquiry.sql` | Worksheet > Worksheet Enquiry (saved worksheet, read-only) |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

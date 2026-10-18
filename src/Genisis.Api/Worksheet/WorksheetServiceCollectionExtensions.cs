@@ -1,0 +1,35 @@
+using Genisis.Api.Worksheet.Enquiry;
+using Genisis.Api.Worksheet.Lookups;
+using Genisis.Api.Worksheet.SendToAccounts;
+using Genisis.Api.Worksheet.SendToAr;
+using Genisis.Api.Worksheet.Tracking;
+
+namespace Genisis.Api.Worksheet;
+
+/// <summary>Registers the services and repositories of the Worksheet screens.</summary>
+public static class WorksheetServiceCollectionExtensions
+{
+    /// <summary>
+    /// Adds a repository behind its interface and the service that uses it for each screen. Services are scoped (one unit of work per
+    /// request); repositories hold no state and are singletons. <c>IDbSessions</c> is registered by <c>AddCaseScreens</c>.
+    /// </summary>
+    public static IServiceCollection AddWorksheetScreens(this IServiceCollection services)
+    {
+        services.AddSingleton<IWorksheetLookupRepository, WorksheetLookupRepository>();
+        services.AddScoped<WorksheetLookupService>();
+
+        services.AddSingleton<IEnquiryRepository, EnquiryRepository>();
+        services.AddScoped<EnquiryService>();
+
+        services.AddSingleton<ITrackingRepository, TrackingRepository>();
+        services.AddScoped<TrackingService>();
+
+        services.AddSingleton<ISendToAccountsRepository, SendToAccountsRepository>();
+        services.AddScoped<SendToAccountsService>();
+
+        services.AddSingleton<ISendToArRepository, SendToArRepository>();
+        services.AddScoped<SendToArService>();
+
+        return services;
+    }
+}

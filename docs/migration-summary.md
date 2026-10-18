@@ -73,7 +73,7 @@ The VB6 code is the specification. For every migrated screen the following were 
 | `dotnet test` (validators and rules, services with fake repositories, HTTP pipeline, architecture, database tests against MYDELL with rollback) | **531 passed, 2 failed** (533 tests, merged branch; the two are Upload Bordx tests that need an `UploadDb` staging database this server does not have) |
 | `npm run lint` (oxlint) · `npm run format:check` · `npm run typecheck` · `npm run build` | 0 warnings, clean, clean, built |
 | `npm test` (Vitest: masks, validation, CSV, case helpers, listing rules, worksheet rules, scan codes, error boundary) | **103 passed** |
-| Browser suites (`GenisisUI/e2e`, headless Chrome, real API and databases) | **203 checks passed** (the three Worksheet suites are 119 of them), no console or network errors; data restored afterwards |
+| Browser suites (`GenisisUI/e2e`, headless Chrome, real API and databases) | **214 checks passed** (the three Worksheet suites are 130 of them), no console or network errors; data restored afterwards |
 | CI workflows | written for both repositories; the same commands were run locally, **not yet on a hosted runner** |
 
 ## 7. Open items and risks

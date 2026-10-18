@@ -54,6 +54,21 @@ Worksheet Tracking. The other three (the top-level row, Generate Credit/Debit No
 - "No of Days (DOR - DClose)": a worksheet closed the day it was registered shows 1, not 0.
 - "is empty" tests on a date column also match 1900-01-01, which is how `= ''` read a date column.
 
+### Search layout: criteria in a panel on the right
+
+Worksheet Tracking had about 40 criteria stacked in three full-width blocks, which put the results grid more than a screen below the top. Tracking and Send to A/C now use Case Tracking's
+layout (`SearchLayout`, the same `ct-layout` styles): the main criteria, the actions and the results on the left, the other criteria in a sticky panel on the right that scrolls on its own, and
+stacks under the results on a window narrower than 1,100 px. Nothing was removed or renamed; only the place changed, so every field, hint, validation and desktop behaviour is as before.
+
+| Screen | Main part | "More filters" panel |
+|---|---|---|
+| Worksheet Tracking | Use Scan, Wks No, Payor, Claimability, Pending Status and its "is empty" tick, and the Update pending status block | 38 criteria in three groups: Worksheet (version, group company, plan, ins type, policy, member, I/C, bordx), Amounts (App Amt, Pay2M, Pay2H), Dates and diagnosis (DOA, DOD, DPO, first and final diagnosis), each from / to pair side by side with its "is empty" tick |
+| Worksheet Send to A/C | Use Scan, Wks No, Payor, Date Sent from / to, Token Status, and the Send to accounts block | Wks Date, Wks Amt and Bordx No from / to |
+| Worksheet Send to A/R | all four criteria (Use Scan, Case No, Date Sent from / to, Token Status) | none: there is nothing to put aside |
+
+The results grid now shows on the first screen of Tracking (its top moved from below two screens of criteria to about 550 px). The browser suite checks that the panel holds exactly these criteria, that
+the main part keeps the others, that the grid is on the first screen, that the panel scrolls and is sticky, that Send to A/R has no panel and that a narrow window stacks the panel under the results.
+
 ### Worksheet Send to A/R — reduced
 
 `FrmARRecFrCLM` reads `CASOthers.CASDTC` and, on update, copies the invoice number, date and amount into `CASOthers.CASINVNo` / `InvDate` / `CASInvAmt`.
@@ -280,6 +295,6 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 ## Verification (phases 1 to 3)
 
 `dotnet build -c Release -warnaserror` clean; `dotnet test` 531 of 533 passed on the merged branch (207 of the tests are Worksheet tests; in the last full run one slow Tracking report test (`agents.insured`) timed out and passed when run alone, which is counted as passed; the two failures are Upload Bordx tests
-that need an `UploadDb` database this server does not have); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 203 checks passed in all, no console or network
-errors (the three Worksheet suites are 119 of them: Tracking / Send to A/C / Send to A/R 40, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
+that need an `UploadDb` database this server does not have); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
+errors (the three Worksheet suites are 130 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

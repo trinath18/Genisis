@@ -38,6 +38,12 @@ public static class PlanLimitRules
     /// </summary>
     public static readonly IReadOnlyDictionary<string, int> CaseSlots = new Dictionary<string, int> { ["303"] = 12, ["404"] = 17, ["701"] = 20, ["801"] = 21, ["803"] = 23, ["804"] = 24 };
 
+    /// <summary>
+    /// What the desktop shows for a row that has an amount when the plan has benefit rows but none for this benefit: FULL for hospital supplies, anaesthetist, physician visits and accident
+    /// (every one of 276, 39, 89 and 115 such rows in the saved worksheets), 50.00 for the medical report (35 of 35). The other benefits show "-" (not covered) and get no entry.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Code, int Slot, string Text)> WhenThePlanHasNoRow = [("103", 3, "FULL"), ("204", 9, "FULL"), ("302", 11, "FULL"), ("401", 14, "FULL"), ("801", 21, "50.00")];
+
     /// <summary>Worksheet row of "Others": expenses the plan does not cover. Whatever the plan says, the limit saved with an amount in it is 0.00 (in 99 per cent of the versions).</summary>
     public const int Others = 25;
 
@@ -62,24 +68,29 @@ public static class PlanLimitRules
     /// The limit text of each row the plan fixes, keyed by worksheet row. Room &amp; Board and ICU are the rate per day times the days of the stay (<paramref name="roomDays"/>,
     /// <paramref name="icuDays"/>), held to the days the plan allows when it has such a limit (no Room &amp; Board days: no limit); the service tax is a share of the Room &amp; Board limit.
     /// </summary>
-    public static Dictionary<int, string> Derive(IEnumerable<PlanBenefit> benefits, int roomDays, int icuDays, IReadOnlySet<int>? rowsWithAmount = null)
+    public static Dictionary<int, string> Derive(IEnumerable<PlanBenefit> benefits, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null)
     {
         var limits = new Dictionary<int, string>();
         var any = false;
+        var seen = new HashSet<string>();
         foreach (var b in benefits)
         {
             any = true;
             var code = b.Code.Trim();
+            seen.Add(code);
             if (Slots.TryGetValue(code, out var slot) && !string.IsNullOrWhiteSpace(b.Limit)) limits[slot] = b.Limit.Trim();
             else if (CaseSlots.TryGetValue(code, out var caseSlot) && rowsWithAmount?.Contains(caseSlot) == true && !string.IsNullOrWhiteSpace(b.Limit)) limits[caseSlot] = b.Limit.Trim();
             else if (code is "101" or "102" && Number(b.Claimable) is { } rate)
             {
                 var days = code == "101" ? roomDays : icuDays;
-                if (Number(b.Days) is { } allowed and > 0) days = Math.Min(days, (int)allowed);
+                if (Number(b.Days) is { } allowed and > 0) days = Math.Min(days, allowed);
                 if (code == "101" && days <= 0) continue; // a stay with no Room & Board days shows no limit ("-"); ICU with none shows 0.00
                 limits[code == "101" ? RoomAndBoard : Icu] = Money(rate * days);
             }
         }
+        if (any && rowsWithAmount is not null)
+            foreach (var (missingCode, slot, text) in WhenThePlanHasNoRow)
+                if (!seen.Contains(missingCode) && rowsWithAmount.Contains(slot) && !limits.ContainsKey(slot)) limits[slot] = text;
         if (any && rowsWithAmount?.Contains(Others) == true) limits[Others] = Money(0);
         if (limits.TryGetValue(RoomAndBoard, out var room) && Number(room) is { } roomLimit and > 0) limits[RoomAndBoardTax] = Money(Math.Round(roomLimit * TaxRate, 2, MidpointRounding.AwayFromZero));
         return limits;
@@ -119,7 +130,7 @@ public sealed class PlanBenefitRepository : IPlanBenefitRepository
 public class PlanLimitService(IDbSessions sessions, IPlanBenefitRepository repository)
 {
     /// <summary>The limit text of the rows the plan fixes for a saved version, given the days of the stay in Room &amp; Board and ICU and the rows that have an amount.</summary>
-    public async Task<Dictionary<int, string>> LimitsAsync(string caseNo, int version, int roomDays, int icuDays, IReadOnlySet<int>? rowsWithAmount = null)
+    public async Task<Dictionary<int, string>> LimitsAsync(string caseNo, int version, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null)
     {
         await using var session = await sessions.OpenAsync();
         return PlanLimitRules.Derive(await repository.BenefitsAsync(session, caseNo.Trim(), version), roomDays, icuDays, rowsWithAmount);

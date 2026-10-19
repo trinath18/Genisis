@@ -349,31 +349,64 @@ no balance to read; they fall back to the member's. The top-up policy's balances
 
 ### Step 6: a worksheet from the invoices and the plan alone
 
-`WorksheetCalculator.CalculateAsync` puts the steps together the way Registration does when it opens a worksheet: actual amounts from the invoices, limits from the plan's benefit rows, the
-co-insurance, the available limit, then the rows and the summary. The plan is chosen as the desktop chooses it: a take-over plan if the case has one; otherwise, for a member with a new plan after
-renewal, the current plan (rows up to the payor effective date) when the patient was admitted on or before that date and the new plan (rows up to the new policy effective date) after it;
-otherwise the dependant's own plan, otherwise the member's. Only the days of the stay come from outside (they are entered with the invoice; the test uses the days the desktop saved).
+`WorksheetCalculator.CalculateAsync` puts the steps together the way Registration does when it opens a worksheet: actual amounts from the invoices, the days of the stay from the invoices, limits
+from the plan's benefit rows, the co-insurance, the available limit, then the rows and the summary. Nothing comes from the saved worksheet. The plan is chosen as the desktop chooses it: a
+take-over plan if the case has one; otherwise, for a member with a new plan after renewal, the current plan (rows up to the payor effective date) when the patient was admitted on or before
+that date and the new plan (rows up to the new policy effective date) after it; otherwise the dependant's own plan, otherwise the member's.
 
-Measured over 1,130 saved versions (the latest version of each patient's latest case), to the cent:
+**The days of the stay** are the sum over the version's invoices of `CLMBoardDay` and `CLMICUDay` (fractional days such as 7.5 exist; the first version of this step read them as whole
+numbers and lost those rows). The saved room days equal that sum for 98.6 per cent of versions, the ICU days for 99.4 per cent.
+
+**What the desktop shows when the plan has benefit rows but none for a benefit** (read from the saved worksheets, rows with an amount only): FULL for hospital supplies (276 of 276 such
+rows), anaesthetist (39 of 39), physician visits (89 of 89) and accident (115 of 115); 50.00 for the medical report (35 of 35); "-" (not covered) for the others, which get no limit.
+
+Measured over 367 saved versions (the latest version of each patient's latest case), to the cent:
 
 | Figure | Reproduced |
 |---|---|
-| Approved total before the available limit (saved total approved less limit exceeded) | 778 (68.8 per cent) |
-| Total approved | 797 (70.5 per cent) |
+| Approved total before the available limit (saved total approved less limit exceeded) | 286 (77.9 per cent) |
+| Total approved | 290 (79.0 per cent) |
 
-The breakdown the test prints shows where the rest goes: the co-payment is right for 99.5 per cent of the versions; when the limits and the co-payment are right the approved total is right in 778 of
-781; **the limits are the whole gap** (the plan gives the same approved sum as the saved limits for 69 per cent). Most of the rest is one pattern: a row has an amount, the saved limit is FULL (or
-a rate times days for Room & Board), and the plan's benefit rows have no row for that benefit (about 5 per cent of the versions with FULL hospital supplies; mostly payor AY's `M` plans, which
-have rows for other benefits only). The desktop's `getDatatoWS` fills those from rules that are not ported. Until they are, a calculation for such a plan should be shown as "limits not found
-for this plan" and its limits typed in, rather than trusted.
+(Before the days and the missing-row defaults: 68.8 and 70.5 per cent over 1,130 versions.) The breakdown the test prints shows where the rest goes: the co-payment is right for 99.7 per cent of
+the versions, the approved total follows whenever the limits and the co-payment are right (286 of 287), and the limits are the whole gap (the plan gives the same approved sum as the saved limits for
+78 per cent). What is left of it is a long tail: ICU and lodger tax rows, row 304, benefits whose limit the plan states as a percentage, and rows the desktop fills from rules in `getDatatoWS`
+that are not ported. A calculation therefore carries notes that name every row that has an amount and no limit.
 
-Next: those plan rules, the Room & Board co-payment, then the Registration screen (invoices in, calculation, save) and Approve.
+### Worksheet Registration: the calculation page
+
+`GET /api/worksheet/calculation/{case}?version=` (access position 22 or 23) and the **Worksheet Registration** page: enter a case, see its worksheet calculated from the invoices and the plan
+row by row (Benefits, Limit from the plan, Limit as saved, Actual, Approved, Payable to Hosp, Due to/(frm) Mem), the summary beside what the desktop saved (a figure that differs by a cent or more is in
+bold, and so is a limit whose effect differs from the saved one), the days summed from the invoices and the notes. It writes nothing. Page text: "Entering the invoices of a new worksheet and
+saving it are not available yet, so nothing is written here."
+
+**Why a new worksheet cannot be registered yet.** Registration does not create invoices: it works on the invoices of the case, and opens the separate invoice form (`frmInvoice`, which is not
+on the Required list and is not migrated) to enter them; its own save writes the worksheet tables. Every invoice in the development database already belongs to a saved worksheet
+(`INVWSversion` is set on all 39,684), so there is no unregistered invoice to calculate or save, and nothing to test registering a new worksheet against but the saved rows. Registering a
+worksheet needs invoices to exist (entered in the desktop, or by an invoice screen once one is migrated), the calculation (done, 79 per cent) and the save below.
+
+### Approve: what the desktop does, and what is migrated
+
+`cmdApprove_Click` of `frmWorksheetAdj2013` (and the save of Registration) checks, in this order, and stops at the first that fails: case number ("Please enter Case Number!"); a later version
+exists ("This worksheet cannot be amended"); no member ("Please select a record before proceeding!"); no invoice ("Worksheet cannot be saved without any invoice!"); no final diagnosis ("Final
+Diagnosis cannot be saved without any invoice!"); no worksheet status ("Please Select Worksheet Status!"); hospital-paid amount differs from the final hospital total ("Please verify Payable to
+Hospital amount"); the member-paid bank, account, address, post code, city and state checks (ported for Update); the bordx indicator for MH / IB cases ("Please Enter Bordx Indicator"); then
+"Are you sure?". In one transaction it then runs: `SaveClaim("A")` (228 lines, the version row of `Claim` with its 141 columns), `SaveClaimRemarks`, `saveLimit`, `saveActual`,
+`saveApprove`, `saveHos`, `saveMember`, `savePayMBMStatus` (935 lines), `SameLimitUndExcess`, the excess letter (`saveExcessLetter`, 512 lines), `UpdateInvoice`,
+`UpdateCasReserve`, `UpdateMBMBalance` (606 lines: the available limit), `UpdateMBMBnfBal`, `UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`, `UpdateClaimTopup`, `HCreditDebit`, and
+`tblRecord` (`IsWSdone`, `CaseProgress` = GL Issued); then "Record Save".
+
+**Migrated:** the calculation the grid tables (`ClaimLimit`, `ClaimActual`, `ClaimApprove`, `ClaimHos`, `ClaimMember`) come from; the pieces that already existed (Update's payment and address
+checks, Final LG's hospital-amount check, the Excess letter read, the notes and letters). **Not migrated:** every write above. Approve changes the member's available limit and the numbers
+other worksheets and payments read, so it will not be ported until each write can be checked: the plan is to regenerate the saved rows of a version from the engine and compare them column by column
+with the saved ones (as the limit, co-payment and balance steps are), table by table, before any of it writes to a real database.
+
+Next: the remaining plan rules (percentage limits, ICU and lodger tax, row 304), the Room & Board co-payment, then the save procedures in the order above, each verified by regenerating saved rows.
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/230_worksheet_tracking.sql`, `240_worksheet_send_to_accounts.sql`, `250_worksheet_send_to_ar.sql`; synonyms `genisis.WS_WKSTracking` (`VIEW_WKSTrackingNew`) and `genisis.WS_WKS2AC` (`VIEW_WKS2AC`) in `000_setup.sql`; Enquiry: `260_worksheet_enquiry.sql`, `270_worksheet_engine.sql`, `280_worksheet_adjustment.sql`, `290_worksheet_documents.sql`, `300_worksheet_final_lg.sql`, `310_worksheet_plan_limits.sql`, `320_worksheet_plan_terms.sql`, `330_worksheet_balance_limit.sql` and the synonyms `WS_ClaimActual`, `WS_ClaimHos`, `WS_ClaimMember`, `WS_ClaimLimit`, `WS_ClaimOthers`, `WS_CASInvoice` |
+| SQL | `sql/main/230_worksheet_tracking.sql`, `240_worksheet_send_to_accounts.sql`, `250_worksheet_send_to_ar.sql`; synonyms `genisis.WS_WKSTracking` (`VIEW_WKSTrackingNew`) and `genisis.WS_WKS2AC` (`VIEW_WKS2AC`) in `000_setup.sql`; Enquiry: `260_worksheet_enquiry.sql`, `270_worksheet_engine.sql`, `280_worksheet_adjustment.sql`, `290_worksheet_documents.sql`, `300_worksheet_final_lg.sql`, `310_worksheet_plan_limits.sql`, `320_worksheet_plan_terms.sql`, `330_worksheet_balance_limit.sql`, `340_worksheet_stay_days.sql`, `350_worksheet_calculation.sql` and the synonyms `WS_ClaimActual`, `WS_ClaimHos`, `WS_ClaimMember`, `WS_ClaimLimit`, `WS_ClaimOthers`, `WS_CASInvoice` |
 | API | `Genisis.Api/Worksheet/{Tracking,SendToAccounts,SendToAr,Lookups,Enquiry,Engine,Adjustment}/*.cs` (models, FluentValidation validators, rules, `I…Repository` + repository, service), `Worksheet/WorksheetCommon.cs`, `Worksheet/WorksheetServiceCollectionExtensions.cs`; thin controllers `WorksheetTrackingController`, `WorksheetSendToAccountsController`, `WorksheetSendToArController`, `WorksheetEnquiryController`, `WorksheetAdjustmentController`, `WorksheetLookupsController` |
 | UI | `GenisisUI/src/pages/worksheet/` — `WorksheetTrackingPage`, `WorksheetSendToAccountsPage`, `WorksheetSendToArPage`, `worksheetRules.ts` (pure rules, form models, Yup schemas, query mapping), `useTickList.ts`, `useWorksheetLookups.ts`, `RangeFields.tsx`; `WorksheetEnquiryPage`, `EnquiryTabs.tsx`, `EnquiryCaseDialog.tsx`, `enquiryRules.ts`; `WorksheetAdjustmentPage`, `AdjustmentEditor.tsx`, `adjustmentRules.ts`; `lib/scanCodes.ts` |
 | Tests | `WorksheetScreensTests.cs` (rules, validators, services with fakes), `WorksheetDatabaseTests.cs` (real databases, every write rolled back), the architecture tests (extended to the new namespaces), `WorksheetEnquiryTests.cs`, `WorksheetAdjustmentTests.cs`, `worksheetRules.test.ts`, `enquiryRules.test.ts`, `adjustmentRules.test.ts`, `scanCodes.test.ts`, browser suites `e2e/worksheet.mjs`, `e2e/worksheet-enquiry.mjs` and `e2e/worksheet-adjustment.mjs` |
@@ -389,7 +422,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 580 of 580 passed on the merged branch (262 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
-staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
-errors (the three Worksheet suites are 130 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 587 of 587 passed on the merged branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 119 unit tests passed; browser suites 232 checks passed in all, no console or network
+errors (the four Worksheet suites are 148 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42, Registration 18); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

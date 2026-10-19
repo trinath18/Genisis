@@ -112,7 +112,7 @@ How to read the status column
 | # | Menu path | Control | Access pos | Opens (VB6) | Status | Web route |
 |---:|---|---|---:|---|---|---|
 | 1 | Worksheet | `Claim` |  |  | Not required (hidden in the desktop) |  |
-| 2 | Worksheet > Worksheet Registration | `mnuNewWorksheet` |  | frmWorksheetRegGST2015 (newest registration form in the project; no click handler) | Required, not migrated |  |
+| 2 | Worksheet > Worksheet Registration | `mnuNewWorksheet` |  | frmWorksheetRegGST2015 (newest registration form in the project; no click handler) | Required, **partly migrated**: the calculation page only (nothing is saved, no invoice entry) |  |
 | 3 | Worksheet > WorkSheet Adjustment | `mnuWSAdjust` | 23 |  | Migrated | `/worksheet/adjustment` |
 | 4 | Worksheet > Worksheet Enquiry | `mnuWSEnq` | 13 | frmWorksheetEnq | Migrated | `/worksheet/enquiry` |
 | 5 | Worksheet > Generate Credit/Debit Note | `mnuCreditDebitNote` |  |  | Not required (hidden in the desktop) |  |

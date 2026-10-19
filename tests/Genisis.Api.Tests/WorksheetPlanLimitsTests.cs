@@ -48,6 +48,24 @@ public class WorksheetPlanLimitsRulesTests
     }
 
     [Fact]
+    public void A_row_with_an_amount_whose_benefit_the_plan_does_not_list_gets_the_desktops_default()
+    {
+        var plan = new[] { B("101", "0", "120", "100"), B("104", "FULL") };
+        var limits = PlanLimitRules.Derive(plan, 2, 0, new HashSet<int> { 1, 3, 9, 11, 14, 21, 23, 15 });
+        Assert.Equal(("FULL", "FULL", "FULL", "FULL", "50.00"), (limits[3], limits[9], limits[11], limits[14], limits[21]));
+        Assert.False(limits.ContainsKey(23)); // admin and ambulance show "-" when the plan has no row
+        Assert.False(limits.ContainsKey(15));
+    }
+
+    [Fact]
+    public void The_default_applies_only_to_rows_with_an_amount_and_only_when_the_plan_has_rows()
+    {
+        Assert.False(PlanLimitRules.Derive([B("104", "FULL")], 0, 0, new HashSet<int>()).ContainsKey(3));
+        Assert.False(PlanLimitRules.Derive([], 0, 0, new HashSet<int> { 3 }).ContainsKey(3));
+        Assert.Equal("80.00", PlanLimitRules.Derive([B("103", "80.00")], 0, 0, new HashSet<int> { 3 })[3]);
+    }
+
+    [Fact]
     public void Others_is_never_covered_whatever_the_plan_says_and_only_when_it_has_an_amount()
     {
         Assert.False(PlanLimitRules.Derive([B("901", "100")], 0, 0).ContainsKey(25));
@@ -118,13 +136,14 @@ public class WorksheetPlanLimitsOracleTests(ITestOutputHelper output)
             """, transaction: session.Transaction)).ToList();
         Assert.True(sample.Count >= 150, $"only {sample.Count} versions in the sample");
 
+        static decimal Days(string? text) => decimal.TryParse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0m;
         var service = new PlanLimitService(TestDb.Sessions(), new PlanBenefitRepository());
         var engine = new WorksheetEngineRepository();
         var groups = new[] { "plain", "case dependent", "Others", "Room & Board", "ICU", "tax" }.ToDictionary(g => g, _ => (N: 0, Ok: 0));
         foreach (var v in sample)
         {
             var withAmount = (await engine.ActualAsync(session, v.Cas, v.Version)).Where(a => a.Actual > 0).Select(a => a.Slot).ToHashSet();
-            var derived = await service.LimitsAsync(v.Cas, v.Version, int.TryParse(v.RoomDays, out var rd) ? rd : 0, int.TryParse(v.IcuDays, out var id) ? id : 0, withAmount);
+            var derived = await service.LimitsAsync(v.Cas, v.Version, Days(v.RoomDays), Days(v.IcuDays), withAmount);
             if (derived.Count == 0) continue;
             var saved = (await engine.LimitsAsync(session, v.Cas, v.Version)).ToDictionary(l => l.Slot, l => l.LimitText);
             foreach (var (slot, text) in derived)

@@ -36,6 +36,8 @@ against the same database.
 | `main/310_worksheet_plan_limits.sql` | Worksheet engine step 4: the benefit rows (BNF) in force for the patient's plan on the admission date |
 | `main/320_worksheet_plan_terms.sql` | Worksheet engine step 5: the plan's co-payment terms (co-insurance percentage and sign, Room & Board co-payment) |
 | `main/330_worksheet_balance_limit.sql` | Worksheet engine step 5b: the patient's available limit (member's or covered person's, by the plan's annual limit type) |
+| `main/340_worksheet_stay_days.sql` | Worksheet engine step 7: the days of the stay, summed from the invoices |
+| `main/350_worksheet_calculation.sql` | Worksheet Registration calculation page: row captions, the figures saved with a version, a case's versions |
 | `main/130_mma.sql` | Maintenance > Entity (Procedures, Look Up Table) and Maintenance > Accounts; tables in the maintenance database |
 | `main/140_adjustment.sql` | Membership > Adjustment (all endorsement types) |
 | `main/150_enquiry_tabs.sql` | Membership > Enquiry: HIS Benefits, Acc History, Fees, Non Disclosure, Policy Terms, LT Limit, Policy Wording, T/O Claims, WS |

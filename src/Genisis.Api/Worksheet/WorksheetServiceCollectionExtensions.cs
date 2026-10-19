@@ -1,4 +1,5 @@
 using Genisis.Api.Worksheet.Adjustment;
+using Genisis.Api.Worksheet.Calculation;
 using Genisis.Api.Worksheet.Engine;
 using Genisis.Api.Worksheet.Enquiry;
 using Genisis.Api.Worksheet.Lookups;
@@ -28,7 +29,10 @@ public static class WorksheetServiceCollectionExtensions
         services.AddScoped<CoPaymentService>();
         services.AddSingleton<IBalanceLimitRepository, BalanceLimitRepository>();
         services.AddScoped<BalanceLimitService>();
+        services.AddSingleton<IStayDaysRepository, StayDaysRepository>();
         services.AddScoped<WorksheetCalculator>();
+        services.AddSingleton<ICalculationRepository, CalculationRepository>();
+        services.AddScoped<CalculationService>();
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();

@@ -8,13 +8,13 @@ namespace Genisis.Api.Tests;
 [Collection(DatabaseWriteCollection.Name)]
 public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
 {
-    private sealed record Saved(string Cas, int Version, decimal TotalApproved, decimal LimitExceeded, decimal CoPayment, decimal Approved, string? RoomDays, string? IcuDays);
+    private sealed record Saved(string Cas, int Version, decimal TotalApproved, decimal LimitExceeded, decimal CoPayment);
 
-    private static WorksheetCalculator Calculator() => new(TestDb.Sessions(), new WorksheetEngineRepository(), new PlanBenefitRepository(), new PlanTermsRepository(), new BalanceLimitRepository());
+    private static WorksheetCalculator Calculator() => new(TestDb.Sessions(), new WorksheetEngineRepository(), new PlanBenefitRepository(), new PlanTermsRepository(), new BalanceLimitRepository(), new StayDaysRepository());
 
     /// <summary>
     /// For the latest version of the latest case of each patient (so the available limit is still the one the claim drew on), about one in thirty-six: the worksheet is worked out from the invoices,
-    /// the plan's benefit rows, its co-insurance and the available limit, with nothing from the saved worksheet but the days of the stay. Two figures are compared with the saved ones to the cent:
+    /// the plan's benefit rows, its co-insurance and the available limit, with nothing from the saved worksheet (the days of the stay come from the invoices). Two figures are compared with the saved ones to the cent:
     /// the approved total before the available limit comes into it (the saved total approved less the limit exceeded), which does not depend on the limit, and the total approved itself. Measured
     /// over 1,130 versions: 68.8 and 70.5 per cent. The breakdown the test prints shows why: the co-payment is right for 99.5 per cent, the approved total follows when the limits are right (778 of 781),
     /// and the limits are the whole gap: 69 per cent of the versions get the same approved sum from the plan as from the saved limits, the rest mostly where the plan has no row for a benefit the
@@ -29,10 +29,8 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
         await using var session = await TestDb.Sessions().OpenAsync();
         var sample = (await session.Connection.QueryAsync<Saved>(
             """
-            SELECT RTRIM(w.CASNumber) AS Cas, w.ClaimVersion AS Version, ISNULL(w.CLMTotalApproved, 0) AS TotalApproved, ISNULL(w.CLMLimitExceeded, 0) AS LimitExceeded, ISNULL(w.CLMCoPayRB, 0) AS CoPayment,
-                   ISNULL(w.CLMTotalApproved, 0) AS Approved, RTRIM(l.CLMBoardDays) AS RoomDays, RTRIM(l.CLMICUDays) AS IcuDays
+            SELECT RTRIM(w.CASNumber) AS Cas, w.ClaimVersion AS Version, ISNULL(w.CLMTotalApproved, 0) AS TotalApproved, ISNULL(w.CLMLimitExceeded, 0) AS LimitExceeded, ISNULL(w.CLMCoPayRB, 0) AS CoPayment
             FROM genisis.WS_Claim w
-            JOIN genisis.WS_ClaimLimit l ON l.CASNumber = w.CASNumber AND l.CLMVersion = w.ClaimVersion
             JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = w.CASNumber AND v.ClaimVersion = w.ClaimVersion
             WHERE w.CASNumber NOT LIKE 'ZZ%' AND v.MBMNumber IS NOT NULL AND w.CLMPreviousBalance IS NOT NULL AND v.CASDateAdmitted IS NOT NULL
               AND ABS(CHECKSUM(w.CASNumber, w.ClaimVersion)) % 36 = 0
@@ -48,7 +46,7 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
         int done = 0, beforeLimitSame = 0, totalSame = 0, workedHard = 0, limitsOk = 0, limitsOkCoPayOk = 0, limitsOkCoPayOkTotalOk = 0, coPayOk = 0;
         foreach (var v in sample)
         {
-            var result = await calculator.CalculateAsync(v.Cas, v.Version, int.TryParse(v.RoomDays, out var rd) ? rd : 0, int.TryParse(v.IcuDays, out var id) ? id : 0, v.TotalApproved);
+            var result = await calculator.CalculateAsync(v.Cas, v.Version, v.TotalApproved);
             if (result is null) continue;
             done++;
             var derivedBeforeLimit = result.Grid.Totals.Approved - result.CoPayment;

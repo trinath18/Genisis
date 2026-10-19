@@ -132,3 +132,30 @@ END';
     EXEC (@cisSql);
 END
 GO
+
+-- ===== UploadDb (Membership > Upload Bordx staging database; optional: skipped when it does not exist, see create-upload-db.sql)
+-- Read and write: the TmpUpload_* procedures stage the members of an upload there and SaveUploadDate / DeleteTmpUploadDate read and clear them.
+GO
+IF DB_ID(N'UploadDb') IS NOT NULL
+BEGIN
+    DECLARE @uploadSql nvarchar(max) = N'USE UploadDb;
+DECLARE @login sysname = N''apiuser'', @q sysname, @s nvarchar(max) = N'''';
+SET @q = QUOTENAME(@login);
+IF USER_ID(@login) IS NULL
+BEGIN
+    SET @s = N''CREATE USER '' + @q + N'' FOR LOGIN '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datareader'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datareader ADD MEMBER '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datawriter'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datawriter ADD MEMBER '' + @q;
+    EXEC (@s);
+END';
+    EXEC (@uploadSql);
+END
+GO

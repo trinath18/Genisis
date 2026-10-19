@@ -352,7 +352,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 571 of 573 passed on the merged branch (247 of the tests are Worksheet tests; the two failures are Upload Bordx tests
-that need an `UploadDb` database this server does not have); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 573 of 573 passed on the merged branch (247 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
 errors (the three Worksheet suites are 130 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

@@ -22,6 +22,8 @@ public static class WorksheetServiceCollectionExtensions
 
         services.AddSingleton<IWorksheetEngineRepository, WorksheetEngineRepository>();
         services.AddScoped<WorksheetEngineService>();
+        services.AddSingleton<IPlanBenefitRepository, PlanBenefitRepository>();
+        services.AddScoped<PlanLimitService>();
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();

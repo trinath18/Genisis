@@ -180,7 +180,7 @@ Note screen (`frmGenerateCNNote`, hidden, not required), neither of which is mig
 
 **Deliberate differences.** A case with no excess record gets "There is no excess record for this case." and is not marked (the desktop opened an empty letter and marked the case anyway); a
 debit note is refused for a worksheet that has nothing due from the member (the desktop only disabled the button); the notes' phone line is left out (the desktop's phone source is commented
-out). The data of the notes and the letter can only be shown for worksheets whose case and member exist in the database; in this trimmed development copy that is about 1,900 versions.
+out). The data of the notes and the letter can only be shown for worksheets whose case and member exist in the database; in the development database since the data was restored that is 31,199 of the 31,208 saved versions (see "Restored data").
 
 ### Adjustment, step 3: Final LG
 
@@ -206,7 +206,7 @@ What is not the same, or could not be checked:
 - **The letter.** The desktop built it in the worksheet form's own Word routine (`funcwordLG` and `bookmarkLG`, about 2,600 lines, from a template that is not in the source package). The
   web builds it with the Case Adjustment guarantee letter (the same LG types, B for private-plan members, and fields); the two letters' wording was not compared field by field.
 - **The limit test.** The desktop's own `CheckLimit` (about 800 lines: top-up, lifetime and per-disability branches) is approximated by the Case side's balance limit rule plus the
-  worksheet's final approve. It cannot be checked against this database, whose plan and member data were trimmed (see the Phase 3 notes).
+  worksheet's final approve. It has not been checked against the saved worksheets yet; the restored data (see "Restored data") makes that possible.
 - **Data.** The case has to be registered with its member (the letter's context), which is true of about 1,700 cases here.
 
 ## Phase 3: worksheet calculation engine (steps 1 to 3 done)
@@ -239,12 +239,10 @@ against every saved worksheet, using the limit text saved with each version:
 Two things the data cannot confirm: the pay-member flag is **not set in any saved worksheet**, so `GetMax` is covered by unit tests only; and for a negative actual amount the
 desktop returns the limit when the amount is below it (ported as written, pinned by a test).
 
-**Step 3 (limits from the plan) cannot be checked against this database.** The Registration form builds the limit text in `display_benefit`: for each grid row it reads the
-plan's benefit row from `BNF` (plan, insured type, health type; `BNFRMPerDis` is the amount or the word FULL, `BNFClaimAbleAmount` the daily rate), and for Room & Board and ICU
-multiplies the rate by the days of the (last) invoice (`tmRBDays`, `tmICUDays`); `getDatatoWS` then limits the days again by the plan's day limits and by the days already used
-by a linked case (`ClaimSameLimit`). But in this database `BNF` has benefit rows for only 122 of 21,351 plans, and only 14 of the 31,208 saved worksheet versions belong to one of
-them (1,933 versions have a member row at all). Anything ported for this step could be verified on those 14 versions and on hand-made cases only, which is not the standard used
-for steps 1 and 2. It needs a database with `BNF` populated for the plans of the saved worksheets.
+**Step 4 (limits from the plan): the data gap is closed.** The Registration form builds the limit text in `display_benefit`: for each grid row it reads the plan's benefit row from `BNF`
+(plan, insured type, health type; `BNFRMPerDis` is the amount or the word FULL, `BNFClaimAbleAmount` the daily rate), and for Room & Board and ICU multiplies the rate by the days of the
+(last) invoice; `getDatatoWS` then limits the days again by the plan's day limits and by the days already used by a linked case (`ClaimSameLimit`). This could not be checked while the
+development database had benefit rows for only 126 plans; see "Restored data" and "Step 4" below.
 
 **Step 3, done: the summary rows that follow from the grid** (`WorksheetRules.Final`, `genisis.WorksheetEngine_SummaryInputs`, `WorksheetEngineService.FinalSavedAsync`).
 Probing all 31,199 saved `Claim` rows (the table is complete; only the case, member and plan tables were trimmed) showed which summary figures are plain arithmetic on figures
@@ -268,11 +266,50 @@ What the data does **not** support, and why these are not ported yet:
   stay unported until a worksheet that uses them is available.
 - **Payable to hospital and the bordx amount** equal "final minus payable to member" and "final" only in 96 to 97 per cent of versions. The misses are adjustment (credit) worksheets, where
   the bordx amount follows the hospital figure and does not take the co-payment off (for example AJ00000033, versions 7 and 8). Settling that needs the rest of `getFinalTotal`
-  (about 700 more lines) and the adjustment rules, so it is left for the Adjustment step.
+  (about 700 more lines) and the adjustment rules, so it is left for the Approve step.
 - **The co-payment itself.** `getFinalTotal` takes it as (approved minus Room & Board minus taxes) times the plan's co-payment percentage, then nudges the cents for invoices from
-  April 2008 on. That needs the member's plan, which exists for only about 1,900 of the 31,208 versions here, so the co-payment (and the plan limits, see above) are inputs for now.
+  April 2008 on. That needs the member's plan, which the restored data now has for almost every saved version (see "Restored data"), so porting it and checking it against the saved `CLMCoPayRB` is the next engine step; until then the co-payment is an input.
 
-Next: Adjustment, which can already re-evaluate and show a saved worksheet. Registration needs the plan-derived limits and co-payment, so it waits for fuller plan data.
+### Restored data
+
+The development `HISDB` had been trimmed to save space, so the case, member and plan tables covered only a small part of the 31,208 saved worksheet versions. A full copy was restored beside it as
+`HISDB_actual_backup` (138 GB; `HISDB` is 7 GB), and what the Worksheet module needs was copied across, **adding only rows that were missing and never changing an existing row**, in one
+transaction, with the encryption triggers of `MBM` / `MBMCoveredPersons` / `MBMOthersTwo` / `PLN` switched off while copying (so the already-encrypted columns arrive as they are) and on again after.
+A verified backup of `HISDB` was taken first. The copy:
+
+| Table | Rows added | Why |
+|---|---|---|
+| `BNF` | 376,897 (now 377,994 rows, 19,725 plans; was 126 plans) | the plan benefit rows the limits come from |
+| `PLN` | 1 | plan master |
+| `CAS` | 14,488 (now 17,080; saved worksheets' cases: 16,205 of 16,206) | the cases of the saved worksheets |
+| `MBM`, `MBMOthers`, `MBMOthersTwo`, `MBMCoveredPersons` | 2,081 / 4,523 / 217 / 4,062 | their members and covered persons |
+| `CASRemarks`, `CASRemarksTwo`, `CASRemarkThree`, `CASOthers`, `CASOthersTwo`, `CAS_UD`, `DIAFirst`, `DIAFinal` | about 12,650 each | the case's remarks, details (including the ASCII export flag) and diagnoses |
+
+Saved versions visible to Enquiry and Adjustment went from 1,950 to 31,199 of 31,208, and versions whose member plan has benefit rows from 14 to over 31,000. `HISMaintenance` was not restored, so
+its per-case tables (`CASLG`, `tblRecord`, `CASCrossReference`) still cover only part of the cases; the screens cope with a missing row, and three Case database tests that assumed a complete set now
+make the missing cross-reference rows inside their own rolled-back session.
+
+### Step 4: limits the plan fixes (done for the rows the saved data confirms)
+
+`genisis.WorksheetEngine_PlanBenefits` returns the benefit rows of the patient's plan (the covered person's own plan for a dependant that has one), insured type and health type that are in force on
+the admission date; `PlanLimitRules.Derive` turns them into the limit text of each row. Measured against the limit text the desktop saved, over the 31,190 versions that have plan data:
+
+| Rows | Rule | Agreement |
+|---|---|---|
+| Hospital supplies, theatre, pre-hospital (2), surgical, anaesthetist, pre-surgical, physician's visit, accident, ambulance, outpatient, organ (codes 103, 104, 201 to 204, 301, 302, 401 to 403, 501) | the plan's FULL or amount, as it stands | 93 to 97 per cent each; 96.6 per cent in the oracle test's sample (6,200 of 6,419 rows) |
+| Room & Board | daily rate times the days of the stay, held to the plan's days; no days means no limit ("-") | 97.7 per cent in the sample (212 of 217) |
+| ICU | the same with its own days; no days gives 0.00 | 96.3 per cent (156 of 162) |
+| Service tax on Room & Board | 6 per cent of the Room & Board limit | 96.3 per cent (209 of 217); 98.6 per cent over all versions |
+
+Which row of the benefit table was in force made no difference: the latest row up to the admission date and the latest row of all agree on every version. `WorksheetPlanLimitsOracleTests`
+repeats the comparison on about one version in forty on every run.
+
+**Not derived yet** (the plain rule agrees on only 4 to 66 per cent, because the desktop also looks at the case): post-hospitalisation (303: 54 per cent; the saved limit is 0.00 for many
+plans that have an amount), kidney and cancer treatment (404), guardian allowance (701), medical report (801), admin (803), home nursing (804), others (901: 20 per cent; 0.00 saved where the plan
+has 100) and the plan-specific tax rows for ICU and lodger. Their rules are in `display_benefit` and `getDatatoWS` and need the same method: read the VB6, port it, compare it with the saved text.
+Also still to port: the day caps from a linked case (`ClaimSameLimit`) and the days of the stay taken from the invoices (the oracle uses the days the desktop saved).
+
+Next: those rows, then the co-payment and the member's available limit from the data (checked against the saved `CLMCoPayRB` and `CLMPreviousBalance`), then Worksheet Registration and Approve.
 
 ## Code map
 
@@ -294,7 +331,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 531 of 533 passed on the merged branch (207 of the tests are Worksheet tests; in the last full run one slow Tracking report test (`agents.insured`) timed out and passed when run alone, which is counted as passed; the two failures are Upload Bordx tests
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 549 of 551 passed on the merged branch (225 of the tests are Worksheet tests; the two failures are Upload Bordx tests
 that need an `UploadDb` database this server does not have); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
 errors (the three Worksheet suites are 130 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

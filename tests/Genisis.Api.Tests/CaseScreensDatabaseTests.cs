@@ -241,6 +241,7 @@ public class CaseScreensDatabaseTests
             "EXISTS (SELECT 1 FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber AND w.CLMTotalApproved > 0) " +
             "AND EXISTS (SELECT 1 FROM dbo.MBM m WHERE m.MBMNumber = c.MBMNumber AND RTRIM(m.INSCode) NOT IN ('F', 'H')) AND c.MBMPatientCovID = '00'");
         Assert.NotNull(cas);
+        await EnsureCrossReferences(session, cas);
         var oldMember = (await repository.GetCaseAsync(session, cas!))!.MemberNo;
         var newMember = await session.Connection.ExecuteScalarAsync<string>(
             "SELECT TOP (1) RTRIM(MBMNumber) FROM dbo.MBM WHERE MBMNumber <> @oldMember AND MBMAvailableLimit IS NOT NULL ORDER BY MBMNumber DESC", new { oldMember }, session.Transaction);
@@ -346,9 +347,12 @@ public class CaseScreensDatabaseTests
         await SqlScripts.EnsureDeployedAsync(MainDb);
         var sessions = TestDb.Sessions();
         var service = new ListingService(sessions, new ListingRepository(), new StubDocuments(false), NullLogger<ListingService>.Instance);
-        var bad = (await service.SearchAsync(new ListingFilter { UseScan = false })).FirstOrDefault(r => ListingRules.SelectionProblem(ToItem(r), null) is not null);
+        var found = await service.SearchAsync(new ListingFilter { UseScan = false });
+        var bad = found.FirstOrDefault(r => ListingRules.SelectionProblem(ToItem(r), null) is not null) ?? found.FirstOrDefault();
         Assert.NotNull(bad);
         await using var session = await sessions.BeginAsync();
+        // a complete database has no listed worksheet that breaks a rule; this one is made to (no discharge date) inside the rolled-back session
+        await session.Connection.ExecuteAsync("UPDATE dbo.CAS SET CASDischargeDate = NULL WHERE CASNumber = @cas", new { cas = bad.CaseNo }, session.Transaction);
         var ex = await Assert.ThrowsAsync<CaseListingException>(() =>
             service.GenerateAsync(session, new() { Option = "Multiple Claims", Items = [new(bad.CaseNo, bad.ClaimVersion)] }, "UITEST"));
         Assert.StartsWith($"{bad.CaseNo}-{bad.ClaimVersion}: ", ex.Message);
@@ -357,6 +361,17 @@ public class CaseScreensDatabaseTests
     }
 
     // ---- Claim ASCII / Case ASCII ----
+
+    /// <summary>
+    /// The maintenance database keeps a cross-reference row per case (a copy of the case's status, dates, hospital and claimability, and the export and transfer marks). A database restored in
+    /// parts can have cases without one; inside the test's own (rolled-back) session the missing rows are made from the case, so the test's world is whole.
+    /// </summary>
+    private static Task EnsureCrossReferences(IDbSession session, string? cas = null) => session.Connection.ExecuteAsync(
+        """
+        INSERT INTO genisis.Maint_CASCrossReference (CASNumber, MBMNumber, MBMPatientCovID, CASStatus, CASDischargeDate, CASDateAdmitted, CASHOSCode, CASClaimability, LINKCASNo, CASTopupLmt, CASPending)
+        SELECT c.CASNumber, c.MBMNumber, c.MBMPatientCovID, c.CASStatus, c.CASDischargeDate, c.CASDateAdmitted, c.CASHOSCode, c.CASClaimability, c.LINKCASNo, c.CASTopupLmt, c.CASPending
+        FROM dbo.CAS c WHERE (@cas IS NULL OR c.CASNumber = @cas) AND NOT EXISTS (SELECT 1 FROM genisis.Maint_CASCrossReference x WHERE x.CASNumber = c.CASNumber)
+        """, new { cas }, session.Transaction);
 
     private static async Task<string[]> ReadLinesAsync(string folder, string name) =>
         Encoding.Latin1.GetString(await File.ReadAllBytesAsync(Path.Combine(folder, name))).Split("\r\n", StringSplitOptions.None);
@@ -380,6 +395,7 @@ public class CaseScreensDatabaseTests
         try
         {
             await using var session = await sessions.BeginAsync();
+            await EnsureCrossReferences(session);
 
             // accepted worksheets: header + records + trailer, flagged as exported
             var accepted = await claimService.GenerateAsync(session, new() { Payor = "PN - X", DateFrom = from, DateTo = to, ExportStatus = "N", WorksheetStatus = "0" });

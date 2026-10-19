@@ -33,6 +33,7 @@ builder.Services.AddScoped<Genisis.Api.Reinstatement.IReinstatementService, Geni
 builder.Services.AddScoped<Genisis.Api.McoPending.IMcoPendingService, Genisis.Api.McoPending.McoPendingService>();
 builder.Services.AddScoped<Genisis.Api.Pluto.PlutoAsciiExporter>();
 builder.Services.AddScoped<Genisis.Api.Pluto.IPlutoService, Genisis.Api.Pluto.PlutoService>();
+builder.Services.AddScoped<Genisis.Api.CardControl.ICardControlService, Genisis.Api.CardControl.CardControlService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();

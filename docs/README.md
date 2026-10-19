@@ -68,3 +68,15 @@ Legend: **Met** — in place and verified · **Partly** — in place for part of
 | Modular architecture, shared utilities, future expansion | **Met** at folder / namespace level |
 | CI/CD with lint, test, build | **Met** as workflow files; they have not been executed on a hosted runner from this machine (the commands were run locally) |
 | Architecture diagrams, code organization, naming, component patterns, documentation set | **Met** |
+
+## Open items against the brief
+
+An audit of the repositories against `script.txt` (every library, document, pipeline and rule above checked in the code, not from memory). What the brief asks for and this migration does **not** yet deliver:
+
+1. **"Preserve ALL existing functionality"** is met screen by screen, not for the whole application: 22 of the 113 menu items marked Required are migrated, 91 are not (backlog by module in [menu-mapping.md](menu-mapping.md); Claim Bordx 23, Payment 15, Maintenance 14, Membership 10, and the rest of Worksheet).
+2. **The Worksheet module is not finished.** Migrated: Tracking, Send to A/C, Send to A/R, Enquiry, and Adjustment's Update, credit / debit notes, Excess letter and Final LG. **Not built: Worksheet Registration and Adjustment's Approve.** The calculation engine they need reproduces the desktop's saved totals for about 70 per cent of worksheets from the invoices and the plan alone (measured, see [worksheet-screens.md](worksheet-screens.md) "Step 6"); the gap is the plan rules for benefits the plan's rows do not list, plus the Room & Board co-payment.
+3. **Linting is `oxlint`, not ESLint** (ESLint-compatible rules, 0 warnings); Prettier skips a documented list of older files.
+4. **No formal WCAG audit or colour-contrast measurement** has been run; the accessibility features listed above are in place.
+5. **CI workflows have not run on a hosted runner**; every command they contain was run locally and passes (API build with warnings as errors and 580 tests, UI lint / format / typecheck / 103 unit tests / build, 214 browser checks).
+6. **Older modules are not fully layered** (Plans, Benefits, Membership Registration still call Dapper from services), and one API project holds all layers.
+7. **The browser suites and the oracle tests depend on the development data.** They were corrected when the full data was restored (three Case database tests, two browser suites); a different dataset can need the same.

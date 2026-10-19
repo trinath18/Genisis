@@ -26,6 +26,9 @@ public static class WorksheetServiceCollectionExtensions
         services.AddScoped<PlanLimitService>();
         services.AddSingleton<IPlanTermsRepository, PlanTermsRepository>();
         services.AddScoped<CoPaymentService>();
+        services.AddSingleton<IBalanceLimitRepository, BalanceLimitRepository>();
+        services.AddScoped<BalanceLimitService>();
+        services.AddScoped<WorksheetCalculator>();
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();

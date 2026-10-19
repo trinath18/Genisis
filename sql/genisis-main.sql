@@ -6040,26 +6040,44 @@ END
 GO
 
 -- ===== main/310_worksheet_plan_limits.sql =====
--- Worksheet calculation engine, step 4: the limits the plan fixes (display_benefit of the Registration form). The benefit rows (BNF) of the patient's plan, insured type and health
--- type that are in force on the admission date: for each benefit code the row with the latest effective date up to it. The plan is the covered person's own when the patient is a
--- dependant and has one, otherwise the member's.
+-- Worksheet calculation engine, step 4: the limits the plan fixes (display_benefit of the Registration form). The benefit rows (BNF) of the plan the desktop reads, the row with the latest
+-- effective date up to its bound for each benefit code. Which plan, in the desktop's order:
+--   1. a case with a take-over plan (CAS.CASTakeOverPlan): that plan and the insured type, whatever the health type and date;
+--   2. a member with a new plan after renewal (MBMNewPlanCode): the current plan with rows up to the payor effective date when the patient was admitted on or before it, otherwise
+--      the new plan with rows up to the new policy effective date;
+--   3. a dependant with a plan of their own (MBMCPLNCode): that plan, any date;
+--   4. otherwise the member's plan, any date.
+-- Not ported: the top-up policy's own plan.
 CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_PlanBenefits
     @cas nvarchar(15), @version int
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @plancode nvarchar(20), @ins nvarchar(5), @hlt nvarchar(5), @adm datetime;
+    DECLARE @plancode nvarchar(20), @ins nvarchar(5), @hlt nvarchar(5), @bound datetime, @anyHealthType bit = 0;
+    DECLARE @own nvarchar(20), @dependant nvarchar(20), @newPlan nvarchar(20), @takeOver nvarchar(20), @patient nvarchar(2), @adm datetime, @payorEff datetime, @newEff datetime;
     SELECT TOP (1)
-        @plancode = RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END),
-        @ins = RTRIM(v.INSCode), @hlt = RTRIM(v.HLTCode), @adm = v.CASDateAdmitted
+        @own = RTRIM(v.PLNCode), @dependant = RTRIM(v.MBMCPLNCode), @newPlan = RTRIM(v.MBMNewPlanCode), @patient = v.MBMPatientCovID,
+        @ins = RTRIM(v.INSCode), @hlt = RTRIM(v.HLTCode), @adm = v.CASDateAdmitted, @payorEff = v.MBMPayorEffDate, @newEff = v.MBMNewPolEffDate,
+        @takeOver = RTRIM(c.CASTakeOverPlan)
     FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    JOIN dbo.CAS c ON c.CASNumber = v.CASNumber
     WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+
+    IF ISNULL(@takeOver, N'') <> N'' BEGIN SET @plancode = @takeOver; SET @anyHealthType = 1; END
+    ELSE IF ISNULL(@newPlan, N'') <> N''
+    BEGIN
+        IF @adm <= @payorEff BEGIN SET @plancode = @own; SET @bound = @payorEff; END
+        ELSE BEGIN SET @plancode = @newPlan; SET @bound = @newEff; END
+    END
+    ELSE IF @patient <> N'00' AND ISNULL(@dependant, N'') <> N'' SET @plancode = @dependant;
+    ELSE SET @plancode = @own;
 
     SELECT x.Code, x.Days, x.Claimable, x.[Limit]
     FROM (SELECT RTRIM(b.BNFCode) AS Code, RTRIM(b.BNFNoOfDays) AS Days, RTRIM(b.BNFClaimAbleAmount) AS Claimable, LTRIM(RTRIM(b.BNFRMPerDis)) AS [Limit],
                  ROW_NUMBER() OVER (PARTITION BY b.BNFCode ORDER BY b.BNFEffDate DESC) AS rn
           FROM dbo.BNF b
-          WHERE b.PLNCode = @plancode AND b.INSCode = @ins AND b.HLTCode = @hlt AND (@adm IS NULL OR b.BNFEffDate <= @adm)) x
+          WHERE b.PLNCode = @plancode AND b.INSCode = @ins AND (@anyHealthType = 1 OR b.HLTCode = @hlt)
+            AND (@bound IS NULL OR b.BNFEffDate <= @bound)) x
     WHERE x.rn = 1
     ORDER BY x.Code;
 END
@@ -6080,6 +6098,29 @@ BEGIN
     FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
     JOIN dbo.PLN p ON p.PLNCode = RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END)
                   AND p.PAYCode = v.PAYCode AND p.HLTCode = v.HLTCode
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+END
+GO
+
+-- ===== main/330_worksheet_balance_limit.sql =====
+-- Worksheet calculation engine, step 5b: the member's available limit (the balance limit of the Registration screen). Whose limit it is depends on the plan's annual limit type
+-- (AnnualLimit.SuppLimitStatus, the latest row up to the admission date): for the principal, or a patient with cover 00, it is the member's (MBM.MBMAvailableLimit); for a dependant
+-- with type B it is the first covered person's (cover 01), with type C the patient's own (MBMCoveredPersons.MBMCAvailableLimit), and with any other type (A, or no row) the member's.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_BalanceLimit
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1)
+        CASE WHEN RTRIM(v.MBMMemberType) = N'P' OR v.MBMPatientCovID = N'00' THEN m.MBMAvailableLimit
+             WHEN a.SuppLimitStatus = N'B' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = N'01')
+             WHEN a.SuppLimitStatus = N'C' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = v.MBMPatientCovID)
+             ELSE m.MBMAvailableLimit END AS Balance,
+        RTRIM(a.SuppLimitStatus) AS LimitType
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
+    OUTER APPLY (SELECT TOP (1) al.SuppLimitStatus FROM dbo.AnnualLimit al
+                 WHERE al.PLNCode = RTRIM(v.PLNCode) AND al.INSCode = RTRIM(v.INSCode) AND al.AnnualEffDate <= v.CASDateAdmitted ORDER BY al.AnnualEffDate DESC) a
     WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
 END
 GO

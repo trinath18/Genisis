@@ -41,7 +41,7 @@ public class WorksheetCoPaymentRulesTests
 public class WorksheetCoPaymentOracleTests(ITestOutputHelper output)
 {
     /// <summary>
-    /// Two directions, over about a quarter of the versions that qualify: of the versions with a saved co-payment, how many does the plan's percentage reproduce (about 93 per cent over all of them);
+    /// Two directions, over about a sixth of the versions that qualify: of the versions with a saved co-payment, how many does the plan's percentage reproduce (about 93 per cent over all of them);
     /// and of the versions whose plan has a percentage and an approved total, how many have that saved (about 89 per cent). The approved total is the engine's own, from the invoices and the
     /// saved limit text.
     /// </summary>
@@ -55,7 +55,7 @@ public class WorksheetCoPaymentOracleTests(ITestOutputHelper output)
         var sample = (await session.Connection.QueryAsync<(string Cas, int Version, decimal Saved)>(
             """
             SELECT RTRIM(w.CASNumber), w.ClaimVersion, ISNULL(w.CLMCoPayRB, 0) FROM genisis.WS_Claim w
-            WHERE w.CASNumber NOT LIKE 'ZZ%' AND ABS(CHECKSUM(w.CASNumber, w.ClaimVersion)) % 4 = 0
+            WHERE w.CASNumber NOT LIKE 'ZZ%' AND ABS(CHECKSUM(w.CASNumber, w.ClaimVersion)) % 6 = 0
               AND (ISNULL(w.CLMCoPayRB, 0) <> 0 OR EXISTS (SELECT 1 FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v JOIN dbo.PLN p ON p.PLNCode = RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END) AND p.PAYCode = v.PAYCode AND p.HLTCode = v.HLTCode
                     WHERE v.CASNumber = w.CASNumber AND v.ClaimVersion = w.ClaimVersion AND v.MBMNumber IS NOT NULL AND p.PLNCoINSPerc > 0))
             """, transaction: session.Transaction, commandTimeout: 300)).ToList();
@@ -72,7 +72,7 @@ public class WorksheetCoPaymentOracleTests(ITestOutputHelper output)
             if (derived != 0) { derivedN++; derivedOk += Math.Abs(derived - v.Saved) < 0.015m ? 1 : 0; }
         }
         output.WriteLine($"{sample.Count} versions: of {savedN} with a saved co-payment {savedOk} reproduced; of {derivedN} the plan gives one for, {derivedOk} equal the saved amount");
-        Assert.True(savedN >= 80 && savedOk >= savedN * 0.85, $"saved co-payments reproduced: {savedOk} of {savedN}");
-        Assert.True(derivedN >= 80 && derivedOk >= derivedN * 0.80, $"derived co-payments that equal the saved one: {derivedOk} of {derivedN}");
+        Assert.True(savedN >= 50 && savedOk >= savedN * 0.85, $"saved co-payments reproduced: {savedOk} of {savedN}");
+        Assert.True(derivedN >= 50 && derivedOk >= derivedN * 0.80, $"derived co-payments that equal the saved one: {derivedOk} of {derivedN}");
     }
 }

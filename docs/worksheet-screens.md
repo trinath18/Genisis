@@ -302,7 +302,7 @@ the admission date; `PlanLimitRules.Derive` turns them into the limit text of ea
 | Service tax on Room & Board | 6 per cent of the Room & Board limit | 96.3 per cent (209 of 217); 98.6 per cent over all versions |
 
 Which row of the benefit table was in force made no difference: the latest row up to the admission date and the latest row of all agree on every version. `WorksheetPlanLimitsOracleTests`
-repeats the comparison on about one version in forty on every run.
+repeats the comparison on every run, on a sample of about one version in a hundred (the figures in the tables are from larger samples; the sample is small so that the suite stays fast, since the oracles read the same big tables the Tracking reports do).
 
 **The rows whose limit depends on the case.** For post-hospitalisation (303), kidney and cancer (404), guardian (701), medical report (801), admin (803) and home nursing (804) the plain rule agreed
 on only 4 to 66 per cent of all rows, but that was because the desktop shows "-" on a row that has no amount (nothing can be approved on it anyway). On the rows that **have an amount** the saved
@@ -327,16 +327,53 @@ member's own balances, `MBMBnfLmt`), the day caps from a linked case (`ClaimSame
 third of them; 162 of 171 in the oracle's sample), and of the versions whose plan has a percentage and an amount to apply it to, 86 to 89 per cent have exactly that saved (the rest saved no co-payment, for
 a reason in the case that is not ported). The ratios in the data are plan specific: 10, 25, 5, 15, 20 and 30 per cent.
 
-**Not ported yet:** the Room & Board co-payment of plans with `CoPaymentInd` = Y (`PLNCoPayPerc`, with its conditions on the Room & Board limit and stay and the cent adjustment for invoices from April 2008),
-and the member's available limit before the worksheet (`CLMPreviousBalance`, the desktop's `CheckLimit`: annual limit less what was bordxed, with its top-up, lifetime and per-disability branches).
+**Not ported yet:** the Room & Board co-payment of plans with `CoPaymentInd` = Y (`PLNCoPayPerc`, with its conditions on the Room & Board limit and stay and the cent adjustment for invoices from April 2008).
+It accounts for the co-payments the plan percentage does not reproduce (about 7 per cent of those that exist).
 
-Next: those two, then Worksheet Registration and Approve.
+### Step 5b: the limit before the worksheet
+
+`genisis.WorksheetEngine_BalanceLimit` reads the patient's available limit the way the Registration screen does: whose limit depends on the plan's annual limit type
+(`AnnualLimit.SuppLimitStatus`, the latest row up to the admission date) — the member's (`MBM.MBMAvailableLimit`) for the principal or a patient with cover 00, and for a dependant the first covered
+person's with type B or the patient's own with type C (`MBMCoveredPersons.MBMCAvailableLimit`). Approving a worksheet takes its approved amount off that limit, so the limit before it is the
+available limit **plus what the case has already approved** (`BalanceLimitRules.PreviousBalance`). Measured on each patient's latest case, to the cent against the saved `CLMPreviousBalance`:
+
+| Patient | Reproduced |
+|---|---|
+| Principal or main patient | 7,846 of 10,322 (76 per cent) |
+| Dependant, limit type C | 1,862 of 2,241 (83 per cent) |
+| Dependant, limit type B | 35 of 41 (85 per cent) |
+| Oracle test's sample | 1,710 of 2,229 (76.7 per cent) |
+
+The rest are limits changed after the claim (renewal, adjustment, an amount approved but not taken off), which the rule does not model. Dependants of plans with no annual limit row (421) have
+no balance to read; they fall back to the member's. The top-up policy's balances are not ported.
+
+### Step 6: a worksheet from the invoices and the plan alone
+
+`WorksheetCalculator.CalculateAsync` puts the steps together the way Registration does when it opens a worksheet: actual amounts from the invoices, limits from the plan's benefit rows, the
+co-insurance, the available limit, then the rows and the summary. The plan is chosen as the desktop chooses it: a take-over plan if the case has one; otherwise, for a member with a new plan after
+renewal, the current plan (rows up to the payor effective date) when the patient was admitted on or before that date and the new plan (rows up to the new policy effective date) after it;
+otherwise the dependant's own plan, otherwise the member's. Only the days of the stay come from outside (they are entered with the invoice; the test uses the days the desktop saved).
+
+Measured over 1,130 saved versions (the latest version of each patient's latest case), to the cent:
+
+| Figure | Reproduced |
+|---|---|
+| Approved total before the available limit (saved total approved less limit exceeded) | 778 (68.8 per cent) |
+| Total approved | 797 (70.5 per cent) |
+
+The breakdown the test prints shows where the rest goes: the co-payment is right for 99.5 per cent of the versions; when the limits and the co-payment are right the approved total is right in 778 of
+781; **the limits are the whole gap** (the plan gives the same approved sum as the saved limits for 69 per cent). Most of the rest is one pattern: a row has an amount, the saved limit is FULL (or
+a rate times days for Room & Board), and the plan's benefit rows have no row for that benefit (about 5 per cent of the versions with FULL hospital supplies; mostly payor AY's `M` plans, which
+have rows for other benefits only). The desktop's `getDatatoWS` fills those from rules that are not ported. Until they are, a calculation for such a plan should be shown as "limits not found
+for this plan" and its limits typed in, rather than trusted.
+
+Next: those plan rules, the Room & Board co-payment, then the Registration screen (invoices in, calculation, save) and Approve.
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/230_worksheet_tracking.sql`, `240_worksheet_send_to_accounts.sql`, `250_worksheet_send_to_ar.sql`; synonyms `genisis.WS_WKSTracking` (`VIEW_WKSTrackingNew`) and `genisis.WS_WKS2AC` (`VIEW_WKS2AC`) in `000_setup.sql`; Enquiry: `260_worksheet_enquiry.sql`, `270_worksheet_engine.sql`, `280_worksheet_adjustment.sql`, `290_worksheet_documents.sql`, `300_worksheet_final_lg.sql`, `310_worksheet_plan_limits.sql`, `320_worksheet_plan_terms.sql` and the synonyms `WS_ClaimActual`, `WS_ClaimHos`, `WS_ClaimMember`, `WS_ClaimLimit`, `WS_ClaimOthers`, `WS_CASInvoice` |
+| SQL | `sql/main/230_worksheet_tracking.sql`, `240_worksheet_send_to_accounts.sql`, `250_worksheet_send_to_ar.sql`; synonyms `genisis.WS_WKSTracking` (`VIEW_WKSTrackingNew`) and `genisis.WS_WKS2AC` (`VIEW_WKS2AC`) in `000_setup.sql`; Enquiry: `260_worksheet_enquiry.sql`, `270_worksheet_engine.sql`, `280_worksheet_adjustment.sql`, `290_worksheet_documents.sql`, `300_worksheet_final_lg.sql`, `310_worksheet_plan_limits.sql`, `320_worksheet_plan_terms.sql`, `330_worksheet_balance_limit.sql` and the synonyms `WS_ClaimActual`, `WS_ClaimHos`, `WS_ClaimMember`, `WS_ClaimLimit`, `WS_ClaimOthers`, `WS_CASInvoice` |
 | API | `Genisis.Api/Worksheet/{Tracking,SendToAccounts,SendToAr,Lookups,Enquiry,Engine,Adjustment}/*.cs` (models, FluentValidation validators, rules, `I…Repository` + repository, service), `Worksheet/WorksheetCommon.cs`, `Worksheet/WorksheetServiceCollectionExtensions.cs`; thin controllers `WorksheetTrackingController`, `WorksheetSendToAccountsController`, `WorksheetSendToArController`, `WorksheetEnquiryController`, `WorksheetAdjustmentController`, `WorksheetLookupsController` |
 | UI | `GenisisUI/src/pages/worksheet/` — `WorksheetTrackingPage`, `WorksheetSendToAccountsPage`, `WorksheetSendToArPage`, `worksheetRules.ts` (pure rules, form models, Yup schemas, query mapping), `useTickList.ts`, `useWorksheetLookups.ts`, `RangeFields.tsx`; `WorksheetEnquiryPage`, `EnquiryTabs.tsx`, `EnquiryCaseDialog.tsx`, `enquiryRules.ts`; `WorksheetAdjustmentPage`, `AdjustmentEditor.tsx`, `adjustmentRules.ts`; `lib/scanCodes.ts` |
 | Tests | `WorksheetScreensTests.cs` (rules, validators, services with fakes), `WorksheetDatabaseTests.cs` (real databases, every write rolled back), the architecture tests (extended to the new namespaces), `WorksheetEnquiryTests.cs`, `WorksheetAdjustmentTests.cs`, `worksheetRules.test.ts`, `enquiryRules.test.ts`, `adjustmentRules.test.ts`, `scanCodes.test.ts`, browser suites `e2e/worksheet.mjs`, `e2e/worksheet-enquiry.mjs` and `e2e/worksheet-adjustment.mjs` |
@@ -352,7 +389,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 573 of 573 passed on the merged branch (247 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 580 of 580 passed on the merged branch (262 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
 staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 103 unit tests passed; browser suites 214 checks passed in all, no console or network
 errors (the three Worksheet suites are 130 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

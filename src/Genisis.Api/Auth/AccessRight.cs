@@ -55,6 +55,9 @@ public static class AccessRight
     // Send to A/C and Send to A/R have no click handler and are hidden in the desktop: gated like Tracking, the closest sibling.
     // Keep in step with GenisisUI/src/auth/access.ts.
     public const int WorksheetRegistration = 22;
+
+    /// <summary>Invoice > Invoice Processing (<c>mniInvoiceProcess_Click</c>: <c>CheckAccess(22)</c>, "Invoice Entry"); the desktop uses the same position as the Worksheet Registration scan code.</summary>
+    public const int InvoiceProcessing = 22;
     public const int WorksheetAdjustment = 23;
     public const int WorksheetTracking = 24;
     public const int WorksheetEnquiry = 13;

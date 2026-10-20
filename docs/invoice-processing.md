@@ -117,7 +117,9 @@ the exact columns are read when that routine is ported.
 ## 5. Order of work, and how each step is checked
 
 1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.
-2. **Invoice Processing, read side**: the case's invoices with every field, over `View_CAS_Invoice`.
+2. **Invoice Processing, read side** (done): `GET /api/invoice/{case}` (the case, its member, plan and hospital, and its invoices) and `GET /api/invoice/{case}/{index}` (one invoice with its amounts by worksheet row, the
+   mapping the worksheet engine uses, so the rows add up to the invoice amount for 90 per cent or more of the saved invoices); the page `/invoice/processing` (position 22) lists the invoices, marks the ones no
+   worksheet has used, and shows the 29 rows. It says plainly that nothing can be added, changed or removed yet. 3 database tests, 15 browser checks.
 3. **Invoice Processing, write side**: the 13 checks in order, then the procedures above in the form's order inside one transaction; checked by saving a saved invoice's own values again (in a
    rolled-back transaction) and comparing every column, then by the same on invoices of the ZZ test case.
 4. **Registration save**, routine by routine in the order of section 3: regenerate the saved rows of a version from the engine and compare them with the saved ones column by column, before any of

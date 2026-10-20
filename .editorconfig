@@ -71,7 +71,7 @@ dotnet_diagnostic.CS1591.severity = error
 [src/Genisis.Api/Worksheet/{Tracking,SendToAccounts,SendToAr,Lookups,Enquiry,Engine,Adjustment,Calculation}/*.cs]
 dotnet_diagnostic.CS1591.severity = error
 
-[src/Genisis.Api/Controllers/{WorksheetLookupsController,WorksheetTrackingController,WorksheetSendToAccountsController,WorksheetSendToArController,WorksheetEnquiryController,WorksheetAdjustmentController,WorksheetCalculationController}.cs]
+[src/Genisis.Api/Controllers/{WorksheetLookupsController,WorksheetTrackingController,WorksheetSendToAccountsController,WorksheetSendToArController,WorksheetEnquiryController,WorksheetAdjustmentController,WorksheetCalculationController,InvoiceController}.cs]
 dotnet_diagnostic.CS1591.severity = error
 
 [src/Genisis.Api/Invoice/*.cs]

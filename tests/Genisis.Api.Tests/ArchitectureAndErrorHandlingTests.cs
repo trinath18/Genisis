@@ -31,11 +31,11 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
     [
         "Genisis.Api.Case.Ascii", "Genisis.Api.Case.AuditReview", "Genisis.Api.Case.Listing", "Genisis.Api.Case.Lookups", "Genisis.Api.Case.Mma",
         "Genisis.Api.Case.NonDisclosure", "Genisis.Api.Case.PanelHospitals", "Genisis.Api.Case.PayClaim", "Genisis.Api.Case.Transfer",
-        "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
+        "Genisis.Api.Invoice", "Genisis.Api.Worksheet.Calculation", "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
     ];
 
     private static bool IsScreenNamespace(string? ns) =>
-        ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal));
+        ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Invoice", StringComparison.Ordinal));
 
     private static string ApiSourceRoot()
     {

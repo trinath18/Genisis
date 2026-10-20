@@ -129,7 +129,7 @@ public static class CalculationRules
 /// Worksheet Registration, calculation step: works a worksheet out from its invoices and the patient's plan and shows it beside what the desktop saved. It writes nothing; saving a new
 /// worksheet needs invoice entry and the save procedures, which are not migrated (see worksheet-screens.md).
 /// </summary>
-public class CalculationService(IDbSessions sessions, ICalculationRepository repository, IWorksheetEngineRepository engine, WorksheetCalculator calculator)
+public class CalculationService(IDbSessions sessions, ICalculationRepository repository, IWorksheetEngineRepository engine, IWorksheetCalculator calculator)
 {
     private const string NotFound = "Record not found!";
 

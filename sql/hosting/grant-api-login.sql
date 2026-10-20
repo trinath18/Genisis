@@ -3,7 +3,8 @@
 --   * every procedure of the genisis schema (the API's own procedures: sql/genisis-main.sql, sql/genisis-maintenance.sql)
 --   * the older dbo procedures the desktop application owns and the API calls as they are (listed below; found by scanning the API source)
 -- Direct reads/writes done inside those procedures and through the cross-database synonyms need db_datareader / db_datawriter on HISDB,
--- HISMaintenance, HISWorkSheet and HISPayment (grant them separately).
+-- HISMaintenance, HISWorkSheet, HISPayment and HISDMArchive (grant them separately). Maintenance > Security writes USR and GRP in
+-- HISMaintenance; Membership > Deletion and user deletes write the archive tables in HISDMArchive.
 --
 -- Run as a sysadmin, once per environment. Idempotent. Replace N'apiuser' (one DECLARE per database block) with the name of your login.
 -- If the API starts calling another dbo procedure, add it here.

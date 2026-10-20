@@ -52,6 +52,9 @@ against the same database.
 | `main/185_leaflet_card.sql` | Membership > Leaflet & Card |
 | `main/186_temp_registration.sql` | Membership > Temp MBM Reg (previous membership as a renewal) |
 | `main/187_temp_adjustment.sql` | Membership > Temp MBM Adj (temporary payor check) |
+| `main/400_account_transaction.sql` | Maintenance > Account Transaction (MMA Schedule of Fees search) |
+| `main/410_security.sql` | Maintenance > Security: Department (GRP), Role Management and User Permission (USR) |
+| `main/420_mma_entry.sql` | Maintenance > MMA (Procedures/OPCS): schedule rates of up to six OPCS codes |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

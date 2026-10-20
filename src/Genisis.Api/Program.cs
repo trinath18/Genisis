@@ -35,6 +35,7 @@ builder.Services.AddScoped<Genisis.Api.Pluto.PlutoAsciiExporter>();
 builder.Services.AddScoped<Genisis.Api.Pluto.IPlutoService, Genisis.Api.Pluto.PlutoService>();
 builder.Services.AddScoped<Genisis.Api.CardControl.ICardControlService, Genisis.Api.CardControl.CardControlService>();
 builder.Services.AddScoped<Genisis.Api.Deletion.IDeletionService, Genisis.Api.Deletion.DeletionService>();
+builder.Services.AddScoped<Genisis.Api.LeafletCard.ILeafletCardService, Genisis.Api.LeafletCard.LeafletCardService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();

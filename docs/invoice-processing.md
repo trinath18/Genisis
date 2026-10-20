@@ -75,8 +75,9 @@ the exact columns are read when that routine is ported.
 ## 4. What the data shows
 
 * Every invoice in the development `HISWorkSheet` belongs to a saved worksheet; only 170 of 39,684 are not yet marked `INVWSed`.
-* **`HISWorkSheet` is heavily trimmed:** 16,210 cases have a worksheet, against 683,012 discharged cases in the full `HISDB` (`HISDB_actual_backup`). So the 79 per cent the engine reaches was
-  measured on about 2 per cent of the worksheets, and there is almost nothing to test registering a new worksheet against.
+* **`HISWorkSheet` was heavily trimmed:** 16,210 cases had a worksheet, against 683,012 discharged cases in the full `HISDB`. `HISWorkSheet_backup` (the full database) was then restored and 25,497 more
+  cases were brought across (70,426 versions, 91,108 invoices, 8,310 invoices not yet in a worksheet and 638 cases that have an invoice but no worksheet: real Registration candidates). See
+  "More data" in [worksheet-screens.md](worksheet-screens.md). The larger data lowered the engine's accuracy from 79 to 69 per cent (the first sample had been too easy).
 
 ## 5. Order of work, and how each step is checked
 
@@ -85,7 +86,7 @@ the exact columns are read when that routine is ported.
 3. **Invoice Processing, write side**: the 13 checks in order, then the procedures above in the form's order inside one transaction; checked by saving a saved invoice's own values again (in a
    rolled-back transaction) and comparing every column, then by the same on invoices of the ZZ test case.
 4. **Registration save**, routine by routine in the order of section 3: regenerate the saved rows of a version from the engine and compare them with the saved ones column by column, before any of
-   it writes to a real database. Registration's grid must let the user change a limit or an approved amount, as the desktop does, because the engine alone reproduces about 79 per cent.
+   it writes to a real database. Registration's grid must let the user change a limit or an approved amount, as the desktop does, because the engine alone reproduces about 69 per cent.
 5. **Approve** reuses 4.
 
 ## 6. Data that would change how much can be checked

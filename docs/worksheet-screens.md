@@ -289,6 +289,46 @@ Saved versions visible to Enquiry and Adjustment went from 1,950 to 31,199 of 31
 its per-case tables (`CASLG`, `tblRecord`, `CASCrossReference`) still cover only part of the cases; the screens cope with a missing row, and three Case database tests that assumed a complete set now
 make the missing cross-reference rows inside their own rolled-back session.
 
+### Correction: the accuracy figures below were measured on too small a sample
+
+The figures for steps 4 to 6 were first measured on the 31,208 worksheet versions of the trimmed `HISWorkSheet` (16,210 cases). After `HISWorkSheet_backup` was restored, 25,497 more cases were
+brought in (see "More data" below: 70,426 versions, 91,108 invoices) and the same checks were run again. Some held and some did not:
+
+| Check | First measured (31,208 versions) | On 70,426 versions |
+|---|---|---|
+| Plan limits on rows with an amount: plain / case dependent / Others / Room & Board / tax | 97.0 / 90.1 / 97.8 / 97.7 / 96.3 per cent | 96.5 / 80.2 / 94.2 / 94.6 / 93.7 per cent |
+| Co-payment: how many saved co-payments the plan's percentage reproduces | 94.7 per cent (162 of 171) | **35 per cent (120 of 342)**; of the 145 the plan gives one for, 83 per cent are right |
+| The limit before the worksheet | 76.7 per cent | 68.9 per cent |
+| A worksheet from the invoices and the plan alone: approved total before the limit / total approved | 77.9 / 79.0 per cent | **68.0 / 68.7 per cent** (819 versions) |
+| The summary rows from saved limits, co-payment and balance: total approved / limit exceeded | 97 / 99.4 per cent | 92.3 / 98.8 per cent |
+
+**Why the co-payment dropped.** The first sample was mostly payors whose co-payment is the plan's co-insurance percentage. The larger one has many more of other kinds. On 888 saved co-payments only 29
+per cent are explained by `PLNCoINSPerc`. The desktop has at least three mechanisms (read from `frmWorksheetRegGST2015`): the **Room & Board co-payment** (plan `CoPaymentInd`, `PLNCoPayPerc`):
+(approved total less approved Room & Board, less the MRI share for plan families 2 and 3 and new SM plans, less row 28, and less the tax for major-medical plans) times the percentage, only when the room
+charged exceeds the plan's limit, with a cent adjustment for invoices from April 2008; the **co-insurance** (`PLNCoIns` = Y, `PLNCoInsInd` 1, 2 or other, percentage from `AnnualLimit.AnnCoInsPerc`),
+whose result goes to the **Ex-Gratia row** (capped at 3,000), not the co-payment row; and a **flat share** that the saved worksheets show for some payors (TK 20 per cent of the approved total for 40 per cent of the
+sample, ST 10, AN 25, AJ 10, AX 10, XL about 19) and whose source is **not** in any of the plan, payor (`PAY.PAYCoPayment`), annual limit, member (`MBMCoPayGL`) or `MBMOthersTwo.MBMCoPayRB` columns that
+were searched. Finding where TK's 20 per cent comes from is the next step for the co-payment.
+
+### More data: `HISWorkSheet_backup`
+
+`HISWorkSheet_backup` (6.7 GB; the working `HISWorkSheet` was 365 MB) has 1,120,736 worksheet versions and 1,434,634 invoices for 639,214 cases. It has the same tables, columns and keys as the working one,
+and every row of the working one is in it, so rows were **added only where missing, never changed**, in one transaction, after a verified backup of each database
+(`HISWorkSheet_before_worksheet_data_restore.bak`, `HISDB_before_second_worksheet_data_restore.bak` in SQL Server's backup folder), with the four GST triggers off while copying and on again after.
+
+Which cases: every case with an invoice that is not yet in a worksheet or has no worksheet at all and that the full `HISDB` knows (7,380), plus a repeatable one in thirty-two sample of the worksheet cases
+(18,140): 25,497 cases. Their worksheet and invoice rows came across, then their case, member, covered-person and satellite rows into `HISDB` (25,015 cases, 17,670 members and the rest).
+
+| | Before | After |
+|---|---|---|
+| Worksheet versions | 31,208 | 70,426 (70,416 visible to Enquiry and Adjustment) |
+| Invoices | 39,684 | 91,108 |
+| Invoices not yet in a worksheet | 170 | 8,310 |
+| Cases that have an invoice but no worksheet (Registration candidates) | 0 | 638 (632 with case and member data) |
+| Cases in `HISDB.CAS` | 17,080 | 42,095 |
+
+`HISMaintenance` is still trimmed.
+
 ### Step 4: limits the plan fixes (done for the rows the saved data confirms)
 
 `genisis.WorksheetEngine_PlanBenefits` returns the benefit rows of the patient's plan (the covered person's own plan for a dependant that has one), insured type and health type that are in force on
@@ -323,12 +363,10 @@ member's own balances, `MBMBnfLmt`), the day caps from a linked case (`ClaimSame
 ### Step 5: co-payment (co-insurance done)
 
 `genisis.WorksheetEngine_PlanTerms` reads the patient's plan row (`PLN`, by plan, payor and health type) and `CoPaymentRules.CoInsurance` takes the plan's percentage (`PLNCoINSPerc`, when
-`PLNCoInsSign` is Y) of the approved total, to the cent, rounding half away from zero. Over all the saved versions that have a co-payment it reproduces 93 per cent of them to the cent (203 of 219 in a
-third of them; 162 of 171 in the oracle's sample), and of the versions whose plan has a percentage and an amount to apply it to, 86 to 89 per cent have exactly that saved (the rest saved no co-payment, for
-a reason in the case that is not ported). The ratios in the data are plan specific: 10, 25, 5, 15, 20 and 30 per cent.
+`PLNCoInsSign` is Y) of the approved total, to the cent, rounding half away from zero. **It is right for 83 per cent of the versions where the plan gives a percentage, but it covers only about a third of the saved co-payments** (35 per cent of
+342 in the test's sample, 29 per cent of 888 in a wider one); see "Correction" above for the other mechanisms. The ratios in the data are plan specific: 5, 10, 15, 20, 25 and 30 per cent.
 
-**Not ported yet:** the Room & Board co-payment of plans with `CoPaymentInd` = Y (`PLNCoPayPerc`, with its conditions on the Room & Board limit and stay and the cent adjustment for invoices from April 2008).
-It accounts for the co-payments the plan percentage does not reproduce (about 7 per cent of those that exist).
+**Not ported yet:** the Room & Board co-payment, the co-insurance that goes to the Ex-Gratia row, the flat shares of some payors (source not found), and the cent adjustment for invoices from April 2008.
 
 ### Step 5b: the limit before the worksheet
 
@@ -342,7 +380,8 @@ available limit **plus what the case has already approved** (`BalanceLimitRules.
 | Principal or main patient | 7,846 of 10,322 (76 per cent) |
 | Dependant, limit type C | 1,862 of 2,241 (83 per cent) |
 | Dependant, limit type B | 35 of 41 (85 per cent) |
-| Oracle test's sample | 1,710 of 2,229 (76.7 per cent) |
+| Oracle test's sample, first data | 1,710 of 2,229 (76.7 per cent) |
+| Oracle test's sample, 70,426 versions | 917 of 1,330 (68.9 per cent) |
 
 The rest are limits changed after the claim (renewal, adjustment, an amount approved but not taken off), which the rule does not model. Dependants of plans with no annual limit row (421) have
 no balance to read; they fall back to the member's. The top-up policy's balances are not ported.
@@ -367,6 +406,8 @@ Measured over 367 saved versions (the latest version of each patient's latest ca
 | Approved total before the available limit (saved total approved less limit exceeded) | 286 (77.9 per cent) |
 | Total approved | 290 (79.0 per cent) |
 
+(On the larger data, 819 versions: 557 (68.0 per cent) and 563 (68.7 per cent); see "Correction".)
+
 (Before the days and the missing-row defaults: 68.8 and 70.5 per cent over 1,130 versions.) The breakdown the test prints shows where the rest goes: the co-payment is right for 99.7 per cent of
 the versions, the approved total follows whenever the limits and the co-payment are right (286 of 287), and the limits are the whole gap (the plan gives the same approved sum as the saved limits for
 78 per cent). What is left of it is a long tail: ICU and lodger tax rows, row 304, benefits whose limit the plan states as a percentage, and rows the desktop fills from rules in `getDatatoWS`
@@ -382,7 +423,7 @@ saving it are not available yet, so nothing is written here."
 **Why a new worksheet cannot be registered yet.** Registration does not create invoices: it works on the invoices of the case, and opens the separate invoice form (`frmInvoice`, which is not
 on the Required list and is not migrated) to enter them; its own save writes the worksheet tables. Every invoice in the development database already belongs to a saved worksheet
 (`INVWSversion` is set on all 39,684), so there is no unregistered invoice to calculate or save, and nothing to test registering a new worksheet against but the saved rows. Registering a
-worksheet needs invoices to exist (entered in the desktop, or by an invoice screen once one is migrated), the calculation (done, 79 per cent) and the save below.
+worksheet needs invoices to exist (entered in the desktop, or by an invoice screen once one is migrated), the calculation (done, 69 per cent) and the save below.
 
 ### Approve: what the desktop does, and what is migrated
 

@@ -22,8 +22,10 @@ public record PlanTerms
 public static class CoPaymentRules
 {
     /// <summary>
-    /// The co-insurance: the plan's percentage of the approved total, to the cent, when the plan has a percentage and its sign is Y. Over the saved worksheets it gives the saved co-payment
-    /// to the cent in 93 per cent of those that have one; the Room &amp; Board co-payment of the other plans is a separate rule that is not ported yet.
+    /// The co-insurance: the plan's percentage of the approved total, to the cent, when the plan has a percentage and its sign is Y. It is right for 83 per cent of the worksheets it applies to,
+    /// but it covers only about a third of the co-payments there are (35 per cent of 342 in the test's sample; 29 per cent of 888 in a wider one): the Room &amp; Board co-payment, the
+    /// co-insurance that goes to the ex-gratia row, and flat shares of 10 to 25 per cent for some payors (TK 20 per cent, ST 10, AN 25, AJ 10) whose source is not in the plan, payor, annual limit or
+    /// member columns that were searched are separate rules that are not ported.
     /// </summary>
     public static decimal CoInsurance(decimal totalApproved, PlanTerms? terms) =>
         terms is { CoInsurancePercent: > 0 } && string.Equals(terms.CoInsuranceSign?.Trim(), "Y", StringComparison.OrdinalIgnoreCase)

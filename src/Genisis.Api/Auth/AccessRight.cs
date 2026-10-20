@@ -52,9 +52,7 @@ public class RequireAccessAttribute(int position, params int[] alternatives) : A
     public void OnAuthorization(AuthorizationFilterContext context)
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true) return;
-        if (!AccessRight.Has(context.HttpContext.User, position))
-            context.Result = new ObjectResult(Genisis.Api.Common.Errors.Problems.Create(context.HttpContext, StatusCodes.Status403Forbidden, "Forbidden", "Access Denied!")) { StatusCode = StatusCodes.Status403Forbidden };
         if (!Positions.Any(p => AccessRight.Has(context.HttpContext.User, p)))
-            context.Result = new ObjectResult(new { message = "Access Denied!" }) { StatusCode = StatusCodes.Status403Forbidden };
+            context.Result = new ObjectResult(Genisis.Api.Common.Errors.Problems.Create(context.HttpContext, StatusCodes.Status403Forbidden, "Forbidden", "Access Denied!")) { StatusCode = StatusCodes.Status403Forbidden };
     }
 }

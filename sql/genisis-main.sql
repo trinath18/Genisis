@@ -17,7 +17,8 @@ DECLARE @WorksheetDb sysname = N'HISWorkSheet';
 -- The clinical (CIS) and payment databases are optional: the screens that read them need them, their synonyms are skipped when absent.
 DECLARE @PaymentDb sysname = N'HISPayment';
 -- The archive database (the desktop's mediconnectA) is optional too: only Membership > Deletion writes to it.
-DECLARE @ArchiveDb sysname = N'HISDMArchive';
+-- It is HISDMArchive on one server and HISDBArchive on another: the first that exists is used.
+DECLARE @ArchiveDb sysname = CASE WHEN DB_ID(N'HISDMArchive') IS NOT NULL THEN N'HISDMArchive' ELSE N'HISDBArchive' END;
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);

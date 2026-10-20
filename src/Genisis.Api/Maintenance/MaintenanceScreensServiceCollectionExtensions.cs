@@ -1,4 +1,5 @@
 using Genisis.Api.Maintenance.AccountTransaction;
+using Genisis.Api.Maintenance.Security;
 
 namespace Genisis.Api.Maintenance;
 
@@ -10,6 +11,10 @@ public static class MaintenanceScreensServiceCollectionExtensions
     {
         services.AddSingleton<IAccountTransactionRepository, AccountTransactionRepository>();
         services.AddScoped<AccountTransactionService>();
+        services.AddSingleton<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<DepartmentService>();
+        services.AddSingleton<ISecurityUserRepository, SecurityUserRepository>();
+        services.AddScoped<SecurityUserService>();
         return services;
     }
 }

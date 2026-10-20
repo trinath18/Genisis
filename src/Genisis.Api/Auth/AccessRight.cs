@@ -25,6 +25,12 @@ public static class AccessRight
 
     /// <summary>Maintenance > Account Transaction (MnuAccountTrans_Click) checks position 1 too.</summary>
     public const int AccountTransaction = 1;
+
+    /// <summary>Maintenance > Security > Department: the matrix's own Department right (ACS 111), not the desktop's CheckAccess(2), which is Membership > Adjustment.</summary>
+    public const int SecurityDepartment = 111;
+
+    /// <summary>Maintenance > Security > Role Management and User Permission: the matrix's User Permission right (ACS 112), not the desktop's CheckAccess(2).</summary>
+    public const int SecurityUsers = 112;
     /// <summary>Case > Inquiry (frmCaseInquiry) checks position 7 in mdiMain.</summary>
     public const int CaseEnquiry = 7;
 

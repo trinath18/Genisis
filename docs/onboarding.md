@@ -25,7 +25,7 @@ something should behave, the VB6 form/module is the answer (`mdiMain.frm` for me
 | SQL Server access to `MYDELL` with Windows authentication | `sqlcmd -S MYDELL -E -C -Q "select @@version"` |
 | Chrome (only for the browser tests) | |
 
-Databases used: `HISDB` (main), `HISMaintenance`, `HISWorkSheet`, `HISPayment`, `HISDBArchive`.
+Databases used: `HISDB` (main), `HISMaintenance`, `HISWorkSheet`, `HISPayment`, `HISDMArchive` (the archive database; it was named `HISDBArchive` before and the desktop connects to the new name).
 
 ### Deploy the SQL (once, and after every API update that changes `sql/`)
 

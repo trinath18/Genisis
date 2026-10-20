@@ -31,6 +31,8 @@ builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingRepository, Genisis.Api
 builder.Services.AddScoped<Genisis.Api.Tracking.ITrackingService, Genisis.Api.Tracking.TrackingService>();
 builder.Services.AddScoped<Genisis.Api.Reinstatement.IReinstatementService, Genisis.Api.Reinstatement.ReinstatementService>();
 builder.Services.AddScoped<Genisis.Api.McoPending.IMcoPendingService, Genisis.Api.McoPending.McoPendingService>();
+builder.Services.AddScoped<Genisis.Api.Pluto.PlutoAsciiExporter>();
+builder.Services.AddScoped<Genisis.Api.Pluto.IPlutoService, Genisis.Api.Pluto.PlutoService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();

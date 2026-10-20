@@ -27,11 +27,14 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 
 | Position | Screen |
 | --- | --- |
-| 1 | Membership > Registration; also the Maintenance screens (Plan, Benefits, Entity, Accounts), as in the desktop |
-| 2 | Membership > Adjustment |
-| 3 | Membership > Enquiry |
-| 4 | Membership > Upload Bordx |
+| 1 | Membership > Registration and Temp MBM Reg; also the Maintenance screens (Plan, Benefits, Entity, Accounts), as in the desktop |
+| 2 | Membership > Adjustment; also Member Reinstatement, MCO Pending, Card Sending Mode, Deletion and Temp MBM Adj |
+| 3 | Membership > Enquiry; also Leaflet & Card |
+| 4 | Membership > Upload Bordx; also Upload Membership Excel (Pluto) and Generate Membership ASCII (Pluto) |
 | 14 | Membership > Tracking |
+
+The desktop menu items for the screens after "also" have no click handler (they were hidden and dead in the desktop), so they
+have no access position of their own; each uses the position of the closest screen, as agreed for this migration.
 
 Every endpoint checks its position on the server (`[RequireAccess]`); hiding a menu item in the UI is not the protection.
 
@@ -148,6 +151,22 @@ when blank) and matches each supplementary's payor numbers by cover ID. The curr
 `TmpUpload_MBMCovPersonsNew` and `TmpUpload_MBMOthers_2015` have required parameters the desktop does not pass (so the
 desktop upload fails against this database); the API sends them blank.
 
+## Other Membership screens
+
+These menu items are marked Required in the menu list but had no click handler in the desktop; each was migrated from the form it
+belongs to. Every write runs in one transaction (the desktop ran most of them without one).
+
+| Screen | Route | Desktop form | Notes |
+| --- | --- | --- | --- |
+| Member Reinstatement | `/api/membership/reinstatement` | `frmMBMReintstatement` | Cancelled memberships only. `MBMReinstatement` per cover, status A with the new final expiry, amendment type R. Fees follow `MemberCallFees` (GetMCO / GetPremium on the lapse date, pro-rated to the expiry, rounding per `PLNRoundUpStatus`), including its carry-over of the previous person's fee. |
+| MCO Pending | `/api/membership/mco-pending` | `frmMBMMCOPending` | Search by number / bordx date / status; Update sets P (inserts the row) or R (removes it); billed rows (B) are refused. Pending rows without a cross-reference are listed under their own number. |
+| Upload Membership Excel (Pluto) | `/api/membership/pluto/upload` | `frmMembershipExcelPluto` | `.xls` / `.xlsx` read with ExcelDataReader (replacing Excel automation); every row checked first, all rows inserted or none into `MBMExcellUploadShelly`. Column 30 (remarks) has no table column. |
+| Generate Membership ASCII (Pluto) | `/api/membership/pluto/ascii` | `frmMembershipASCIIPluto` | Fixed-width file of one payor and bordx date; `MBMGuaRenewal` is not a staging column, so its 5 characters are blank. |
+| Card Sending Mode | `/api/membership/card-control` | `frmMembershipCardControl` | Sending mode / sent date / doc reference on `MBMTwo` (cover 00) or `MBMCoveredPersonsTwo`. The mode filter is an exact match (the desktop used `<=`). |
+| Deletion | `/api/membership/deletion` | `frmDeleteMembers` | Copies to the archive database (`@ArchiveDb`, synonyms `genisis.Arch_*`) then deletes from MBM / MBMOthers / MBMCoveredPersons. Columns that moved to the `*Two` tables are read from there. |
+| Leaflet & Card | `/api/membership/leaflet-card` | `frmMainReport` | PDFs (PDFsharp-MigraDoc 6.2.4, MIT) in place of the Crystal reports `Leaflet.rpt` / `MBMCardPrinting.rpt`. Printed flags are not tracked: `dbo.MBMPrinting` does not exist. |
+| Temp MBM Reg | `/api/membership/temp-registration/{no}` | `FrmTempMBMReg` | An older copy of Registration whose extra is loading a previous membership as a renewal; returns the pre-filled request, saved with the Registration endpoint. |
+| Temp MBM Adj | `/api/membership/temp-adjustment/{no}` | `FrmTempMBMAdj` | An older copy of Adjustment limited to temporary payors (`PAY.tempPayIND = 'Y'`); the UI opens the Adjustment editor for those memberships only. |
 ## Maintenance > Benefits
 
 `/api/maintenance/benefits` replaces `frmMaintenanceBenefits` (same menu right as Plan, position 1).

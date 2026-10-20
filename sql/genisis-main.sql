@@ -7,7 +7,8 @@
 -- ===== main/000_setup.sql =====
 -- Setup for the Genesis stored procedures. Run on the main database (the one that has dbo.PLN and dbo.MBM).
 -- Creates the genisis schema and the synonyms the procedures use to read the maintenance database.
--- If your maintenance, clinical, worksheet or payment database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb / @PaymentDb below before running.
+-- If your maintenance, clinical, worksheet, payment or archive database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb /
+-- @PaymentDb / @ArchiveDb below before running.
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
@@ -15,6 +16,8 @@ DECLARE @CisDb sysname = N'CISDB';
 DECLARE @WorksheetDb sysname = N'HISWorkSheet';
 -- The clinical (CIS) and payment databases are optional: the screens that read them need them, their synonyms are skipped when absent.
 DECLARE @PaymentDb sysname = N'HISPayment';
+-- The archive database (the desktop's mediconnectA) is optional too: only Membership > Deletion writes to it.
+DECLARE @ArchiveDb sysname = N'HISDMArchive';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -65,6 +68,11 @@ CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_PRM', N'PRM'), (N'Cis_MCO', N'MCO'),
     (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t)
 WHERE DB_ID(@CisDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas', N'U') IS NOT NULL;
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@ArchiveDb) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t)
+WHERE DB_ID(@ArchiveDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NOT NULL;
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
 ';
@@ -87,7 +95,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + CASE WHEN DB_ID(@CisDb) IS NULL THEN N'none' ELSE @CisDb END
-    + N', worksheet database: ' + @WorksheetDb + N').';
+    + N', worksheet database: ' + @WorksheetDb + N', archive database: ' + CASE WHEN DB_ID(@ArchiveDb) IS NULL THEN N'none' ELSE @ArchiveDb END + N').';
 GO
 
 -- ===== main/010_plan.sql =====
@@ -4707,6 +4715,474 @@ BEGIN
     SET NOCOUNT ON;
     DELETE genisis.Maint_MMAFees WHERE FeeIndex = @index;
     SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
+-- ===== main/180_reinstatement.sql =====
+-- Membership > Member Reinstatement (legacy frmMBMReintstatement).
+-- Status, final expiry, covered-person status and the amendment history reuse the Adjustment_* writers;
+-- the fees reuse Adjustment_PlanRates / Registration_Mco / Registration_Premium (desktop MemberCallFees).
+
+-- The membership as cmdSearch_Click shows it (Search_MBM / VIEW_Search) plus the lapse date (MBMTwo.MBMCancelDate).
+CREATE OR ALTER PROCEDURE genisis.Reinstatement_Load
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.MBMName) AS Name, RTRIM(m.MBMPolicyNo) AS PolicyNo,
+        RTRIM(m.MBMIcBcPp) AS IcBcPp, RTRIM(m.MBMStatus) AS Status, m.MBMPayorEffDate AS PayorEffectiveDate,
+        m.MBMPayorExpDate AS PayorExpiryDate, m.MBMFinalExpiryDate AS FinalExpiryDate, RTRIM(m.INSCode) AS InsuredType,
+        RTRIM(m.PLNCode) AS PlanCode, RTRIM(m.MBMAdultChild) AS AdultChild, RTRIM(m.PAYCode) AS PayorCode,
+        RTRIM(m.HLTCode) AS HealthCode, RTRIM(m.AGECode) AS AgeCode, RTRIM(m.MBMSex) AS Sex,
+        o.MBMMCOFee AS McoFee, o.MBMPremium AS Premium, t.MBMCancelDate AS LapsedDate
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber
+    WHERE m.MBMNumber = @number;
+END
+GO
+
+-- Every covered person, whatever its status: the desktop reinstates all of them.
+CREATE OR ALTER PROCEDURE genisis.Reinstatement_Covered
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(MBMCCoverID) AS CoverId, RTRIM(MBMCAdultChild) AS AdultChild, RTRIM(MBMCAgeband) AS AgeCode,
+        RTRIM(MBMCSex) AS Sex, MBMCMCO AS McoFee, MBMCPremium AS Premium
+    FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @number ORDER BY MBMCCoverID;
+END
+GO
+
+-- One MBMReinstatement row per reinstated cover (00 = principal); invoiced later by Contribution Billing > MCO Reinstatement.
+CREATE OR ALTER PROCEDURE genisis.Reinstatement_Insert
+    @number nvarchar(4000), @coverId nvarchar(4000), @endtBordx datetime, @batch nvarchar(4000), @mco money, @premium money,
+    @lapsed datetime, @reinstate datetime, @user nvarchar(4000), @today datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMReinstatement (MBMNumber, MBMCoverID, MBMEndtBordxDate, MBMMCOFee, MBMPremium, MBMLapsedDate,
+        MBMReinstateDate, LastUpdateUSR, LastUpdateDate, MBMEndtBordxBatch)
+    VALUES (@number, @coverId, @endtBordx, @mco, @premium, @lapsed, @reinstate, @user, @today, @batch);
+END
+GO
+
+-- ===== main/181_mco_pending.sql =====
+-- Membership > MCO Pending (legacy frmMBMMCOPending). MCOPending lives in the maintenance database (genisis.Maint_MCOPending).
+-- Status codes: P pending, R release (the row is removed), B billed (set by Contribution Billing; cannot be changed here).
+
+-- Desktop Listing on VIEW_MCOPending: every cross-referenced membership with its pending row, if any. The bordx date shown is the
+-- pending row's, else the membership's; the bordx date filter applies to the membership's date as in the desktop.
+-- Rows of MCOPending without a cross-reference are listed under their own number (the desktop fails on the view's empty MBMNumber).
+CREATE OR ALTER PROCEDURE genisis.McoPending_Search
+    @numberFrom nvarchar(4000) = NULL, @numberTo nvarchar(4000) = NULL, @bordxFrom datetime = NULL, @bordxTo datetime = NULL,
+    @status nvarchar(4000) = NULL, @limit int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@limit) RTRIM(COALESCE(x.MBMNumber, p.MBMNumber)) AS MembershipNo, COALESCE(p.MBMBordxDate, x.MBMBordxDate) AS BordxDate,
+        p.MBMNewBordxDate AS NewBordxDate, RTRIM(p.Status) AS Status
+    FROM genisis.Maint_MBMCrossReference x
+    FULL OUTER JOIN genisis.Maint_MCOPending p ON p.MBMNumber = x.MBMNumber
+    WHERE (@numberFrom IS NULL OR COALESCE(x.MBMNumber, p.MBMNumber) >= @numberFrom)
+      AND (@numberTo IS NULL OR COALESCE(x.MBMNumber, p.MBMNumber) <= @numberTo)
+      AND (@bordxFrom IS NULL OR x.MBMBordxDate >= @bordxFrom)
+      AND (@bordxTo IS NULL OR x.MBMBordxDate <= @bordxTo)
+      AND (@status IS NULL OR p.Status = @status)
+    ORDER BY COALESCE(x.MBMNumber, p.MBMNumber);
+END
+GO
+
+-- One membership for cmdUpdate_Click: Exists says whether MCOPending already has its row.
+CREATE OR ALTER PROCEDURE genisis.McoPending_Get
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(COALESCE(x.MBMNumber, p.MBMNumber)) AS MembershipNo, COALESCE(p.MBMBordxDate, x.MBMBordxDate) AS BordxDate,
+        RTRIM(p.Status) AS Status, CAST(CASE WHEN p.MBMNumber IS NULL THEN 0 ELSE 1 END AS bit) AS PendingExists
+    FROM genisis.Maint_MBMCrossReference x
+    FULL OUTER JOIN genisis.Maint_MCOPending p ON p.MBMNumber = x.MBMNumber
+    WHERE x.MBMNumber = @number OR p.MBMNumber = @number;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.McoPending_Insert
+    @number nvarchar(4000), @bordxDate datetime, @status nvarchar(4000), @user nvarchar(4000), @today datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO genisis.Maint_MCOPending (MBMNumber, MBMBordxDate, Status, LastUpdateUser, LastUpdateDate)
+    VALUES (@number, @bordxDate, @status, @user, @today);
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.McoPending_Delete
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM genisis.Maint_MCOPending WHERE MBMNumber = @number;
+END
+GO
+
+-- ===== main/182_pluto.sql =====
+-- Membership > Upload Membership Excel (Pluto) and Generate Membership ASCII (Pluto)
+-- (legacy frmMembershipExcelPluto / frmMembershipASCIIPluto). The desktop used the Pluto connection (MediConnectPluto.UDL),
+-- which points at the main database; the staging table is dbo.MBMExcellUploadShelly.
+
+-- One worksheet row (cmdReturnDate_Click). Empty dates are stored as NULL (the desktop's '' became 01/01/1900).
+CREATE OR ALTER PROCEDURE genisis.Pluto_InsertUpload
+    @No decimal(18, 0), @RELCode nvarchar(4000), @MBMPolicyNo nvarchar(4000), @MBMName nvarchar(4000), @MBMAddress1 nvarchar(4000),
+    @MBMAddress2 nvarchar(4000), @MBMAddress3 nvarchar(4000), @CTYCode nvarchar(4000), @STACode nvarchar(4000),
+    @MBMPostCode nvarchar(4000), @MBMGroupCompany nvarchar(4000), @MBMDepartment nvarchar(4000), @BRNCode nvarchar(4000),
+    @MBMSex nvarchar(4000), @MBMRenewFlag nvarchar(4000), @MBMIcBcPp nvarchar(4000), @MBMDOB datetime, @PLNCode nvarchar(4000),
+    @INSCode nvarchar(4000), @MBMPayorEffDate datetime, @MBMPayorExpDate datetime, @MBMExclusion nvarchar(4000),
+    @MBMCLNPlanCode nvarchar(4000), @MBMCLNInsType nvarchar(4000), @MBMCLNEffDate datetime, @MBMCLNExpDate datetime,
+    @MBMCLNExclusion nvarchar(4000), @PAYCode nvarchar(4000), @MBMBordxDate datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.MBMExcellUploadShelly (No, RELCode, MBMPolicyNo, MBMName, MBMAddress1, MBMAddress2, MBMAddress3, CTYCode, STACode,
+        MBMPostCode, MBMGroupCompany, MBMDepartment, BRNCode, MBMSex, MBMRenewFlag, MBMIcBcPp, MBMDOB, PLNCode, INSCode,
+        MBMPayorEffDate, MBMPayorExpDate, MBMExclusion, MBMCLNPlanCode, MBMCLNInsType, MBMCLNEffDate, MBMCLNExpDate,
+        MBMCLNExclusion, PAYCode, MBMBordxDate)
+    VALUES (@No, @RELCode, @MBMPolicyNo, @MBMName, @MBMAddress1, @MBMAddress2, @MBMAddress3, @CTYCode, @STACode,
+        @MBMPostCode, @MBMGroupCompany, @MBMDepartment, @BRNCode, @MBMSex, @MBMRenewFlag, @MBMIcBcPp, @MBMDOB, @PLNCode, @INSCode,
+        @MBMPayorEffDate, @MBMPayorExpDate, @MBMExclusion, @MBMCLNPlanCode, @MBMCLNInsType, @MBMCLNEffDate, @MBMCLNExpDate,
+        @MBMCLNExclusion, @PAYCode, @MBMBordxDate);
+END
+GO
+
+-- The staged rows of one payor and bordx date, in worksheet order (CmdGenerate_Click). Health type only filters the payor list.
+CREATE OR ALTER PROCEDURE genisis.Pluto_AsciiRows
+    @bordxDate datetime, @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RELCode, MBMPolicyNo, MBMAgentCode, MBMSalutation, MBMName, MBMAddress1, MBMAddress2, MBMAddress3, CTYCode, MBMPostCode,
+        STACode, MBMTelNoH, MBMTelNoO, MBMTelNoM, MBMIcBcPp, MBMDOB, MBMSex, NATCode, MBMWeight, MBMHeight, LGNCode, RACCode,
+        MBMOccupation, MBMWorkNature, MBMBlood, MBMAllergic, MBMPayorEffDate, MBMPayorExpDate, PLNCode, INSCode, MBMGroupCompany,
+        MBMRenewFlag, MBMExclusion, MBMSmoking, MBMAlcohol, MBMMaritalStatus, BRNCode, MBMPrevPolNo, MBMPrevMemNo, MBMEmployeeNo,
+        MBMJoinedDate, Clinical, ClinicName1, ClinicName2, ClinicName3, ClinicName4, MBMDepartment, MBMGRPCompanyAdd1,
+        MBMGRPCompanyAdd2, MBMGRPCompanyAdd3, MBMGRPCompanyAdd4, MBMPrevTakeOverPlnCode, MBMInstallment, MBMPOLSubNo1, MBMPOLSubNo2,
+        MBMPOLIssuedDate, MBMRiskNo, MBMTransNo, MBMPAYNo, MBMPAYSeqNo, MBMClientNo, MBMClientID, MBMPrevPLNCode, MBMRBAmt,
+        MBMPrevInsCom, MBMPAYRemarks, MBMCLMNonPayFr, MBMCLMNonPayTo, MBMUpgradedPLN, MBMNewEffDate, MBMEndorsementNo, MBMAppName,
+        MBMPayorPremNet, MBMPayorPremGross, MBMPayorMCONet, MBMPayorMCOGross, MBMFamPolicyDisc, MBMRenewDisc, MBMIcBcPp2nd,
+        MBMRnBStatus, MBMLoadPrem, MBMFamDiscAmt, MBMRenewDiscAmt, MBMBlackListed, MBMBankACNo, MBMUnderwritingExcess,
+        MBMCLNPlanCode, MBMCLNInsType, MBMCLNEffDate, MBMCLNExpDate, MBMCLNExclusion
+    FROM dbo.MBMExcellUploadShelly
+    WHERE MBMBordxDate = @bordxDate AND PAYCode = @pay
+    ORDER BY No;
+END
+GO
+
+-- Payors of one health type for the ASCII screen (desktop cboHLTCode_Click / SearchPayorHLTType).
+CREATE OR ALTER PROCEDURE genisis.Pluto_Payors
+    @hlt nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY WHERE HLTCode = @hlt ORDER BY PAYCode;
+END
+GO
+
+-- ===== main/183_card_control.sql =====
+-- Membership > Card Sending Mode (legacy frmMembershipCardControl): when and how membership cards were sent.
+-- Principals: MBMTwo.MBMSendingMode / MBMCardDate / MBMDOCRef. Supplementaries: the same columns of MBMCoveredPersonsTwo.
+
+-- Desktop MBMInquiryList on Search_MBM_CardSent (VIEW_CardSent_Principal). Result 1: the principals matching the filters;
+-- result 2: the covered persons of the family principals among them (only those with an MBMCoveredPersonsTwo row, as in the
+-- desktop's inner join). The sending-mode and sent-date filters apply to the principal only, as in the desktop.
+CREATE OR ALTER PROCEDURE genisis.CardControl_Search
+    @payor nvarchar(4000) = NULL, @numberFrom nvarchar(4000) = NULL, @numberTo nvarchar(4000) = NULL,
+    @bordxFrom datetime = NULL, @bordxTo datetime = NULL, @batchFrom int = NULL, @batchTo int = NULL,
+    @sentFrom datetime = NULL, @sentTo datetime = NULL, @mode nvarchar(4000) = NULL, @limit int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@limit) RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.MBMName) AS Name, m.MBMBordxDate AS BordxDate, m.MBMBatchNo AS BatchNo,
+        RTRIM(t.MBMSendingMode) AS SendingMode, t.MBMCardDate AS SentDate, RTRIM(m.MBMPolicyNo) AS PolicyNo, RTRIM(t.MBMDOCRef) AS DocReference,
+        RTRIM(o.MBMGroupCompany) AS GroupCompany, RTRIM(o.MBMCostCenter) AS CostCenter, RTRIM(o.MBMBranch) AS Branch,
+        RTRIM(o.MBMDepartment) AS Department, RTRIM(m.INSCode) AS InsuredType
+    INTO #principals
+    FROM dbo.MBM m
+    JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    WHERE (@payor IS NULL OR m.PAYCode = @payor)
+      AND (@numberFrom IS NULL OR m.MBMNumber >= @numberFrom)
+      AND (@numberTo IS NULL OR m.MBMNumber <= @numberTo)
+      AND (@bordxFrom IS NULL OR m.MBMBordxDate >= @bordxFrom)
+      AND (@bordxTo IS NULL OR m.MBMBordxDate <= @bordxTo)
+      AND (@batchFrom IS NULL OR m.MBMBatchNo >= @batchFrom)
+      AND (@batchTo IS NULL OR m.MBMBatchNo <= @batchTo)
+      AND (@sentFrom IS NULL OR t.MBMCardDate >= @sentFrom)
+      AND (@sentTo IS NULL OR t.MBMCardDate <= @sentTo)
+      AND (@mode IS NULL OR t.MBMSendingMode = @mode)
+    ORDER BY m.MBMNumber;
+
+    SELECT MembershipNo, Name, BordxDate, BatchNo, SendingMode, SentDate, PolicyNo, DocReference, GroupCompany, CostCenter, Branch,
+        Department, InsuredType
+    FROM #principals ORDER BY MembershipNo;
+
+    SELECT RTRIM(c.MBMCNumber) AS MembershipNo, RTRIM(c.MBMCCoverID) AS CoverId, RTRIM(c.MBMCName) AS Name,
+        RTRIM(c2.MBMSendingMode) AS SendingMode, c2.MBMCardDate AS SentDate, RTRIM(c2.MBMDOCRef) AS DocReference
+    FROM #principals p
+    JOIN dbo.MBMCoveredPersons c ON c.MBMCNumber = p.MembershipNo
+    JOIN dbo.MBMCoveredPersonsTwo c2 ON c2.MBMCNumber = c.MBMCNumber AND c2.MBMCCoverID = c.MBMCCoverID
+    WHERE p.InsuredType IN ('F', 'H')
+    ORDER BY c.MBMCNumber, c.MBMCCoverID;
+END
+GO
+
+-- CmdUpdate_Click: cover 00 updates the principal (MBMTwo), any other cover the covered person (MBMCoveredPersonsTwo).
+-- Result: the number of rows changed.
+CREATE OR ALTER PROCEDURE genisis.CardControl_Update
+    @number nvarchar(4000), @coverId nvarchar(4000), @mode nvarchar(4000), @sentDate datetime, @docRef nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @coverId = N'00'
+        UPDATE dbo.MBMTwo SET MBMSendingMode = @mode, MBMCardDate = @sentDate, MBMDOCRef = @docRef WHERE MBMNumber = @number;
+    ELSE
+        UPDATE dbo.MBMCoveredPersonsTwo SET MBMSendingMode = @mode, MBMCardDate = @sentDate, MBMDOCRef = @docRef
+        WHERE MBMCNumber = @number AND MBMCCoverID = @coverId;
+    SELECT @@ROWCOUNT AS Result;
+END
+GO
+
+-- ===== main/184_deletion.sql =====
+-- Membership > Deletion (legacy frmDeleteMembers). Memberships of one health type and payor, chosen by bordx date range (D),
+-- bordx date + batch (B) or membership number range (M), are copied to the archive database (genisis.Arch_*) and deleted from
+-- MBM, MBMOthers and, for family plans, MBMCoveredPersons. Other tables (MBMTwo, MBMCrossReference, ...) are left as the desktop
+-- left them.
+
+-- Health types and payors for the drop-downs (desktop ComboListing: tables HLT and PAY).
+CREATE OR ALTER PROCEDURE genisis.Deletion_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(HLTCode) AS Code, RTRIM(HLTDescription) AS Name FROM dbo.HLT ORDER BY HLTCode;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+END
+GO
+
+-- The principals a delete option selects (desktop Exportsql / DELsqlList).
+CREATE OR ALTER FUNCTION genisis.Deletion_Selection
+    (@hlt nvarchar(4000), @pay nvarchar(4000), @option nvarchar(4000), @bordxFrom datetime, @bordxTo datetime, @receiptDate datetime,
+     @batch int, @numberFrom nvarchar(4000), @numberTo nvarchar(4000))
+RETURNS TABLE
+AS
+RETURN
+    SELECT m.MBMNumber, m.INSCode, m.MBMMemberType
+    FROM dbo.MBM m
+    WHERE m.HLTCode = @hlt AND m.PAYCode = @pay
+      AND ((@option = N'D' AND m.MBMBordxDate >= @bordxFrom AND m.MBMBordxDate <= @bordxTo)
+        OR (@option = N'B' AND m.MBMBordxDate = @receiptDate AND m.MBMBatchNo = @batch)
+        OR (@option = N'M' AND m.MBMNumber >= @numberFrom AND m.MBMNumber <= @numberTo));
+GO
+
+-- Desktop DELMBMListing / DELSuppListing. Result 1: the principals; result 2: covered persons of the family principals that have a
+-- bordx date (the desktop lists only those, but deletes all).
+CREATE OR ALTER PROCEDURE genisis.Deletion_List
+    @hlt nvarchar(4000), @pay nvarchar(4000), @option nvarchar(4000), @bordxFrom datetime = NULL, @bordxTo datetime = NULL,
+    @receiptDate datetime = NULL, @batch int = NULL, @numberFrom nvarchar(4000) = NULL, @numberTo nvarchar(4000) = NULL, @limit int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@limit) RTRIM(m.MBMNumber) AS MembershipNo, m.MBMBordxDate AS BordxDate, m.MBMBatchNo AS BatchNo, RTRIM(m.MBMName) AS Name,
+        RTRIM(m.MBMMemberType) AS MemberType, RTRIM(m.INSCode) AS InsuredType
+    INTO #principals
+    FROM genisis.Deletion_Selection(@hlt, @pay, @option, @bordxFrom, @bordxTo, @receiptDate, @batch, @numberFrom, @numberTo) s
+    JOIN dbo.MBM m ON m.MBMNumber = s.MBMNumber
+    ORDER BY m.MBMNumber;
+
+    SELECT MembershipNo, BordxDate, BatchNo, Name, MemberType, InsuredType FROM #principals ORDER BY MembershipNo;
+
+    SELECT RTRIM(c.MBMCNumber) AS MembershipNo, RTRIM(c.MBMCCoverID) AS CoverId, RTRIM(c.MBMCName) AS Name, c.MBMCBordxDate AS BordxDate,
+        c.MBMCBatchNo AS BatchNo, RTRIM(c.MBMCMemberType) AS MemberType
+    FROM #principals p JOIN dbo.MBMCoveredPersons c ON c.MBMCNumber = p.MembershipNo
+    WHERE p.InsuredType IN ('F', 'H') AND c.MBMCBordxDate IS NOT NULL
+    ORDER BY c.MBMCNumber, c.MBMCCoverID;
+END
+GO
+
+-- Desktop DeletePrincipals / DeleteMBMOthers / DeleteSupplementary: archive then delete. The caller owns the transaction.
+-- Columns the desktop read from MBM / MBMOthers / MBMCoveredPersons that have since moved to MBMTwo / MBMOthersTwo /
+-- MBMCoveredPersonsTwo are read from there.
+-- Result: Principals (member type P, as the desktop counts them), Supplementaries (covered persons not of type P), Memberships.
+CREATE OR ALTER PROCEDURE genisis.Deletion_Delete
+    @hlt nvarchar(4000), @pay nvarchar(4000), @option nvarchar(4000), @bordxFrom datetime = NULL, @bordxTo datetime = NULL,
+    @receiptDate datetime = NULL, @batch int = NULL, @numberFrom nvarchar(4000) = NULL, @numberTo nvarchar(4000) = NULL, @today datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT MBMNumber, INSCode, MBMMemberType INTO #selected
+    FROM genisis.Deletion_Selection(@hlt, @pay, @option, @bordxFrom, @bordxTo, @receiptDate, @batch, @numberFrom, @numberTo);
+
+    INSERT INTO genisis.Arch_MBM (MBMNumber, MBMPolicyNo, MBMIcBcPp, MBMName, MBMSalutation, HLTCode, PAYCode, MBMAddress1, MBMAddress2,
+        MBMAddress3, CTYCode, MBMPostCode, MBMTelnoH, MBMTelNoM, MBMTelNoO, MBMEmail, MBMDOB, NATCode, RACCode, MBMSex, MBMPayorEffDate,
+        MBMPayorExpDate, AGECode, INSCode, PLNCode, MBMAdultChild, MBMAvailableLimit, SRVCodeList, STACode, LGNCode, MBMBordxDate,
+        MBMTakeover, MBMRenewFlag, BRNCode, MBMStatus, MBMValueDate, MBMPolicyYear, MBMMemberType, MBMBatchNo, MBMDataStatus)
+    SELECT m.MBMNumber, m.MBMPolicyNo, m.MBMIcBcPp, m.MBMName, t.MBMSalutation, m.HLTCode, m.PAYCode, m.MBMAddress1, m.MBMAddress2,
+        m.MBMAddress3, m.CTYCode, m.MBMPostCode, t.MBMTelnoH, t.MBMTelNoM, t.MBMTelNoO, t.MBMEmail, m.MBMDOB, t.NATCode, m.RACCode, m.MBMSex,
+        m.MBMPayorEffDate, m.MBMPayorExpDate, m.AGECode, m.INSCode, m.PLNCode, m.MBMAdultChild, m.MBMAvailableLimit, t.SRVCodeList, m.STACode,
+        t.LGNCode, m.MBMBordxDate, m.MBMTakeover, m.MBMRenewFlag, m.BRNCode, 'D', @today, m.MBMPolicyYear, m.MBMMemberType, m.MBMBatchNo, 'D'
+    FROM dbo.MBM m JOIN #selected s ON s.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber;
+
+    INSERT INTO genisis.Arch_MBMOthers (MBMNumber, MBMAgentCode, MBMWeight, MBMHeight, MBMWorkNature, MBMOccupation, MBMBlood, MBMAllergic,
+        MBMFirstMemNo, MBMGroupCompany, MBMSmoking, MBMAlcohol, MBMMaritalStatus, MBMPrevPolNo, MBMPrevMemNo, MBMEmployeeNo)
+    SELECT o.MBMNumber, o.MBMAgentCode, w.MBMWeight, w.MBMHeight, w.MBMWorkNature, w.MBMOccupation, w.MBMBlood, w.MBMAllergic,
+        o.MBMFirstMemNo, o.MBMGroupCompany, w.MBMSmoking, w.MBMAlcohol, w.MBMMaritalStatus, o.MBMPrevPolNo, o.MBMPrevMemNo, o.MBMEmployeeNo
+    FROM dbo.MBMOthers o JOIN #selected s ON s.MBMNumber = o.MBMNumber
+    LEFT JOIN dbo.MBMOthersTwo w ON w.MBMNumber = o.MBMNumber;
+
+    INSERT INTO genisis.Arch_MBMCoveredPersons (MBMCNumber, MBMCCoverID, MBMCSalutation, MBMCName, MBMCICBCPPNo, MBMCDOB, MBMCAgeband,
+        MBMCSex, MBMCAdultChild, MBMCRELCode, MBMCBloodType, MBMCAllergic, MBMCMemberType, MBMCAnnualLimit)
+    SELECT c.MBMCNumber, c.MBMCCoverID, c2.MBMCSalutation, c.MBMCName, c.MBMCICBCPPNo, c.MBMCDOB, c.MBMCAgeband, c.MBMCSex, c.MBMCAdultChild,
+        c.MBMCRELCode, c2.MBMCBloodType, c2.MBMCAllergic, c.MBMCMemberType, c.MBMCAnnualLimit
+    FROM dbo.MBMCoveredPersons c JOIN #selected s ON s.MBMNumber = c.MBMCNumber
+    LEFT JOIN dbo.MBMCoveredPersonsTwo c2 ON c2.MBMCNumber = c.MBMCNumber AND c2.MBMCCoverID = c.MBMCCoverID
+    WHERE s.INSCode IN ('F', 'H');
+
+    DECLARE @supplementaries int = (SELECT COUNT(*) FROM dbo.MBMCoveredPersons c JOIN #selected s ON s.MBMNumber = c.MBMCNumber
+        WHERE s.INSCode IN ('F', 'H') AND ISNULL(c.MBMCMemberType, '') <> 'P');
+
+    DELETE o FROM dbo.MBMOthers o JOIN #selected s ON s.MBMNumber = o.MBMNumber;
+    DELETE c FROM dbo.MBMCoveredPersons c JOIN #selected s ON s.MBMNumber = c.MBMCNumber WHERE s.INSCode IN ('F', 'H');
+    DELETE m FROM dbo.MBM m JOIN #selected s ON s.MBMNumber = m.MBMNumber;
+
+    SELECT (SELECT COUNT(*) FROM #selected WHERE MBMMemberType = 'P') AS Principals, @supplementaries AS Supplementaries,
+        (SELECT COUNT(*) FROM #selected) AS Memberships;
+END
+GO
+
+-- ===== main/185_leaflet_card.sql =====
+-- Membership > Leaflet & Card (legacy frmMainReport, Leaflet and Card Printing tabs; Crystal Reports Leaflet.rpt and
+-- MBMCardPrinting.rpt). The desktop's printed / reprinted flags lived in dbo.MBMPrinting, which this database does not have,
+-- so they are not tracked.
+
+-- RecordSearching: memberships of one payor, health type and batch within a bordx date range.
+CREATE OR ALTER PROCEDURE genisis.LeafletCard_Search
+    @from datetime, @to datetime, @pay nvarchar(4000), @hlt nvarchar(4000), @batch int, @limit int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@limit) RTRIM(PAYCode) AS PayorCode, RTRIM(MBMNumber) AS MembershipNo, MBMBordxDate AS BordxDate, RTRIM(MBMPolicyNo) AS PolicyNo,
+        RTRIM(HLTCode) AS HealthCode, MBMBatchNo AS BatchNo, RTRIM(MBMName) AS Name
+    FROM dbo.MBM
+    WHERE MBMBordxDate >= @from AND MBMBordxDate <= @to AND PAYCode = @pay AND HLTCode = @hlt AND MBMBatchNo = @batch
+    ORDER BY PAYCode, MBMBordxDate, HLTCode, MBMBatchNo, MBMNumber;
+END
+GO
+
+-- Leaflet.rpt reads VIEW_LEAFLET (active memberships only) one membership at a time. Result 1: one row per membership;
+-- result 2: its covered persons.
+CREATE OR ALTER PROCEDURE genisis.LeafletCard_Leaflets
+    @from datetime, @to datetime, @pay nvarchar(4000), @hlt nvarchar(4000), @batch int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT RTRIM(v.MBMNumber) AS MembershipNo, RTRIM(v.MBMPolicyNo) AS PolicyNo, RTRIM(v.MBMAgentCode) AS AgentCode,
+        RTRIM(v.MBMName) AS Name, RTRIM(v.MBMAddress1) AS Address1, RTRIM(v.MBMAddress2) AS Address2, RTRIM(v.MBMAddress3) AS Address3,
+        RTRIM(v.MBMPostCode) AS PostCode, RTRIM(v.CTYCode) AS City, RTRIM(v.STACode) AS State, RTRIM(v.PAYCompanyName) AS PayorName,
+        RTRIM(v.MBMGroupCompany) AS GroupCompany, RTRIM(v.MBMEmployeeNo) AS EmployeeNo, RTRIM(v.MBMDepartment) AS Department,
+        RTRIM(v.INSCode) AS InsuredType, RTRIM(v.PLNDescription) AS PlanDescription
+    INTO #leaflets
+    FROM dbo.VIEW_LEAFLET v
+    JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
+    WHERE m.MBMBordxDate >= @from AND m.MBMBordxDate <= @to AND m.PAYCode = @pay AND m.HLTCode = @hlt AND m.MBMBatchNo = @batch;
+
+    SELECT * FROM #leaflets ORDER BY MembershipNo;
+
+    SELECT RTRIM(c.MBMCNumber) AS MembershipNo, RTRIM(c.MBMCCoverID) AS CoverId, LTRIM(RTRIM(c.MBMCName)) AS Name, RTRIM(c.MBMCRELCode) AS Relationship
+    FROM dbo.MBMCoveredPersons c
+    WHERE c.MBMCNumber IN (SELECT MembershipNo FROM #leaflets)
+    ORDER BY c.MBMCNumber, c.MBMCCoverID;
+END
+GO
+
+-- MBMCardPrinting.rpt / ExpMBMPrintingToExcel read VIEW_CardPrinting: one card per covered person, the principal as cover 00.
+-- The desktop's card selection does not filter on health type.
+CREATE OR ALTER PROCEDURE genisis.LeafletCard_Cards
+    @from datetime, @to datetime, @pay nvarchar(4000), @batch int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT RTRIM(PAYCode) AS PayorCode, MBMBordxDate AS BordxDate, RTRIM(HLTCode) AS HealthCode, MBMBatchNo AS BatchNo,
+        RTRIM(MBMNumber) AS MembershipNo, RTRIM(MBMCCoverID) AS CoverId, RTRIM(MBMCName) AS Name, RTRIM(MBMCICBCPPNo) AS IcBcPp,
+        RTRIM(MBMCRELCode) AS Relationship, RTRIM(MBMPolicyNo) AS PolicyNo, RTRIM(PLNCode) AS PlanCode, MBMPayorExpDate AS ExpiryDate,
+        RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(MBMEmployeeNo) AS EmployeeNo
+    FROM dbo.VIEW_CardPrinting
+    WHERE MBMNumber IS NOT NULL AND MBMCNumber IS NOT NULL
+      AND MBMBordxDate >= @from AND MBMBordxDate <= @to AND PAYCode = @pay AND MBMBatchNo = @batch
+    ORDER BY PayorCode, BordxDate, HealthCode, BatchNo, MembershipNo, CoverId;
+END
+GO
+
+-- Payor names for the heading of the card export (desktop ComboListing on PAY).
+CREATE OR ALTER PROCEDURE genisis.LeafletCard_Payor
+    @pay nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(PAYCompanyName) AS Name FROM dbo.PAY WHERE PAYCode = @pay;
+END
+GO
+
+-- ===== main/186_temp_registration.sql =====
+-- Membership > Temp MBM Reg (legacy FrmTempMBMReg): a registration pre-filled from a previous membership (cmdShow_Click on
+-- SearchMBMCovPersonsProc, with showMBMTwo / showMBMOthers / showMBMOthersTwo / showMBMCov). The new membership is saved by the
+-- Registration procedures.
+
+-- Result 1: the previous membership; result 2: its covered persons (family plans, cover 00 excluded).
+CREATE OR ALTER PROCEDURE genisis.TempRegistration_Source
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.HLTCode) AS HealthCode, RTRIM(m.PAYCode) AS PayorCode,
+        RTRIM(m.MBMPolicyNo) AS PolicyNo, m.MBMPolicyYear AS PolicyYear, RTRIM(t.MBMSalutation) AS Salutation, RTRIM(m.MBMName) AS Name,
+        RTRIM(m.MBMIcBcPp) AS IcBcPp, RTRIM(t.MBMIcBcPp2nd) AS OtherIc, m.MBMDOB AS DateOfBirth, RTRIM(m.MBMSex) AS Sex,
+        RTRIM(m.RACCode) AS RaceCode, RTRIM(t.NATCode) AS NationalityCode, RTRIM(w.MBMMaritalStatus) AS MaritalStatus,
+        RTRIM(m.MBMAddress1) AS Address1, RTRIM(m.MBMAddress2) AS Address2, RTRIM(m.MBMAddress3) AS Address3, RTRIM(m.CTYCode) AS City,
+        RTRIM(m.MBMPostCode) AS PostCode, RTRIM(m.STACode) AS State, RTRIM(t.MBMTelnoH) AS TelHome, RTRIM(t.MBMTelNoM) AS TelMobile,
+        RTRIM(t.MBMTelNoO) AS TelOffice, RTRIM(t.MBMEmail) AS Email, RTRIM(m.INSCode) AS InsuredType, RTRIM(m.PLNCode) AS PlanCode,
+        o.MBMFirstJoinedDate AS DateJoined, RTRIM(m.MBMTakeover) AS TakeOver, RTRIM(o.MBMGuaRenewal) AS GuaranteeRenewal,
+        RTRIM(o.MBMInstallment) AS InstallmentMode, RTRIM(o.MBMGroupCompany) AS GroupCompany, RTRIM(o.MBMEmployeeNo) AS EmployeeNo,
+        RTRIM(o.MBMDepartment) AS Department, RTRIM(o.MBMBranch) AS Branch, RTRIM(o.MBMAgentCode) AS AgentCode,
+        RTRIM(w.MBMExclusion) AS Exclusion, RTRIM(w.MBMAllergic) AS Allergic, RTRIM(w.MBMRemarks) AS Remarks
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthersTwo w ON w.MBMNumber = m.MBMNumber
+    WHERE m.MBMNumber = @number;
+
+    SELECT RTRIM(c.MBMCCoverID) AS CoverId, RTRIM(c.MBMCRELCode) AS Relationship, RTRIM(c2.MBMCSalutation) AS Salutation,
+        RTRIM(c.MBMCName) AS Name, RTRIM(c.MBMCICBCPPNo) AS IcBcPp, c.MBMCDOB AS DateOfBirth, RTRIM(c.MBMCSex) AS Sex,
+        RTRIM(c2.MBMCOccupation) AS Occupation, RTRIM(c2.MBMCExclusion) AS Exclusion, RTRIM(c2.MBMCAllergic) AS Allergic
+    FROM dbo.MBM m
+    JOIN dbo.MBMCoveredPersons c ON c.MBMCNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMCoveredPersonsTwo c2 ON c2.MBMCNumber = c.MBMCNumber AND c2.MBMCCoverID = c.MBMCCoverID
+    WHERE m.MBMNumber = @number AND m.INSCode IN ('F', 'H') AND RTRIM(c.MBMCCoverID) <> '00'
+    ORDER BY c.MBMCCoverID;
+END
+GO
+
+-- ===== main/187_temp_adjustment.sql =====
+-- Membership > Temp MBM Adj (legacy FrmTempMBMAdj): an older copy of Adjustment that only opens memberships of temporary payors
+-- (PAY.tempPayIND = 'Y', checked in FindMBM). The adjustment itself is saved by the Adjustment procedures.
+CREATE OR ALTER PROCEDURE genisis.TempAdjustment_Payor
+    @number nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(m.MBMNumber) AS MembershipNo, RTRIM(m.PAYCode) AS PayorCode,
+        CAST(CASE WHEN RTRIM(ISNULL(p.tempPayIND, '')) = 'Y' THEN 1 ELSE 0 END AS bit) AS Temporary
+    FROM dbo.MBM m
+    LEFT JOIN dbo.PAY p ON p.PAYCode = m.PAYCode
+    WHERE m.MBMNumber = @number;
 END
 GO
 

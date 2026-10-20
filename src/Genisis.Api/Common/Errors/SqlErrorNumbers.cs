@@ -21,7 +21,18 @@ public static class SqlErrorNumbers
     /// <summary>Could not find stored procedure: the SQL scripts of this version have not been run.</summary>
     public const int MissingProcedure = 2812;
 
+    /// <summary>Violation of a primary key or unique constraint.</summary>
+    public const int DuplicateKey = 2627;
+
+    /// <summary>Cannot insert a duplicate key row in a unique index.</summary>
+    public const int DuplicateIndexKey = 2601;
+
+    /// <summary>A table's clustered index is disabled, so the table cannot be read or written until it is rebuilt.</summary>
+    public const int IndexDisabled = 8655;
+
     public static bool IsTruncation(int number) => number is StringTruncated or StringTruncatedInColumn;
+
+    public static bool IsDuplicateKey(int number) => number is DuplicateKey or DuplicateIndexKey;
 
     public static bool IsEncryptionKeyMissing(int number) => number is MasterKeyNotOpen or DecryptionFailed;
 }

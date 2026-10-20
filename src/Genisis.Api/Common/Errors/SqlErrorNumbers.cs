@@ -27,6 +27,9 @@ public static class SqlErrorNumbers
     /// <summary>Cannot insert a duplicate key row in a unique index.</summary>
     public const int DuplicateIndexKey = 2601;
 
+    /// <summary>A table's clustered index is disabled, so the table cannot be read or written until it is rebuilt.</summary>
+    public const int IndexDisabled = 8655;
+
     public static bool IsTruncation(int number) => number is StringTruncated or StringTruncatedInColumn;
 
     public static bool IsDuplicateKey(int number) => number is DuplicateKey or DuplicateIndexKey;

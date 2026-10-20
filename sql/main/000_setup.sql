@@ -1,11 +1,13 @@
 -- Setup for the Genesis stored procedures. Run on the main database (the one that has dbo.PLN and dbo.MBM).
 -- Creates the genisis schema and the synonyms the procedures use to read the maintenance database.
--- If your maintenance, clinical or worksheet database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb below before running.
+-- If your maintenance, clinical, worksheet or archive database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb /
+-- @ArchiveDb below before running.
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
 DECLARE @CisDb sysname = N'CISDB';
 DECLARE @WorksheetDb sysname = N'HISWorkSheet';
+DECLARE @ArchiveDb sysname = N'HISDMArchive';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -36,6 +38,11 @@ BEGIN
     RAISERROR(N'STOPPED: worksheet database "%s" was not found on this server (or it has no dbo.VIEW_Account_History). Change @WorksheetDb at the top of this script to your worksheet database name and run it again.', 16, 1, @WorksheetDb);
     SET NOEXEC ON;
 END
+ELSE IF DB_ID(@ArchiveDb) IS NULL OR OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NULL
+BEGIN
+    RAISERROR(N'STOPPED: archive database "%s" was not found on this server (or it has no dbo.MBMArchive). Change @ArchiveDb at the top of this script to your archive database name (the desktop''s mediconnectA connection) and run it again.', 16, 1, @ArchiveDb);
+    SET NOEXEC ON;
+END
 
 IF SCHEMA_ID(N'genisis') IS NULL EXEC (N'CREATE SCHEMA genisis AUTHORIZATION dbo');
 
@@ -61,10 +68,14 @@ CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
 FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_PRM', N'PRM'), (N'Cis_MCO', N'MCO'),
     (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t);
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@ArchiveDb) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
 ';
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + @CisDb
-    + N', worksheet database: ' + @WorksheetDb + N').';
+    + N', worksheet database: ' + @WorksheetDb + N', archive database: ' + @ArchiveDb + N').';
 GO

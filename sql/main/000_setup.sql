@@ -1,6 +1,7 @@
 -- Setup for the Genesis stored procedures. Run on the main database (the one that has dbo.PLN and dbo.MBM).
 -- Creates the genisis schema and the synonyms the procedures use to read the maintenance database.
--- If your maintenance, clinical, worksheet or payment database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb / @PaymentDb below before running.
+-- If your maintenance, clinical, worksheet, payment or archive database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb /
+-- @PaymentDb / @ArchiveDb below before running.
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
@@ -8,6 +9,8 @@ DECLARE @CisDb sysname = N'CISDB';
 DECLARE @WorksheetDb sysname = N'HISWorkSheet';
 -- The clinical (CIS) and payment databases are optional: the screens that read them need them, their synonyms are skipped when absent.
 DECLARE @PaymentDb sysname = N'HISPayment';
+-- The archive database (the desktop's mediconnectA) is optional too: only Membership > Deletion writes to it.
+DECLARE @ArchiveDb sysname = N'HISDMArchive';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -58,6 +61,11 @@ CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_PRM', N'PRM'), (N'Cis_MCO', N'MCO'),
     (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t)
 WHERE DB_ID(@CisDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas', N'U') IS NOT NULL;
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@ArchiveDb) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t)
+WHERE DB_ID(@ArchiveDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NOT NULL;
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
 ';
@@ -80,5 +88,5 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + CASE WHEN DB_ID(@CisDb) IS NULL THEN N'none' ELSE @CisDb END
-    + N', worksheet database: ' + @WorksheetDb + N').';
+    + N', worksheet database: ' + @WorksheetDb + N', archive database: ' + CASE WHEN DB_ID(@ArchiveDb) IS NULL THEN N'none' ELSE @ArchiveDb END + N').';
 GO

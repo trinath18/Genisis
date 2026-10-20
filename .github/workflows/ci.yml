@@ -32,6 +32,9 @@ jobs:
           src/Genisis.Api/Case/Listing src/Genisis.Api/Case/Lookups src/Genisis.Api/Case/Mma src/Genisis.Api/Case/NonDisclosure
           src/Genisis.Api/Case/PanelHospitals src/Genisis.Api/Case/PayClaim src/Genisis.Api/Case/Transfer
 
+      - name: Fonts for the PDF documents (Leaflet & Card render with system fonts on Linux)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+
       - name: Test (unit, integration and architecture tests; the database tests skip themselves without GENISIS_TEST_MAINDB)
         run: dotnet test Genisis.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory TestResults
 

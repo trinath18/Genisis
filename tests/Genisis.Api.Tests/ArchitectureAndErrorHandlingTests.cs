@@ -25,7 +25,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         typeof(CaseMmaController), typeof(CaseAuditReviewController), typeof(CaseTransferController), typeof(CaseListingController),
         typeof(ClaimAsciiController), typeof(CaseAsciiController),
         typeof(WorksheetLookupsController), typeof(WorksheetTrackingController), typeof(WorksheetSendToAccountsController), typeof(WorksheetSendToArController), typeof(WorksheetEnquiryController),
-        typeof(AccountTransactionController), typeof(SecurityDepartmentsController), typeof(SecurityUsersController), typeof(SecurityPermissionsController),
+        typeof(AccountTransactionController), typeof(SecurityDepartmentsController), typeof(SecurityUsersController), typeof(SecurityPermissionsController), typeof(MmaEntryController),
     ];
 
     private static readonly string[] ScreenNamespaces =
@@ -33,7 +33,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         "Genisis.Api.Case.Ascii", "Genisis.Api.Case.AuditReview", "Genisis.Api.Case.Listing", "Genisis.Api.Case.Lookups", "Genisis.Api.Case.Mma",
         "Genisis.Api.Case.NonDisclosure", "Genisis.Api.Case.PanelHospitals", "Genisis.Api.Case.PayClaim", "Genisis.Api.Case.Transfer",
         "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
-        "Genisis.Api.Maintenance.AccountTransaction", "Genisis.Api.Maintenance.Security",
+        "Genisis.Api.Maintenance.AccountTransaction", "Genisis.Api.Maintenance.Security", "Genisis.Api.Maintenance.MmaEntry",
     ];
 
     private static bool IsScreenNamespace(string? ns) =>

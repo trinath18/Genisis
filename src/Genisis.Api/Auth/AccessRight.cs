@@ -31,6 +31,9 @@ public static class AccessRight
 
     /// <summary>Maintenance > Security > Role Management and User Permission: the matrix's User Permission right (ACS 112), not the desktop's CheckAccess(2).</summary>
     public const int SecurityUsers = 112;
+
+    /// <summary>Maintenance > MMA (Procedures/OPCS): the desktop menu item had no handler; the matrix's Maintenance MMA checkbox is 147.</summary>
+    public const int MmaEntry = 147;
     /// <summary>Case > Inquiry (frmCaseInquiry) checks position 7 in mdiMain.</summary>
     public const int CaseEnquiry = 7;
 

@@ -50,11 +50,46 @@ All are in `HISWorkSheet`; the form builds the call as text, the port will pass 
 The positional arguments of those calls are the form's variables (`A1`, `A1B`, `A2`, …, `txtGrossRB`, `txtRBTax`, …). About 40 of the `A…` variables are sums of finer fields computed in
 the form's change handlers (for example `A5` pre-hospital = `txtXray` + `txtPreLab` + `txtPreOthers`), so the port needs those formulas as well as the procedures.
 
-### `getTotal`: the invoice amount
+### The form's arithmetic, ported and checked (`Genisis.Api/Invoice/InvoiceRules.cs`)
 
-`getTotal` adds every control whose name starts with `A` and is at most four characters long (the aggregates `A1`, `A1B`, `A2`, … `ALB`, `ART`, `AIT`, `ALT`) and takes off
-`A1 + A2 + ART + AIT + ALT + A17` (amounts that are already inside other aggregates: the room, ICU and lodger lines also appear with their tax; what `A17` stands for is read when this is ported). **Measured:** over 6,000 saved invoices the invoice amount equals the
-sum of the 29 grid rows the worksheet engine takes from the invoice, to the cent, for 5,835 (97.3 per cent); 303 invoices have an amount of zero, and the rest are invoices entered without a breakdown.
+The 40 change handlers that fill the sums were read out of the VB6 mechanically (`extract_aggregates`: every `A… = CDbl(x) + CDbl(y) …` line and the controls each sum uses); they give ten distinct sums and no
+conflicting formula:
+
+| Sum (form variable → column) | Parts |
+|---|---|
+| A5 → `CLMPreHSAmt` | X-ray + lab + others (`CLMPreXRay`, `CLMPreLab`, `CLMPreoTHERS`) |
+| A5B → `CLMMPreHosAmt` | the same for the medical pre-hospital (`CLMMXRay`, `CLMMLab`, `CLMMPreOthers`) |
+| A6 → `CLMSurgicalAmt` | surgical fee + physician + post-treatment + ward (`CLMSurgicalFee`, `CLMSurgPhy`, `CLMSurgPost`, `CLMSurgicalWard`) |
+| A7 → `CLMAna` | fees + consultation + ward (`CLMAnaeFees`, `CLMAnaeConsultation`, `CLMAnaeWard`) |
+| A9 → `CLMPhysician` | fees + ward + procedures (`CLMInHosFees`, `CLMInHosWard`, `CLMProceduresFee`) |
+| A11 → `CLMAccPostAmt` | emergency + post-treatment (`CLMEmergency`, `CLMPostTreat`) |
+| A19 → `CLMTax` | R&B tax + ICU tax + lodger tax (`CLMRBTax`, `CLMICUTax`, `CLMLodgerTax`) |
+| A1B → `CLMTotalBoardAmt` | A1 + ART (`CLMBoardAmt` + `CLMNewRBTax`) |
+| A2B → `CLMTotalICUAmt` | A2 + AIT (`CLMICUAmt` + `CLMNewICUTax`) |
+| ALB → `CLMTotalGAllowAmt` | A17 + ALT (`CLMGuardianAmt` + `CLMNewLodgerTax`) |
+
+`getTotal` adds every amount control named A… of at most four characters and takes off `A1 + A2 + ART + AIT + ALT + A17`, so the room, ICU and guardian lines are counted once, through A1B, A2B and
+ALB. **Measured on saved invoices** (`InvoiceRulesOracleTests`, one invoice in 200): the sums equal the saved columns for **430 of 430** invoices that have a breakdown (in the first, wider SQL check 7 of 8,600
+had the parts all zero, the total having been typed); the invoice amount equals `getTotal` for **388 of 402 (96.5 per cent)**; the others were changed after they were saved. An invoice entered without a
+breakdown has its parts empty and keeps the typed sum.
+
+### Variable to column map of the three amount procedures
+
+The call in `SaveClaim`'s `saveActual`, `saveActualOthers` and `saveNotCover` passes the form's variables positionally; zipped with each procedure's parameters (47, 41 and 11, all matched):
+
+* `Insert_ClaimInvActual2010` (`ClaimInvoiceActual`): `Text1` → `CLMCHospSum`; A1 → `CLMBoardAmt`; `txtGrossRB` → `CLMGrossRB`; A1B → `CLMTotalBoardAmt`; A2 → `CLMICUAmt`; A2B → `CLMTotalICUAmt`;
+  A3 → `CLMServices`; A4 → `CLMTheatre`; A24 → `CLMPreHosp`; A5 → `CLMPreHSAmt`; A5B → `CLMMPreHosAmt`; A6 → `CLMSurgicalAmt`; A7 → `CLMAna`; A8 → `CLMNSPreHos`; A9 → `CLMPhysician`;
+  A10 → `CLMPost`; `txtACC` → `CLMEmergency`; `txtPTreat` → `CLMPostTreat`; A11 → `CLMAccPostAmt`; A12 → `CLMAmbulance`; A13 → `CLMOutpatient`; A14 → `CLMMonthly`; A15 → `CLMMedical`;
+  A16 → `CLMPhone`; A17 → `CLMGuardianAmt`; ALB → `CLMTotalGAllowAmt`; A18 → `CLMAdmin`; `txtRBTax` → `CLMRBTax`; `txtICUTax` → `CLMICUTax`; `txtLodgerTax` → `CLMLodgerTax`; A19 → `CLMTax`;
+  A20 → `CLMOthers1`; `Text2` → `CLMMHospSum`; A25 → `CLMOthersNotCOPay`; `txtOhersNoCoPay` → `CLMOthersDescNoCOPay`; A20B → `CLMOthers2`; `txtOthersDesc1` → `CLMOther1Desc`;
+  `txtOthersDesc2` → `CLMOthers2Desc`; A21 → `CLMCashAmt`; A22 → `CLMOrgan`; A23 → `CLMMRI`; ART → `CLMNewRBTax`; AIT → `CLMNewICUTax`; ALT → `CLMNewLodgerTax`; A26 → `CLMHomeNCAmt`; A27 → `CLMCancerAmt`.
+* `Insert_ClaimInvoiceActOthers_New` (`ClaimInvoiceActualOthers`, 40 columns after the invoice index): the days and rates (`CLMBoardDay`, `CLMRB`, `CLMICUDay`, `CLMICU`), the breakdown above, `CLMINHospHyVisitDay`,
+  `CLMKidneyMnth`, `CLMLodger`, `CLMLodgerday`, `CLMCashDay`, `CLMCash`, the member-paid entries (`CLMMedRptMBM`, `CLMTelChargesMBM`, `CLMGuaAllowMBM`, `CLMAdminRegMBM`, `CLMOthersMBM`) and the nine
+  `…HSS` entries of the hospital supplies screen (`CLMPharmacyHSS` … `CLMMiscHSS`).
+* `Insert_ClaimInvoiceNotCov08` (`ClaimInvoiceNotCover`): `PreH60`, `PreGP`, `PreMedic`, `PreMR`, `PreSpec`, `PostHosp`, `PostNotSame`, `Others`, `ReimOtherRemarks`, `INVHospName`.
+* `Insert_ClaimInvoice_2013` (`ClaimInvoice`, 24): `INVWSversion` (the case's last worksheet version), `INVBordxed`, `INVWSed` (both 0), `INVNo`, `CasNumber`, `InvDate`, `INVEnteredDate`, `INVEnteredBy`,
+  `INVPayee` (the hospital code, or the typed payee), `INVStayType`, `INVPAYType`, `InvPayTo`, `CLMINVRecMode`, `INVFolUpDate`, `CLMINVRecDate`, `INVAmount`, `InvPaidByMem`, `CLMUHCNo`, `InvExcessAmt`,
+  `InvPayAmt`, `INVInitialActAmt`, `INVRoomType`, `UpfrontDisc`, `Discreceived`.
 
 ## 3. What Registration's save writes (`frmWorksheetRegGST2015` and `frmWorksheetAdj2013`, same routines)
 
@@ -81,7 +116,7 @@ the exact columns are read when that routine is ported.
 
 ## 5. Order of work, and how each step is checked
 
-1. **Invoice rules**: `getTotal` and the ~40 aggregates as pure code, checked by the oracle above on every saved invoice (the aggregate fields reproduce the saved `ClaimInvoiceActual` columns).
+1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.
 2. **Invoice Processing, read side**: the case's invoices with every field, over `View_CAS_Invoice`.
 3. **Invoice Processing, write side**: the 13 checks in order, then the procedures above in the form's order inside one transaction; checked by saving a saved invoice's own values again (in a
    rolled-back transaction) and comparing every column, then by the same on invoices of the ZZ test case.
@@ -91,6 +126,6 @@ the exact columns are read when that routine is ported.
 
 ## 6. Data that would change how much can be checked
 
-* **A full `HISWorkSheet` backup**, restored beside the current one (as `HISDB_actual_backup` was) so that rows can be copied across: about 40 times more saved worksheets and invoices to
-  check the rules and the engine against, and real unregistered invoices (cases that have an invoice but no worksheet) to register in a rolled-back transaction.
+* **A full `HISWorkSheet` backup** (done: `HISWorkSheet_backup`, and 25,497 cases were copied across): more saved worksheets and invoices to check the rules and the engine against, and real unregistered
+  invoices (638 cases that have an invoice but no worksheet) to register in a rolled-back transaction.
 * **A full `HISMaintenance` backup**, for the same reason on the per-case tables Registration writes (`tblRecord`, `CASLG`, `CASCrossReference`).

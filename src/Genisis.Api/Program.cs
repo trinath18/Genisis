@@ -37,6 +37,7 @@ builder.Services.AddScoped<Genisis.Api.CardControl.ICardControlService, Genisis.
 builder.Services.AddScoped<Genisis.Api.Deletion.IDeletionService, Genisis.Api.Deletion.DeletionService>();
 builder.Services.AddScoped<Genisis.Api.LeafletCard.ILeafletCardService, Genisis.Api.LeafletCard.LeafletCardService>();
 builder.Services.AddScoped<Genisis.Api.Registration.ITempRegistrationService, Genisis.Api.Registration.TempRegistrationService>();
+builder.Services.AddScoped<Genisis.Api.Adjustment.ITempAdjustmentService, Genisis.Api.Adjustment.TempAdjustmentService>();
 builder.Services.AddScoped<Genisis.Api.Benefits.BenefitService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();

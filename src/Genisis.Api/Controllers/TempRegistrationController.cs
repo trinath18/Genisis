@@ -14,14 +14,14 @@ namespace Genisis.Api.Controllers;
 [RequireAccess(AccessRight.MembershipRegistration)]
 public sealed class TempRegistrationController(ITempRegistrationService renewals) : ControllerBase
 {
-    public const string NotFound = "No record found!";
+    public const string NotFoundMessage = "No record found!";
 
     [HttpGet("{previousMembershipNo}")]
     public async Task<ActionResult<RenewalDraft>> GetDraft(string previousMembershipNo, CancellationToken cancellationToken)
     {
         var draft = await renewals.GetDraftAsync(previousMembershipNo, cancellationToken);
         return draft is null
-            ? new ObjectResult(Problems.Create(HttpContext, StatusCodes.Status404NotFound, "Not found", NotFound)) { StatusCode = StatusCodes.Status404NotFound }
+            ? new ObjectResult(Problems.Create(HttpContext, StatusCodes.Status404NotFound, "Not found", NotFoundMessage)) { StatusCode = StatusCodes.Status404NotFound }
             : Ok(draft);
     }
 }

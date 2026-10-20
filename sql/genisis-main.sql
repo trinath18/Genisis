@@ -7,13 +7,16 @@
 -- ===== main/000_setup.sql =====
 -- Setup for the Genesis stored procedures. Run on the main database (the one that has dbo.PLN and dbo.MBM).
 -- Creates the genisis schema and the synonyms the procedures use to read the maintenance database.
--- If your maintenance, clinical, worksheet or archive database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb /
--- @ArchiveDb below before running.
+-- If your maintenance, clinical, worksheet, payment or archive database has another name, change @MaintenanceDb / @CisDb / @WorksheetDb /
+-- @PaymentDb / @ArchiveDb below before running.
 SET NOEXEC OFF;
 SET NOCOUNT ON;
 DECLARE @MaintenanceDb sysname = N'HISMaintenance';
 DECLARE @CisDb sysname = N'CISDB';
 DECLARE @WorksheetDb sysname = N'HISWorkSheet';
+-- The clinical (CIS) and payment databases are optional: the screens that read them need them, their synonyms are skipped when absent.
+DECLARE @PaymentDb sysname = N'HISPayment';
+-- The archive database (the desktop's mediconnectA) is optional too: only Membership > Deletion writes to it.
 DECLARE @ArchiveDb sysname = N'HISDMArchive';
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
@@ -35,19 +38,9 @@ BEGIN
     RAISERROR(N'STOPPED: maintenance database "%s" was not found on this server (or it has no dbo.ProductCategory). Change @MaintenanceDb at the top of this script to your maintenance database name and run it again.', 16, 1, @MaintenanceDb);
     SET NOEXEC ON;
 END
-ELSE IF DB_ID(@CisDb) IS NULL OR OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas', N'U') IS NULL
-BEGIN
-    RAISERROR(N'STOPPED: clinical database "%s" was not found on this server (or it has no dbo.CISCas). Change @CisDb at the top of this script to your clinical (CIS) database name and run it again.', 16, 1, @CisDb);
-    SET NOEXEC ON;
-END
 ELSE IF DB_ID(@WorksheetDb) IS NULL OR OBJECT_ID(QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History', N'V') IS NULL
 BEGIN
     RAISERROR(N'STOPPED: worksheet database "%s" was not found on this server (or it has no dbo.VIEW_Account_History). Change @WorksheetDb at the top of this script to your worksheet database name and run it again.', 16, 1, @WorksheetDb);
-    SET NOEXEC ON;
-END
-ELSE IF DB_ID(@ArchiveDb) IS NULL OR OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NULL
-BEGIN
-    RAISERROR(N'STOPPED: archive database "%s" was not found on this server (or it has no dbo.MBMArchive). Change @ArchiveDb at the top of this script to your archive database name (the desktop''s mediconnectA connection) and run it again.', 16, 1, @ArchiveDb);
     SET NOEXEC ON;
 END
 
@@ -57,34 +50,52 @@ DECLARE @sql nvarchar(max) = N'';
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@MaintenanceDb) + N'.dbo.' + t + N';
 '
-FROM (VALUES (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory'),
-    (N'Maint_MBMCrossReference', N'MBMCrossReference'), (N'Maint_MBMSEQ05', N'MBMSEQ05'),
-    (N'Maint_MBMSEQRenew05', N'MBMSEQRenew05'), (N'Maint_MBMSEQRenewPol', N'MBMSEQRenewPol'),
-    (N'Maint_MBMSEQRenewHistory', N'MBMSEQRenewHistory'), (N'Maint_CTY', N'CTY'), (N'Maint_SuppMCOStatus', N'SuppMCOStatus'), (N'Maint_MBMSEQ', N'MBMSEQ'), (N'Maint_CaseMgmtFee', N'CaseMgmtFee'),
-    (N'Maint_MMAProcedures', N'MMAProcedures'), (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'),
-    (N'Maint_DiscPlan', N'DiscPlan'), (N'Maint_MCOPending', N'MCOPending'), (N'Maint_CASCrossReference', N'CASCrossReference'),
-    (N'Maint_Renewal', N'Renewal'),
+FROM (VALUES
+    (N'Maint_ProductCategory', N'ProductCategory'), (N'Maint_PolicyCategory', N'PolicyCategory'), (N'Maint_MBMCrossReference', N'MBMCrossReference'),
+    (N'Maint_MBMSEQ05', N'MBMSEQ05'), (N'Maint_MBMSEQRenew05', N'MBMSEQRenew05'), (N'Maint_MBMSEQRenewPol', N'MBMSEQRenewPol'),
+    (N'Maint_MBMSEQRenewHistory', N'MBMSEQRenewHistory'), (N'Maint_CTY', N'CTY'), (N'Maint_SuppMCOStatus', N'SuppMCOStatus'),
+    (N'Maint_MBMSEQ', N'MBMSEQ'), (N'Maint_CaseMgmtFee', N'CaseMgmtFee'), (N'Maint_MMAProcedures', N'MMAProcedures'),
+    (N'Maint_MMAFees', N'MMAFees'), (N'Maint_MMASchedule', N'VIEW_MMA_Schedule'), (N'Maint_DiscPlan', N'DiscPlan'),
+    (N'Maint_MCOPending', N'MCOPending'), (N'Maint_CASCrossReference', N'CASCrossReference'), (N'Maint_Renewal', N'Renewal'),
     (N'Maint_CAQ2013', N'CAQ2013'), (N'Maint_SpecApprove', N'SpecApprove'), (N'Maint_REPSelection', N'REPSelection'),
-    (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'),
-    (N'Maint_CASLG', N'CASLG'), (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'),
-    (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'), (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'),
-    (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason')) v (s, t);
+    (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'), (N'Maint_CASLG', N'CASLG'),
+    (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
+    (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
 FROM (VALUES (N'Cis_PLN', N'PLN'), (N'Cis_AnnualLimit', N'AnnualLimit'), (N'Cis_PRM', N'PRM'), (N'Cis_MCO', N'MCO'),
-    (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t);
+    (N'Cis_VisitLimit', N'VisitLimit'), (N'Cis_CISCas', N'CISCas')) v (s, t)
+WHERE DB_ID(@CisDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas', N'U') IS NOT NULL;
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@ArchiveDb) + N'.dbo.' + t + N';
 '
-FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t);
+FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t)
+WHERE DB_ID(@ArchiveDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NOT NULL;
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
 ';
 EXEC (@sql);
-PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + @CisDb
-    + N', worksheet database: ' + @WorksheetDb + N', archive database: ' + @ArchiveDb + N').';
+
+SET @sql = N'';
+SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
+CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(d) + N'.dbo.' + t + N';
+'
+FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @WorksheetDb, N'ClaimInvoice'),
+    (N'WS_ClaimApprove', @WorksheetDb, N'ClaimApprove'), (N'WS_Bordx', @WorksheetDb, N'Bordx'),
+    (N'WS_WKSTracking', @WorksheetDb, N'VIEW_WKSTrackingNew'), (N'WS_WKS2AC', @WorksheetDb, N'VIEW_WKS2AC'),
+    (N'WS_ClaimActual', @WorksheetDb, N'ClaimActual'), (N'WS_ClaimHos', @WorksheetDb, N'ClaimHos'), (N'WS_ClaimMember', @WorksheetDb, N'ClaimMember'),
+    (N'WS_DRSeq', @WorksheetDb, N'DRSeq'), (N'WS_ExcessLetter', @WorksheetDb, N'CAS_Excess'),
+    (N'WS_ClaimLimit', @WorksheetDb, N'ClaimLimit'), (N'WS_ClaimOthers', @WorksheetDb, N'ClaimOthers'), (N'WS_CASInvoice', @WorksheetDb, N'View_CAS_Invoice'),
+    (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
+    (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
+    (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
+    (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
+WHERE DB_ID(d) IS NOT NULL;
+EXEC (@sql);
+PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + CASE WHEN DB_ID(@CisDb) IS NULL THEN N'none' ELSE @CisDb END
+    + N', worksheet database: ' + @WorksheetDb + N', archive database: ' + CASE WHEN DB_ID(@ArchiveDb) IS NULL THEN N'none' ELSE @ArchiveDb END + N').';
 GO
 
 -- ===== main/010_plan.sql =====
@@ -3793,6 +3804,191 @@ BEGIN
 END
 GO
 
+-- ===== main/160_panel_hospitals.sql =====
+-- Case > Panel Hospitals (legacy frmPanelHospital). Replaces the raw @strAppend dbo.Search_PanelHospitals2.
+
+-- PayorComboListing / SearchPayor: the payors of the payor drop-downs (Inpatient Case Listing, Claim ASCII, Case ASCII).
+CREATE OR ALTER PROCEDURE genisis.Case_Payors
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+END
+GO
+
+-- Form_Load: the hospital panel codes (HosPanelCode on the maintenance database).
+CREATE OR ALTER PROCEDURE genisis.PanelHospitals_Codes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(HosPanelCode) AS Code, RTRIM(HosPanelDesc) AS Description
+    FROM genisis.Maint_HosPanelCode ORDER BY HosPanelCode;
+END
+GO
+
+-- PanelListing: the hospitals of one panel code.
+CREATE OR ALTER PROCEDURE genisis.PanelHospitals_List
+    @code nvarchar(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(h.HOSCode) AS Code, RTRIM(h.HOSName) AS Name, RTRIM(h.HOSTelNo) AS Tel, RTRIM(h.HOSFaxNo) AS Fax,
+        RTRIM(h.HOSAdd1) AS Add1, RTRIM(h.HOSAdd2) AS Add2, RTRIM(h.HOSAdd3) AS Add3,
+        RTRIM(h.HOSState) AS State, RTRIM(h.HOSTown) AS Town
+    FROM dbo.HOS h
+    INNER JOIN dbo.PanelHospitals p ON h.HOSCode = p.HOSCode
+    WHERE p.HosPanelCode = @code
+    ORDER BY h.HOSName, h.HOSCode;
+END
+GO
+
+-- ===== main/165_case_non_disclosure.sql =====
+-- Case > Non-Disclosure Info (legacy frmCASNonDisclosure): the pre-existing / underlying illness the member did not
+-- disclose, stored on dbo.CASOthersTwo.
+
+-- CasDetails: nothing is returned when the case does not exist; HasRecord tells whether CASOthersTwo has a row yet.
+CREATE OR ALTER PROCEDURE genisis.NonDisclosure_Get
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(c.CASNumber) AS CaseNumber,
+        CAST(CASE WHEN o.CASNumber IS NULL THEN 0 ELSE 1 END AS bit) AS HasRecord,
+        RTRIM(o.CASPreIllCAT) AS PreCategory, o.CASPreIllDate AS PreDate,
+        RTRIM(o.CASPreIllOthers) AS PreOthers, RTRIM(o.CASPreIllInfBy) AS PreInformedBy,
+        RTRIM(o.CASUndIllCAT) AS UndCategory, o.CASUndIllDate AS UndDate,
+        RTRIM(o.CASUndIllOthers) AS UndOthers, RTRIM(o.CASUndIllInfBy) AS UndInformedBy
+    FROM dbo.CAS c
+    LEFT JOIN dbo.CASOthersTwo o ON o.CASNumber = c.CASNumber
+    WHERE c.CASNumber = @cas;
+END
+GO
+
+-- CmdUpdate_Click. The desktop only updated an existing CASOthersTwo row and otherwise reported success without
+-- saving; this inserts the row when it is missing. Result: 0 saved, 1 case not found.
+CREATE OR ALTER PROCEDURE genisis.NonDisclosure_Save
+    @cas nvarchar(15),
+    @preCategory nvarchar(4000), @preDate datetime, @preOthers nvarchar(4000), @preInformedBy nvarchar(4000),
+    @undCategory nvarchar(4000), @undDate datetime, @undOthers nvarchar(4000), @undInformedBy nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.CAS WHERE CASNumber = @cas)
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM dbo.CASOthersTwo WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas)
+        UPDATE dbo.CASOthersTwo
+        SET CASPreIllCAT = @preCategory, CASPreIllDate = @preDate, CASPreIllOthers = @preOthers, CASPreIllInfBy = @preInformedBy,
+            CASUndIllCAT = @undCategory, CASUndIllDate = @undDate, CASUndIllOthers = @undOthers, CASUndIllInfBy = @undInformedBy
+        WHERE CASNumber = @cas;
+    ELSE
+        INSERT dbo.CASOthersTwo (CASNumber, CASPreIllCAT, CASPreIllDate, CASPreIllOthers, CASPreIllInfBy,
+            CASUndIllCAT, CASUndIllDate, CASUndIllOthers, CASUndIllInfBy)
+        VALUES (@cas, @preCategory, @preDate, @preOthers, @preInformedBy, @undCategory, @undDate, @undOthers, @undInformedBy);
+
+    SELECT 0 AS Result;
+END
+GO
+
+-- ===== main/170_case_pay_claim.sql =====
+-- Case > Pay & Claim (legacy frmCASPayClaim). Reads replace dbo.Case_CASPayClaim / dbo.Search_CAS_PayClaim; the save
+-- replaces dbo.Case_SavePayClaim / dbo.Case_UpdatePayClaim and leaves the AgentName / CasRemarks columns untouched.
+
+-- showMBM: the principal and, for family / group insured types (F, H), the covered persons.
+CREATE OR ALTER PROCEDURE genisis.PayClaim_Members
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(m.MBMNumber) AS MemberNo, N'00' AS CoverId, RTRIM(m.MBMName) AS PatientName, RTRIM(m.MBMPolicyNo) AS PolicyNo,
+        m.MBMPayorEffDate AS PolicyEffective, m.MBMPayorExpDate AS PolicyExpiry,
+        RTRIM(m.MBMAddress1) AS Add1, RTRIM(m.MBMAddress2) AS Add2, RTRIM(m.MBMAddress3) AS Add3,
+        RTRIM(m.MBMPostCode) AS PostCode, RTRIM(m.STACode) AS State, RTRIM(p.PAYCompanyName) AS InsuranceCompany, 0 AS Sort
+    FROM dbo.CAS c
+    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
+    LEFT JOIN dbo.PAY p ON p.PAYCode = m.PAYCode
+    WHERE c.CASNumber = @cas
+    UNION ALL
+    SELECT RTRIM(cp.MBMCNumber), RTRIM(cp.MBMCCoverID), RTRIM(cp.MBMCName), RTRIM(m.MBMPolicyNo),
+        m.MBMPayorEffDate, m.MBMPayorExpDate, NULL, NULL, NULL, NULL, NULL, NULL, 1
+    FROM dbo.CAS c
+    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
+    INNER JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = m.MBMNumber
+    WHERE c.CASNumber = @cas AND RTRIM(m.INSCode) IN (N'F', N'H')
+    ORDER BY Sort, CoverId;
+END
+GO
+
+-- ShowMBMDetails: the case header the second tab shows (the patient is the principal for cover ID 00).
+CREATE OR ALTER PROCEDURE genisis.PayClaim_Case
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(c.CASNumber) AS CaseNumber, RTRIM(c.MBMNumber) AS MembershipNo, RTRIM(m.MBMPolicyNo) AS PolicyNo,
+        RTRIM(m.MBMName) AS PrincipalName,
+        RTRIM(CASE WHEN c.MBMPatientCovID = N'00' THEN m.MBMName ELSE ISNULL(cp.MBMCName, m.MBMName) END) AS PatientName,
+        c.CASDateAdmitted AS AdmissionDate, c.CASDischargeDate AS DischargeDate, RTRIM(h.HOSName) AS HospitalName
+    FROM dbo.CAS c
+    LEFT JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
+    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = c.MBMNumber AND cp.MBMCCoverID = c.MBMPatientCovID
+    LEFT JOIN dbo.HOS h ON h.HOSCode = c.CASHOSCode
+    WHERE c.CASNumber = @cas;
+END
+GO
+
+-- showPayClaim: the case's Pay & Claim record (at most one per case).
+CREATE OR ALTER PROCEDURE genisis.PayClaim_Get
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(CASNumber) AS CaseNo, CASPayCLMDate AS PayClaimDate,
+        RTRIM(CASLab) AS LabTest, RTRIM(CASConfInfo) AS ConflictingInfo, RTRIM(CASInfoInv) AS Investigation,
+        RTRIM(CASCovgSub) AS Radiology, RTRIM(CASNonPan) AS NonPanel, RTRIM(CASNonCash) AS NoCashless,
+        RTRIM(CASCOthers) AS Others, RTRIM(CASOthers) AS Remarks
+    FROM dbo.CASPayClaim WHERE CASNumber = @cas;
+END
+GO
+
+-- SavePayClaim. @isNew = 1 inserts (Result 2 when the case already has a record), 0 updates (Result 1 when it has none).
+CREATE OR ALTER PROCEDURE genisis.PayClaim_Save
+    @cas nvarchar(15), @isNew bit, @payClaimDate datetime,
+    @lab char(1), @confInfo char(1), @infoInv char(1), @covgSub char(1), @nonPan char(1), @nonCash char(1),
+    @cOthers char(1), @others nvarchar(4000), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.CAS WHERE CASNumber = @cas)
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+
+    DECLARE @exists bit = CASE WHEN EXISTS (SELECT 1 FROM dbo.CASPayClaim WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas) THEN 1 ELSE 0 END;
+    IF @isNew = 1 AND @exists = 1 BEGIN SELECT 2 AS Result; RETURN; END
+    IF @isNew = 0 AND @exists = 0 BEGIN SELECT 1 AS Result; RETURN; END
+
+    DECLARE @now datetime = GETDATE();
+    IF @isNew = 1
+        INSERT dbo.CASPayClaim (CASNumber, CASPayCLMDate, CASLab, CASConfInfo, CASInfoInv, CASCovgSub, CASNonPan, CASNonCash,
+            CASCOthers, CASOthers, CASRegUser, CASRegDate, LastUpdateUser, LastUpdateDate)
+        VALUES (@cas, @payClaimDate, @lab, @confInfo, @infoInv, @covgSub, @nonPan, @nonCash,
+            @cOthers, @others, @userCode, @now, @userCode, @now);
+    ELSE
+        UPDATE dbo.CASPayClaim
+        SET CASPayCLMDate = @payClaimDate, CASLab = @lab, CASConfInfo = @confInfo, CASInfoInv = @infoInv, CASCovgSub = @covgSub,
+            CASNonPan = @nonPan, CASNonCash = @nonCash, CASCOthers = @cOthers, CASOthers = @others,
+            LastUpdateUser = @userCode, LastUpdateDate = @now
+        WHERE CASNumber = @cas;
+
+    SELECT 0 AS Result;
+END
+GO
+
 -- ===== main/170_tracking.sql =====
 -- Membership > Tracking (legacy FrmNewMBMTracking). The desktop passed a concatenated WHERE fragment to dbo.MBMTracking; here every
 -- filter is a typed parameter. genisis.Tracking_CaseText (171_tracking_cases.sql, generated) holds each case's fixed query text.
@@ -4410,6 +4606,118 @@ BEGIN
 END
 GO
 
+-- ===== main/180_mma.sql =====
+-- Case > MMA/CPT (legacy frmMMA, "Malaysian Medical Association"): the MMA procedure schedule (MMAProcedures) and the
+-- surgeon / anaesthetist fee look-up table (MMAFees), both on the maintenance database. The search patterns are LIKE
+-- patterns built (and escaped) by the API; NULL means "not filtered".
+
+-- ProcListing / SearchProc: ProcMainBPCode and OPCSCode are the searchable fields.
+CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureSearch
+    @mainBodyPart nvarchar(4000) = NULL, @opcsCode nvarchar(4000) = NULL, @max int = 5000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) ProcIndex AS [Index], RTRIM(ProcMainBPCode) AS MainBodyPart, RTRIM(OPCSCode) AS OpcsCode,
+        RTRIM(OPCSNarrative) AS Narrative, RTRIM(ProcSurgCat) AS SurgeonCategory, RTRIM(ProcAnaesCat) AS AnaesthetistCategory,
+        RTRIM(ProcPart) AS Part, RTRIM(PartACost) AS PartACost, RTRIM(ProcPageNo) AS PageNo
+    FROM genisis.Maint_MMAProcedures
+    WHERE (@mainBodyPart IS NULL OR ProcMainBPCode LIKE @mainBodyPart)
+      AND (@opcsCode IS NULL OR OPCSCode LIKE @opcsCode)
+    ORDER BY ProcIndex;
+END
+GO
+
+-- SaveProc: @index NULL inserts (returns the new index), otherwise updates that row (Result 1 when it does not exist).
+CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureSave
+    @index int = NULL, @mainBodyPart nvarchar(4000), @opcsCode nvarchar(4000), @narrative nvarchar(4000),
+    @surgeonCategory nvarchar(4000), @anaesthetistCategory nvarchar(4000), @part nvarchar(4000),
+    @partACost nvarchar(4000), @pageNo nvarchar(4000), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
+    IF @index IS NULL
+    BEGIN
+        INSERT genisis.Maint_MMAProcedures (ProcMainBPCode, OPCSCode, OPCSNarrative, ProcSurgCat, ProcAnaesCat, ProcPageNo,
+            PartACost, ProcPart, ProcLastUpdateUser, ProcLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.ProcIndex AS [Index]
+        VALUES (@mainBodyPart, NULLIF(@opcsCode, N''), @narrative, NULLIF(@surgeonCategory, N''), NULLIF(@anaesthetistCategory, N''),
+            NULLIF(@pageNo, N''), NULLIF(@partACost, N''), @part, @user, @today);
+        RETURN;
+    END
+
+    UPDATE genisis.Maint_MMAProcedures
+    SET ProcMainBPCode = @mainBodyPart, OPCSCode = NULLIF(@opcsCode, N''), OPCSNarrative = @narrative,
+        ProcSurgCat = NULLIF(@surgeonCategory, N''), ProcAnaesCat = NULLIF(@anaesthetistCategory, N''),
+        ProcPageNo = NULLIF(@pageNo, N''), PartACost = NULLIF(@partACost, N''), ProcPart = @part,
+        ProcLastUpdateUser = @user, ProcLastUpdateDate = @today
+    WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- DeleteProc. Result 1 when the row does not exist.
+CREATE OR ALTER PROCEDURE genisis.Mma_ProcedureDelete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE genisis.Maint_MMAProcedures WHERE ProcIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
+-- LookListing / SearchLook: the surgeon's and anaesthetist's categories are the searchable fields.
+CREATE OR ALTER PROCEDURE genisis.Mma_FeeSearch
+    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL, @max int = 5000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) FeeIndex AS [Index], RTRIM(SurgeonsCat) AS SurgeonCategory, SurgeonsFees AS SurgeonFees,
+        RTRIM(AnaesthetistsCat) AS AnaesthetistCategory, AnaesthetistsFees AS AnaesthetistFees
+    FROM genisis.Maint_MMAFees
+    WHERE (@surgeonCategory IS NULL OR SurgeonsCat LIKE @surgeonCategory)
+      AND (@anaesthetistCategory IS NULL OR AnaesthetistsCat LIKE @anaesthetistCategory)
+    ORDER BY FeeIndex;
+END
+GO
+
+-- SaveLook: @index NULL inserts (returns the new index), otherwise updates that row (Result 1 when it does not exist).
+CREATE OR ALTER PROCEDURE genisis.Mma_FeeSave
+    @index int = NULL, @surgeonCategory nvarchar(4000), @surgeonFees money, @anaesthetistCategory nvarchar(4000),
+    @anaesthetistFees money, @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
+    IF @index IS NULL
+    BEGIN
+        INSERT genisis.Maint_MMAFees (SurgeonsCat, SurgeonsFees, AnaesthetistsCat, AnaesthetistsFees, FeeLastUpdateUser, FeeLastUpdateDate)
+        OUTPUT 0 AS Result, inserted.FeeIndex AS [Index]
+        VALUES (NULLIF(@surgeonCategory, N''), @surgeonFees, NULLIF(@anaesthetistCategory, N''), @anaesthetistFees, @user, @today);
+        RETURN;
+    END
+
+    UPDATE genisis.Maint_MMAFees
+    SET SurgeonsCat = NULLIF(@surgeonCategory, N''), SurgeonsFees = @surgeonFees,
+        AnaesthetistsCat = NULLIF(@anaesthetistCategory, N''), AnaesthetistsFees = @anaesthetistFees,
+        FeeLastUpdateUser = @user, FeeLastUpdateDate = @today
+    WHERE FeeIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result, @index AS [Index];
+END
+GO
+
+-- DeleteLook. Result 1 when the row does not exist.
+CREATE OR ALTER PROCEDURE genisis.Mma_FeeDelete
+    @index int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE genisis.Maint_MMAFees WHERE FeeIndex = @index;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
 -- ===== main/180_reinstatement.sql =====
 -- Membership > Member Reinstatement (legacy frmMBMReintstatement).
 -- Status, final expiry, covered-person status and the amendment history reuse the Adjustment_* writers;
@@ -4875,6 +5183,1475 @@ BEGIN
     FROM dbo.MBM m
     LEFT JOIN dbo.PAY p ON p.PAYCode = m.PAYCode
     WHERE m.MBMNumber = @number;
+END
+GO
+
+-- ===== main/190_case_audit_review.sql =====
+-- Case > Case Audit Review (legacy frmCaseAuditReview). The case, member, diagnoses and repudiation are read with the
+-- procedures Case Adjustment already uses; these cover what is specific to the audit review: its own record
+-- (dbo.CASAuditReview, shown through dbo.VIEW_CAS_AuditReview) and the hospital payments (HISPayment.Payment2HOS).
+-- They replace the raw @strAppend dbo.Case_AuditReview modes and dbo.Case_AuditInsert / dbo.Case_AuditUpdate.
+
+-- showOther (audit part) + showPaymentRecord + the member. The visit date is stored by the desktop as an mm/dd/yyyy string.
+CREATE OR ALTER PROCEDURE genisis.CaseAudit_Get
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET DATEFORMAT mdy;
+    SELECT RTRIM(CASInvNo) AS InvoiceNo, INVDate AS InvoiceDate, CASInvAmt AS InvoiceAmount, CASDisRec AS DiscountReceived,
+        RTRIM(CASDiscType) AS DiscountType, CASLetterSent AS LetterSent, CASHospReply AS LetterReply,
+        RTRIM(CASARStatus) AS Status, CASAROpenDate AS DateOpen, CASDTC AS DateToClaims,
+        CASReviewAudit AS Query, CASARAnswer AS Answer, CASARRemarks AS Remarks,
+        CASE WHEN ISDATE(NULLIF(RTRIM(CASDOV), N'')) = 1 THEN CONVERT(datetime, RTRIM(CASDOV), 101) END AS VisitDate, RTRIM(CASDOVTime) AS VisitTime,
+        CASVRemarks AS VisitAction, RTRIM(Officer) AS Officer
+    FROM dbo.CASAuditReview WHERE CASNumber = @cas;
+
+    IF OBJECT_ID(N'genisis.Pay_Payment2HOS', N'SN') IS NOT NULL
+        EXEC sp_executesql N'SELECT RTRIM(PVHOSNo) AS PvNo, PVHOSDate AS PvDate, HOSPaidAmt AS AmountPaid
+            FROM genisis.Pay_Payment2HOS WHERE CASNumber = @cas ORDER BY PVHOSDate, PVHOSIndex',
+            N'@cas nvarchar(15)', @cas;
+    ELSE
+        SELECT CAST(NULL AS nvarchar(30)) AS PvNo, CAST(NULL AS datetime) AS PvDate, CAST(NULL AS money) AS AmountPaid WHERE 1 = 0;
+
+    -- The member straight from dbo.MBM: SearchMBMCas (used for the case's member panel) returns nothing for a member
+    -- that has no MBMOthers / MBMOthersTwo / MBMTwo row, and the audit review still has to show who the member is.
+    SELECT RTRIM(m.MBMNumber) AS MemberNo, RTRIM(m.MBMName) AS Name, RTRIM(m.MBMIcBcPp) AS Ic, RTRIM(m.PAYCode) AS Payor,
+        RTRIM(m.MBMPolicyNo) AS PolicyNo, RTRIM(m.MBMRenewFlag) AS Renewal, RTRIM(m.MBMTakeover) AS TakeOver,
+        m.MBMPayorEffDate AS EffectiveDate, m.MBMPayorExpDate AS ExpiryDate, RTRIM(m.MBMAddress1) AS Address1,
+        RTRIM(m.MBMAddress2) AS Address2, RTRIM(m.MBMAddress3) AS Address3, RTRIM(m.MBMPostCode) AS PostCode,
+        RTRIM(m.CTYCode) AS Town, RTRIM(m.STACode) AS State, m.MBMDOB AS Dob, m.MBMAvailableLimit AS AvailableLimit,
+        RTRIM(m.MBMStatus) AS Status, RTRIM(CAST(o.MBMInstallment AS nvarchar(50))) AS Installment
+    FROM dbo.CAS c
+    INNER JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    WHERE c.CASNumber = @cas;
+END
+GO
+
+-- cmdUpdate1_Click: Case_AuditInsert / Case_AuditUpdate on the case's audit row plus Case_AuditUpdate on the maintenance
+-- cross reference (the audit status). Blank amounts are stored as 0, blank dates as NULL, like the desktop.
+-- Result: 0 saved, 1 case not found.
+CREATE OR ALTER PROCEDURE genisis.CaseAudit_Save
+    @cas nvarchar(15), @invoiceNo nvarchar(4000), @invoiceDate datetime, @invoiceAmount money, @discountReceived money,
+    @discountType nvarchar(4000), @letterSent datetime, @letterReply datetime, @status nvarchar(4000),
+    @dateOpen datetime, @dateToClaims datetime, @query nvarchar(4000), @answer nvarchar(4000), @remarks nvarchar(4000),
+    @visitDate datetime, @visitTime nvarchar(4000), @visitAction nvarchar(4000), @officer nvarchar(4000), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @mbm nvarchar(30) = (SELECT MBMNumber FROM dbo.CAS WHERE CASNumber = @cas);
+    IF @mbm IS NULL
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime), @user nvarchar(10) = LEFT(@userCode, 10);
+    DECLARE @visit nvarchar(10) = CONVERT(nvarchar(10), @visitDate, 101);
+    DECLARE @amount money = ISNULL(@invoiceAmount, 0), @discount money = ISNULL(@discountReceived, 0);
+
+    IF EXISTS (SELECT 1 FROM dbo.CASAuditReview WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas)
+        UPDATE dbo.CASAuditReview
+        SET CASInvNo = @invoiceNo, INVDate = @invoiceDate, CASInvAmt = @amount, CASLetterSent = @letterSent, CASHospReply = @letterReply,
+            CASDOV = @visit, CASDOVTime = @visitTime, Officer = @officer, CASVRemarks = @visitAction, CASDisRec = @discount,
+            CASDTC = @dateToClaims, CASAROpenDate = @dateOpen, CASARAnswer = @answer, CASARRemarks = @remarks,
+            CASReviewAudit = @query, CASARStatus = @status, CASLastUpdateUser = @user, CASLastUpdateDate = @today,
+            CASDiscType = @discountType
+        WHERE CASNumber = @cas;
+    ELSE
+        INSERT dbo.CASAuditReview (CASNumber, CASInvNo, INVDate, CASInvAmt, CASLetterSent, CASHospReply, CASDOV, CASDOVTime,
+            Officer, CASVRemarks, CASDisRec, CASDTC, CASAROpenDate, CASARAnswer, CASARRemarks, CASReviewAudit, CASARStatus,
+            CASLastUpdateUser, CASLastUpdateDate, CASDiscType)
+        VALUES (@cas, @invoiceNo, @invoiceDate, @amount, @letterSent, @letterReply, @visit, @visitTime,
+            @officer, @visitAction, @discount, @dateToClaims, @dateOpen, @answer, @remarks, @query, @status,
+            @user, @today, @discountType);
+
+    UPDATE genisis.Maint_CASCrossReference SET CASARStatus = @status WHERE CASNumber = @cas AND MBMNumber = @mbm;
+
+    SELECT 0 AS Result;
+END
+GO
+
+-- ===== main/200_case_transfer.sql =====
+-- Case > Case Transfer (legacy frmCaseTransferMBMNo, "Case - Transfer of Membership"). Replaces the raw @strAppend
+-- dbo.Case_Transfer modes and the inline recordset writes of TransferProcess / ReCalculatePrevMBMLmt.
+-- The worksheet totals are read through the genisis.WS_* synonyms, so the whole transfer is one MainDb transaction
+-- (the desktop ran its writes on four connections with no working transaction).
+
+-- Text amounts (ClaimApprove stores them as nvarchar) as a number; anything that is not a plain number is 0.
+-- ISNUMERIC is not enough: it accepts a lone minus sign, a lone dot and a dollar sign, none of which can be cast.
+CREATE OR ALTER FUNCTION genisis.Util_SafeDecimal (@s nvarchar(60))
+RETURNS decimal(18, 4)
+AS
+BEGIN
+    DECLARE @t nvarchar(60) = LTRIM(RTRIM(ISNULL(@s, N'')));
+    RETURN CASE
+        WHEN @t = N'' OR LEN(@t) > 15 OR @t LIKE N'%[^0-9.-]%' OR @t NOT LIKE N'%[0-9]%'
+          OR @t LIKE N'%.%.%' OR @t LIKE N'%-%-%' OR (@t LIKE N'%-%' AND LEFT(@t, 1) <> N'-') THEN 0
+        ELSE CAST(@t AS decimal(18, 4))
+    END;
+END
+GO
+
+-- showCAS: the member / cover the case is on now.
+CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Case
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(CASNumber) AS CaseNumber, RTRIM(MBMNumber) AS MemberNo, RTRIM(MBMPatientCovID) AS CoverId, RTRIM(CASStatus) AS CaseStatus
+    FROM dbo.CAS WHERE CASNumber = @cas;
+END
+GO
+
+-- MBMInfo: member / patient details. No row when the member does not exist; CoverFound = 0 for an unknown supplementary.
+CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Member
+    @mbm nvarchar(30), @cover nvarchar(10)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(m.MBMNumber) AS MemberNo, @cover AS CoverId,
+        RTRIM(CASE WHEN @cover = N'00' THEN m.MBMName ELSE cp.MBMCName END) AS PatientName,
+        RTRIM(m.MBMPolicyNo) AS PolicyNo,
+        RTRIM(CASE WHEN @cover = N'00' THEN m.MBMIcBcPp ELSE cp.MBMCICBCPPNo END) AS IcNo,
+        RTRIM(m.MBMStatus) AS Status, m.MBMPayorEffDate AS EffDate, m.MBMPayorExpDate AS ExpDate,
+        CAST(CASE WHEN @cover = N'00' OR cp.MBMCNumber IS NOT NULL THEN 1 ELSE 0 END AS bit) AS CoverFound
+    FROM dbo.MBM m
+    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = m.MBMNumber AND cp.MBMCCoverID = @cover
+    WHERE m.MBMNumber = @mbm;
+END
+GO
+
+-- ReCalculatePrevMBMLmt / the limit part of TransferProcess for one member. @sign = +1 gives the case's approved amount
+-- back to the previous member (@giveBack = 1: always applied, the covered person's own plan code is used for the benefit
+-- limit lookup), -1 charges the new member (only applied when the amount is not zero).
+-- Limit holder: the principal's MBM.MBMAvailableLimit when the plan shares the limit (SuppLimitStatus A) or the patient is
+-- the principal; otherwise the covered person's own MBMCAvailableLimit (status B uses cover 01). The benefit balances
+-- (cancer / kidney / home nursing) follow the plan's benefit status the same way. The annual limit row is the one in
+-- force on the member's payor effective date (the desktop took an arbitrary row of the plan).
+CREATE OR ALTER PROCEDURE genisis.CaseTransfer_MoveLimit
+    @mbm nvarchar(30), @cov nvarchar(10), @sign int, @total money, @cancer money, @kidney money, @home money, @giveBack bit
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @hlt nvarchar(4), @ins nvarchar(4), @plan nvarchar(8), @eff datetime;
+    SELECT @hlt = HLTCode, @ins = INSCode, @plan = PLNCode, @eff = MBMPayorEffDate FROM dbo.MBM WHERE MBMNumber = @mbm;
+
+    DECLARE @status varchar(1);
+    SELECT TOP (1) @status = SuppLimitStatus FROM dbo.AnnualLimit
+    WHERE PLNCode = @plan AND INSCode = @ins AND HLTCode = @hlt AND AnnualEffDate <= ISNULL(@eff, '19000101')
+    ORDER BY AnnualEffDate DESC;
+    IF @status IS NULL
+        SELECT TOP (1) @status = SuppLimitStatus FROM dbo.AnnualLimit WHERE PLNCode = @plan ORDER BY AnnualEffDate DESC;
+    SET @status = CASE WHEN RTRIM(ISNULL(@status, '')) = '' THEN 'A' ELSE RTRIM(@status) END;
+
+    IF @giveBack = 1 OR @total <> 0
+    BEGIN
+        IF @status = 'A' OR @cov = N'00'
+            UPDATE dbo.MBM SET MBMAvailableLimit = ISNULL(MBMAvailableLimit, 0) + @sign * @total WHERE MBMNumber = @mbm;
+        ELSE
+        BEGIN
+            DECLARE @holder nvarchar(10) = CASE WHEN @status = 'B' THEN N'01' ELSE @cov END;
+            UPDATE dbo.MBMCoveredPersons SET MBMCAvailableLimit = ISNULL(MBMCAvailableLimit, 0) + @sign * @total
+            WHERE MBMCNumber = @mbm AND MBMCCoverID = @holder;
+            IF @giveBack = 1
+            BEGIN
+                DECLARE @coveredPlan nvarchar(8) = (SELECT TOP (1) RTRIM(MBMCPLNCode) FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @mbm AND MBMCCoverID = @holder);
+                IF ISNULL(@coveredPlan, N'') <> N'' SET @plan = @coveredPlan;
+            END
+        END
+    END
+
+    DECLARE @benefitStatus varchar(1);
+    SELECT TOP (1) @benefitStatus = SuppALBStatus FROM dbo.BnfAnnLmt
+    WHERE INSCode = @ins AND PLNCode = @plan AND HLTCode = @hlt AND ALBEffDate <= ISNULL(@eff, '19000101')
+    ORDER BY ALBEffDate DESC;
+    DECLARE @benefitHolder nvarchar(6) = CASE WHEN RTRIM(ISNULL(@benefitStatus, '')) = 'B' THEN N'01' ELSE @cov END;
+
+    UPDATE dbo.MBMBnfLmt
+    SET MBMCancerBalLmt = ISNULL(MBMCancerBalLmt, 0) + @sign * @cancer,
+        MBMKidneyBalLmt = ISNULL(MBMKidneyBalLmt, 0) + @sign * @kidney,
+        MBMHomeNCBalLmt = ISNULL(MBMHomeNCBalLmt, 0) + @sign * @home
+    WHERE MBMNumber = @mbm AND MBMCoveredID = @benefitHolder;
+END
+GO
+
+-- TransferProcess. The API has already checked the target member / cover and status; the existence checks here only
+-- protect the data. Result: 0 transferred, 1 case not found, 2 target member / cover not found, 3 the case is already on
+-- that member / cover, 4 the previous member is not on the member table (nothing to give the limit back to).
+-- Returns the approved total that moved.
+CREATE OR ALTER PROCEDURE genisis.CaseTransfer_Apply
+    @cas nvarchar(15), @newMbm nvarchar(30), @newCov nvarchar(10), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @oldMbm nvarchar(30), @oldCov nvarchar(10);
+    SELECT @oldMbm = RTRIM(MBMNumber), @oldCov = RTRIM(MBMPatientCovID) FROM dbo.CAS WITH (UPDLOCK, ROWLOCK) WHERE CASNumber = @cas;
+    IF @oldMbm IS NULL BEGIN SELECT 1 AS Result, CAST(0 AS money) AS Moved; RETURN; END
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBM WHERE MBMNumber = @newMbm)
+       OR (@newCov <> N'00' AND NOT EXISTS (SELECT 1 FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @newMbm AND MBMCCoverID = @newCov))
+    BEGIN SELECT 2 AS Result, CAST(0 AS money) AS Moved; RETURN; END
+    IF @oldMbm = @newMbm AND @oldCov = @newCov BEGIN SELECT 3 AS Result, CAST(0 AS money) AS Moved; RETURN; END
+    IF NOT EXISTS (SELECT 1 FROM dbo.MBM WHERE MBMNumber = @oldMbm) BEGIN SELECT 4 AS Result, CAST(0 AS money) AS Moved; RETURN; END
+
+    -- What the case has been approved for, summed over every claim version (CLMTotalApproved) and the
+    -- cancer / kidney / home nursing benefit amounts (stored as text on ClaimApprove).
+    DECLARE @total money = ISNULL((SELECT SUM(CLMTotalApproved) FROM genisis.WS_Claim WHERE CASNumber = @cas), 0);
+    DECLARE @cancer money, @kidney money, @home money;
+    SELECT @cancer = ISNULL(SUM(genisis.Util_SafeDecimal(CLMIndCancerTreatment)), 0),
+        @kidney = ISNULL(SUM(genisis.Util_SafeDecimal(CLMIndKidneyDial)), 0),
+        @home = ISNULL(SUM(genisis.Util_SafeDecimal(CLMHomeNCAmt)), 0)
+    FROM genisis.WS_ClaimApprove WHERE CASNumber = @cas;
+
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+    DECLARE @note nvarchar(500) = N'~TransMBM by : ' + @userCode + N' Date : ' + CONVERT(nvarchar(8), GETDATE(), 112) + N','
+        + @oldMbm + N'-' + @oldCov + N'->' + @newMbm + N'-' + @newCov;
+
+    UPDATE genisis.Maint_CASCrossReference
+    SET TransRemarks = RIGHT(ISNULL(TransRemarks, N'') + @note, 2000), MBMNumber = @newMbm, MBMPatientCovID = @newCov
+    WHERE CASNumber = @cas;
+    UPDATE dbo.CAS
+    SET MBMNumber = @newMbm, MBMPatientCovID = @newCov, CASLastUpdateUser = @userCode, CASLastUpdateDate = @today
+    WHERE CASNumber = @cas;
+
+    EXEC genisis.CaseTransfer_MoveLimit @oldMbm, @oldCov, 1, @total, @cancer, @kidney, @home, 1;
+    EXEC genisis.CaseTransfer_MoveLimit @newMbm, @newCov, -1, @total, @cancer, @kidney, @home, 0;
+
+    SELECT 0 AS Result, @total AS Moved;
+END
+GO
+
+-- ===== main/210_case_listing.sql =====
+-- Case > Inpatient Case Listing (legacy mnuAppCase -> FrmWksBordx, "Select Worksheets for Bordx"): search the worksheets
+-- that are waiting for a bordx (HISWorkSheet views, through the genisis.WS_* synonyms) and generate the bordx.
+-- Replaces the raw SQL text FrmWksBordx built for WorksheetTrackingListing / WorksheetTrackingListing2 / UpdateRecord /
+-- SaveCLMBordx and the Medix.bas GenerateCLMBordxNo sequence read-then-update (which could hand out a number twice).
+
+-- SearchRecord + WorksheetTrackingListing(2). @scan = 1: one worksheet (case number, optionally a claim version);
+-- 0: a case number range. @ib = 1 reads the IB payor view. Dates are inclusive; @doaEmpty / @dodEmpty keep only
+-- worksheets with no admission / discharge date; @mhBordx = 1 keeps CLMMHBordx = 'Y' (Bordx Status "Yes").
+CREATE OR ALTER PROCEDURE genisis.CaseListing_Search
+    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @version int = NULL, @ib bit = 0,
+    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0,
+    @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0, @mhBordx bit = 0, @max int = 5000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @ib = 1
+        SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CLMTotalApproved AS AppAmt,
+            CASDateAdmitted AS Doa, CASDischargeDate AS Dod, RTRIM(INVPayTo) AS CashType, RTRIM(MBMPatientCovID) AS CoverId,
+            RTRIM(MBMCName) AS CoveredName, RTRIM(HOSName) AS Hospital, CLMPayableByMedix2H AS HosAmt, RTRIM(MBMName) AS MemberName,
+            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(PLNCode) AS PlanCode, RTRIM(ICDCode1) AS IcdCode, RTRIM(MBMBTBG) AS Btbg,
+            RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability, RTRIM(HLTCode) AS HltType
+        FROM genisis.WS_PendingBordxIB
+        WHERE ClaimStatus <> N'R'
+          AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+          AND (@scan = 0 OR @version IS NULL OR ClaimVersion = @version)
+          AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+          AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+          AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
+          AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
+          AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL) AND (@dodEmpty = 0 OR CASDischargeDate IS NULL)
+          AND (@mhBordx = 0 OR CLMMHBordx = 'Y')
+        ORDER BY CASNumber, ClaimVersion;
+    ELSE
+        SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CLMTotalApproved AS AppAmt,
+            CASDateAdmitted AS Doa, CASDischargeDate AS Dod, RTRIM(INVPayTo) AS CashType, RTRIM(MBMPatientCovID) AS CoverId,
+            RTRIM(MBMCName) AS CoveredName, RTRIM(HOSName) AS Hospital, CLMPayableByMedix2H AS HosAmt, RTRIM(MBMName) AS MemberName,
+            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(PLNCode) AS PlanCode, RTRIM(ICDCode1) AS IcdCode, RTRIM(MBMBTBG) AS Btbg,
+            RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability, RTRIM(HLTCode) AS HltType
+        FROM genisis.WS_PendingBordx
+        WHERE ClaimStatus <> N'R'
+          AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+          AND (@scan = 0 OR @version IS NULL OR ClaimVersion = @version)
+          AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+          AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+          AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
+          AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
+          AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL) AND (@dodEmpty = 0 OR CASDischargeDate IS NULL)
+          AND (@mhBordx = 0 OR CLMMHBordx = 'Y')
+        ORDER BY CASNumber, ClaimVersion;
+END
+GO
+
+-- One pending worksheet as the bordx needs it: the values the selection rules check, who is paid (INVPayTo, BTBG) and the
+-- three amounts a bordx can sum (CmdBordx_Click picks one by BTBG / INVPayTo). No row when it is not (or no longer) pending.
+CREATE OR ALTER PROCEDURE genisis.CaseListing_Item
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) p.CaseNo, p.ClaimVersion, p.Payor, p.Dod, p.Hospital, p.GroupCompany, p.InsuredType, p.Claimability, p.HltType,
+        p.CashType, p.Btbg, c.CLMPayableByMedix2H AS Payable2H, c.CLMPayableByMedix2M AS Payable2M,
+        c.CLMTotalApproved AS TotalApproved, ISNULL(c.CLMCaseMgmtFees, 0) AS CaseMgmtFees
+    FROM (
+        SELECT RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CASDischargeDate AS Dod, RTRIM(HOSName) AS Hospital,
+            RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability,
+            RTRIM(HLTCode) AS HltType, RTRIM(INVPayTo) AS CashType, RTRIM(MBMBTBG) AS Btbg
+        FROM genisis.WS_PendingBordx WHERE CASNumber = @cas AND ClaimVersion = @version AND ClaimStatus <> N'R'
+        UNION ALL
+        SELECT RTRIM(CASNumber), ClaimVersion, RTRIM(PAYCode), CASDischargeDate, RTRIM(HOSName), RTRIM(MBMGroupCompany),
+            RTRIM(INSCode), RTRIM(CASClaimability), RTRIM(HLTCode), RTRIM(INVPayTo), RTRIM(MBMBTBG)
+        FROM genisis.WS_PendingBordxIB WHERE CASNumber = @cas AND ClaimVersion = @version AND ClaimStatus <> N'R'
+    ) p
+    INNER JOIN genisis.WS_Claim c ON c.CASNumber = p.CaseNo AND c.ClaimVersion = p.ClaimVersion;
+END
+GO
+
+-- GenerateCLMBordxNo: <payor health type><payor code><7-digit sequence per payor code>. The number is taken atomically.
+CREATE OR ALTER PROCEDURE genisis.CaseListing_NextBordxNo
+    @pay nvarchar(8)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @hlt nvarchar(4) = (SELECT RTRIM(HLTCode) FROM dbo.PAY WHERE PAYCode = @pay);
+    DECLARE @seq nvarchar(20);
+    UPDATE genisis.WS_BordxSEQ WITH (UPDLOCK, ROWLOCK)
+    SET @seq = CLMBordxNo = RIGHT(N'0000000' + CAST(CAST(CLMBordxNo AS int) + 1 AS nvarchar(10)), 7)
+    WHERE PAYCode = @pay;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SET @seq = N'0000001';
+        INSERT genisis.WS_BordxSEQ (PAYCode, CLMBordxNo, HLTCode) VALUES (@pay, @seq, @hlt);
+    END
+    SELECT ISNULL(@hlt, N'') + @pay + @seq AS BordxNo;
+END
+GO
+
+-- UpdateRecord: mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
+-- case remarks. The remark goes into the first remarks page that has room, following the desktop's page order
+-- (CASRemarks.CASORemarks, CASORemarksTwo, CASRemarksTwo.CASORemarks, CASORemarksTwo, CASRemarkThree.CASRemarks, CASRemarksFive);
+-- the lengths decide the page exactly as UpdateRecord did.
+CREATE OR ALTER PROCEDURE genisis.CaseListing_Apply
+    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
+
+    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N'
+    WHERE CASNumber = @cas AND ClaimVersion = @version;
+    UPDATE genisis.WS_ClaimInvoice SET INVBordxRefNo = @bordxNo, INVBordxed = 1
+    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
+    UPDATE dbo.CAS SET CASPending = 'N' WHERE CASNumber = @cas;
+    UPDATE genisis.Maint_CASCrossReference SET CASPending = 'N' WHERE CASNumber = @cas;
+
+    DECLARE @add nvarchar(max) = N'~' + NCHAR(10) + CONVERT(nvarchar(10), GETDATE(), 103) + N'         BORDX DONE BY ' + @userCode
+        + N' -  ' + @bordxNo + REPLICATE(N' ', 44) + @userCode + N' ';
+
+    DECLARE @l1 int = 0, @l2 int = 0, @l3 int = 0, @l4 int = 0, @l5 int = 0;
+    SELECT @l1 = LEN(ISNULL(CASORemarks, N'') + N'x') - 1, @l2 = LEN(ISNULL(CASORemarksTwo, N'') + N'x') - 1 FROM dbo.CASRemarks WHERE CASNumber = @cas;
+    SELECT @l3 = LEN(ISNULL(CASORemarks, N'') + N'x') - 1, @l4 = LEN(ISNULL(CASORemarksTwo, N'') + N'x') - 1 FROM dbo.CASRemarksTwo WHERE CASNumber = @cas;
+    SELECT @l5 = LEN(ISNULL(CASRemarks, N'') + N'x') - 1 FROM dbo.CASRemarkThree WHERE CASNumber = @cas;
+
+    IF @l5 >= 1800 AND @l5 <= 3500
+        UPDATE dbo.CASRemarkThree SET CASRemarksFive = ISNULL(CASRemarksFive, N'') + @add WHERE CASNumber = @cas;
+    ELSE IF (@l5 <> 0 AND @l5 <= 1800) OR @l4 >= 1800
+        UPDATE dbo.CASRemarkThree SET CASRemarks = ISNULL(CASRemarks, N'') + @add WHERE CASNumber = @cas;
+    ELSE IF (@l4 <> 0 AND @l4 <= 1800) OR @l3 >= 1800
+        UPDATE dbo.CASRemarksTwo SET CASORemarksTwo = ISNULL(CASORemarksTwo, N'') + @add WHERE CASNumber = @cas;
+    ELSE IF (@l3 <> 0 AND @l3 <= 1800) OR @l2 >= 1800
+        UPDATE dbo.CASRemarksTwo SET CASORemarks = ISNULL(CASORemarks, N'') + @add WHERE CASNumber = @cas;
+    ELSE IF (@l2 <> 0 AND @l2 <= 1800) OR @l1 >= 1800
+        UPDATE dbo.CASRemarks SET CASORemarksTwo = ISNULL(CASORemarksTwo, N'') + @add WHERE CASNumber = @cas;
+    ELSE IF @l1 <> 0 AND @l1 < 1800
+        UPDATE dbo.CASRemarks SET CASORemarks = ISNULL(CASORemarks, N'') + @add WHERE CASNumber = @cas;
+END
+GO
+
+-- SaveCLMBordx: the Bordx row. Status C when the claims are paid to the hospital (INVPayTo H), R otherwise.
+CREATE OR ALTER PROCEDURE genisis.CaseListing_SaveBordx
+    @bordxNo nvarchar(40), @amount money, @claims int, @status char(1), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT genisis.WS_Bordx (BordxRefNo, BordxPAYCode, BordxDate, BordxBy, BordxClaimAmt, BordxNoClaims, BordxStatus)
+    VALUES (@bordxNo, SUBSTRING(@bordxNo, 2, 2), CAST(CAST(GETDATE() AS date) AS datetime), @userCode, @amount, @claims, @status);
+END
+GO
+
+-- ===== main/220_case_ascii.sql =====
+-- Case > Claim ASCII (legacy frmNewClaimAscii) and Case > Case ASCII (legacy frmCaseASCII): the rows of the fixed-width
+-- payor files, the daily batch number and the "exported" flags. Replaces the raw @strAppend dbo.Case_ClaimAscii modes
+-- (1, 2, 4, 5), Medix.bas GetCLMAsciiBatch / GetCASAsciiBatch (read-then-update) and dbo.Case_CLMAscUpdate.
+
+-- Medix.bas GetCLMAsciiBatch / GetCASAsciiBatch: the next 5-digit batch number of a payor for a day, taken atomically.
+-- @kind = CLM (HISWorkSheet.CLMAsciiSEQ) or CAS (dbo.CASAsciiSEQ).
+CREATE OR ALTER PROCEDURE genisis.Ascii_NextBatch
+    @kind char(3), @pay nvarchar(8), @date datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @day datetime = CAST(CAST(@date AS date) AS datetime), @n nvarchar(10);
+    IF @kind = 'CLM'
+    BEGIN
+        UPDATE genisis.WS_CLMAsciiSEQ WITH (UPDLOCK, ROWLOCK)
+        SET @n = SEQBatchNo = RIGHT(N'00000' + CAST(CAST(SEQBatchNo AS int) + 1 AS nvarchar(10)), 5)
+        WHERE SEQPayCode = @pay AND SEQBatchDate = @day;
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SET @n = N'00001';
+            INSERT genisis.WS_CLMAsciiSEQ (SEQPayCode, SEQBatchDate, SEQBatchNo) VALUES (@pay, @day, @n);
+        END
+    END
+    ELSE
+    BEGIN
+        UPDATE dbo.CASAsciiSEQ WITH (UPDLOCK, ROWLOCK)
+        SET @n = SEQBatchNo = RIGHT(N'00000' + CAST(CAST(SEQBatchNo AS int) + 1 AS nvarchar(10)), 5)
+        WHERE SEQPayCode = @pay AND SEQBatchDate = @day;
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SET @n = N'00001';
+            INSERT dbo.CASAsciiSEQ (SEQPayCode, SEQBatchDate, SEQBatchNo) VALUES (@pay, @day, @n);
+        END
+    END
+    SELECT @n AS BatchNo;
+END
+GO
+
+-- PrincipalASCII (accepted cases, Case_ClaimAscii mode 1): worksheets with a bordx dated in the range for the payor.
+-- The "to" dates are inclusive of the whole day: the desktop compared with <= 'to date' (midnight), which dropped the
+-- cases registered later on the last day because CaseRegDate carries the time.
+-- @reprint = 0 keeps the claims not exported yet (CLMBordxWSASCII N), 1 the ones already exported (Y).
+-- @wsStatus: 0 = new and amended claims (CLMBordxWSStatus A or N), 1 = deleted claims (D).
+CREATE OR ALTER PROCEDURE genisis.AsciiClaim_Accepted
+    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime, @reprint bit, @wsStatus char(1)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM genisis.WS_CLMReport
+    WHERE BordxRefNo IS NOT NULL AND BordxDate >= @dateFrom AND BordxDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
+      AND CLMBordxWSASCII = CASE WHEN @reprint = 1 THEN N'Y' ELSE N'N' END
+      AND ((@wsStatus = '0' AND CLMBordxWSStatus IN (N'A', N'N')) OR (@wsStatus = '1' AND CLMBordxWSStatus = N'D'))
+    ORDER BY BordxRefNo, CASNumber, ClaimVersion;
+END
+GO
+
+-- PrincipalASCIIRejectCase (Case_ClaimAscii mode 4): repudiated cases (second claimability letter R) registered in the range.
+CREATE OR ALTER PROCEDURE genisis.AsciiClaim_Rejected
+    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM genisis.WS_CLMReport
+    WHERE SUBSTRING(CASClaimability, 2, 1) = N'R' AND CaseRegDate >= @dateFrom AND CaseRegDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
+    ORDER BY CASNumber, ClaimVersion;
+END
+GO
+
+-- UpdateWSAscii: the worksheet has been exported. The desktop flagged every version of the case (Case_CLMAscUpdate is
+-- by case number); only the exported version is flagged here.
+CREATE OR ALTER PROCEDURE genisis.AsciiClaim_MarkExported
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_Claim SET CLMBordxWSASCII = N'Y' WHERE CASNumber = @cas AND ClaimVersion = @version;
+END
+GO
+
+-- Case ASCII (Case_ClaimAscii mode 5): the cases of the payor registered in the range. @reprint = 1 keeps the cases already
+-- exported (CASASCIIGenStatus Y). @endorsement: 0 = every case (the desktop never filtered), 1 = deleted (D), 2 = amended (A) by CASASCIIAmendStatus.
+CREATE OR ALTER PROCEDURE genisis.AsciiCase_Rows
+    @pay nvarchar(8), @dateFrom datetime, @dateTo datetime, @reprint bit, @endorsement char(1)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM genisis.WS_CLMReportCas
+    WHERE CaseRegDate >= @dateFrom AND CaseRegDate < DATEADD(day, 1, @dateTo) AND PAYCode = @pay
+      AND (@reprint = 0 OR CASASCIIGenStatus = N'Y')
+      AND (@endorsement = '0' OR (@endorsement = '1' AND CASASCIIAmendStatus = N'D') OR (@endorsement = '2' AND CASASCIIAmendStatus = N'A'))
+    ORDER BY CASNumber;
+END
+GO
+
+-- The case has been exported (the desktop's UpdateCASAscii called a procedure that does not exist, so reprint never worked).
+CREATE OR ALTER PROCEDURE genisis.AsciiCase_MarkExported
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.CASOthersTwo SET CASASCIIGenStatus = N'Y' WHERE CASNumber = @cas;
+END
+GO
+
+-- ===== main/230_worksheet_tracking.sql =====
+-- Worksheet > Worksheet Tracking (legacy FrmWorksheetTracking). The desktop built a WHERE clause as text (strAppend) and
+-- sent it to dbo.WorksheetTracking in HISWorkSheet, which ran it as dynamic SQL; here every criterion is a typed parameter.
+-- Reads the worksheet tracking view through genisis.WS_WKSTracking (HISWorkSheet.dbo.VIEW_WKSTrackingNew).
+
+-- SearchRecord + WorksheetTrackingListing(2). @scan = 1: one case number; 0: a case number range. Every "from"/"to" pair is
+-- inclusive and ignored when NULL; an "empty" flag keeps only rows where the column is NULL or blank (a date column is
+-- blank at 1900-01-01, as the desktop's  = ''  test saw it). The desktop's Ins Type filter read controls that do not exist
+-- on the form, so it never filtered; here @insFrom / @insTo really filter.
+CREATE OR ALTER PROCEDURE genisis.WorksheetTracking_Search
+    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @versionFrom int = NULL, @versionTo int = NULL,
+    @payor nvarchar(4) = NULL, @icFrom nvarchar(60) = NULL, @icTo nvarchar(60) = NULL, @icEmpty bit = 0,
+    @groupCompany nvarchar(300) = NULL, @claimability char(1) = NULL, @pending char(1) = NULL, @pendingEmpty bit = 0,
+    @planFrom nvarchar(8) = NULL, @planTo nvarchar(8) = NULL,
+    @approvedFrom money = NULL, @approvedTo money = NULL, @payMFrom money = NULL, @payMTo money = NULL,
+    @payHFrom money = NULL, @payHTo money = NULL,
+    @policyFrom nvarchar(50) = NULL, @policyTo nvarchar(50) = NULL, @memberFrom nvarchar(30) = NULL, @memberTo nvarchar(30) = NULL,
+    @insFrom nvarchar(4) = NULL, @insTo nvarchar(4) = NULL,
+    @bordxFrom nvarchar(40) = NULL, @bordxTo nvarchar(40) = NULL, @bordxEmpty bit = 0,
+    @dpoFrom datetime = NULL, @dpoTo datetime = NULL, @dpoEmpty bit = 0,
+    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0,
+    @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0,
+    @firstFrom nvarchar(20) = NULL, @firstTo nvarchar(20) = NULL, @firstEmpty bit = 0,
+    @finalFrom nvarchar(20) = NULL, @finalTo nvarchar(20) = NULL, @finalEmpty bit = 0,
+    @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(PAYCode) AS Payor, RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(ClaimStatus) AS WksStatus,
+        RTRIM(CLMPending) AS Pending, CLMTotalApproved AS ApprovedAmt, CLMPayableByMedix2H AS PayableToHospital,
+        CLMPayableByMedix2M AS PayableToMember, CaseRegDate AS Dor, CASDateAdmitted AS Doa, CASDischargeDate AS Dod,
+        ClaimCloseDate AS DClose, CASTokenDate AS Dpo, CLMTokenDate AS DtaC, RTRIM(PatientName) AS Patient, RTRIM(HOSName) AS Hospital,
+        NoofDay AS DaysOpen, RTRIM(BordxRefNo) AS BordxNo, BordxClaimAmt AS BordxAmt, BordxDate, RTRIM(DebitCreditRefNo) AS DebitCreditRefNo,
+        RTRIM(FirstDiag) AS FirstDiag, RTRIM(FinalDiag) AS FinalDiag, RTRIM(CASAdmissionReason) AS AdmissionReason,
+        CAST(ISNULL(ClaimBordxStatus, 0) AS bit) AS Bordxed
+    FROM genisis.WS_WKSTracking
+    WHERE (@payor IS NULL OR PAYCode = @payor)
+      AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+      AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+      AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+      AND (@versionFrom IS NULL OR ClaimVersion >= @versionFrom) AND (@versionTo IS NULL OR ClaimVersion <= @versionTo)
+      AND (@icFrom IS NULL OR ICno >= @icFrom) AND (@icTo IS NULL OR ICno <= @icTo)
+      AND (@icEmpty = 0 OR ICno IS NULL)
+      AND (@groupCompany IS NULL OR MBMGroupCompany = @groupCompany)
+      AND (@claimability IS NULL OR CASClaimability = @claimability)
+      AND (@pending IS NULL OR CLMPending = @pending)
+      AND (@pendingEmpty = 0 OR CLMPending IS NULL OR CLMPending = '')
+      AND (@planFrom IS NULL OR PLNCode >= @planFrom) AND (@planTo IS NULL OR PLNCode <= @planTo)
+      AND (@approvedFrom IS NULL OR CLMTotalApproved >= @approvedFrom) AND (@approvedTo IS NULL OR CLMTotalApproved <= @approvedTo)
+      AND (@payMFrom IS NULL OR CLMPayableByMedix2M >= @payMFrom) AND (@payMTo IS NULL OR CLMPayableByMedix2M <= @payMTo)
+      AND (@payHFrom IS NULL OR CLMPayableByMedix2H >= @payHFrom) AND (@payHTo IS NULL OR CLMPayableByMedix2H <= @payHTo)
+      AND (@policyFrom IS NULL OR MBMPolicyNo >= @policyFrom) AND (@policyTo IS NULL OR MBMPolicyNo <= @policyTo)
+      AND (@memberFrom IS NULL OR MBMNumber >= @memberFrom) AND (@memberTo IS NULL OR MBMNumber <= @memberTo)
+      AND (@insFrom IS NULL OR INSCode >= @insFrom) AND (@insTo IS NULL OR INSCode <= @insTo)
+      AND (@bordxFrom IS NULL OR BordxRefNo >= @bordxFrom) AND (@bordxTo IS NULL OR BordxRefNo <= @bordxTo)
+      AND (@bordxEmpty = 0 OR BordxRefNo IS NULL OR BordxRefNo = '')
+      AND (@dpoFrom IS NULL OR CASTokenDate >= @dpoFrom) AND (@dpoTo IS NULL OR CASTokenDate <= @dpoTo)
+      AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
+      AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
+      AND (@dpoEmpty = 0 OR CASTokenDate IS NULL OR CASTokenDate = '19000101')
+      AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL OR CASDateAdmitted = '19000101')
+      AND (@dodEmpty = 0 OR CASDischargeDate IS NULL OR CASDischargeDate = '19000101')
+      AND (@firstFrom IS NULL OR FirstDiag >= @firstFrom) AND (@firstTo IS NULL OR FirstDiag <= @firstTo)
+      AND (@firstEmpty = 0 OR FirstDiag IS NULL OR FirstDiag = '')
+      AND (@finalFrom IS NULL OR FinalDiag >= @finalFrom) AND (@finalTo IS NULL OR FinalDiag <= @finalTo)
+      AND (@finalEmpty = 0 OR FinalDiag IS NULL OR FinalDiag = '')
+    ORDER BY CASNumber, ClaimVersion;
+END
+GO
+
+-- ChkGrpCom_Click: the group companies that have worksheets for a payor (the desktop listed one entry per worksheet).
+CREATE OR ALTER PROCEDURE genisis.WorksheetTracking_GroupCompanies
+    @payor nvarchar(4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT RTRIM(MBMGroupCompany) AS GroupCompany
+    FROM genisis.WS_WKSTracking
+    WHERE PAYCode = @payor AND MBMGroupCompany IS NOT NULL AND RTRIM(MBMGroupCompany) <> N''
+    ORDER BY RTRIM(MBMGroupCompany);
+END
+GO
+
+-- UpdateCLM: sets the pending status of one worksheet and clears the pending flag of its case, in the four places the
+-- desktop wrote. The desktop only stopped a bordxed worksheet from being ticked; here the procedure refuses it too.
+-- Result: 0 done, 1 worksheet not found, 2 refused (already bordxed).
+CREATE OR ALTER PROCEDURE genisis.WorksheetTracking_Update
+    @cas nvarchar(30), @version int, @date datetime, @status char(1), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @bordxed bit;
+    SELECT @bordxed = ClaimBordxStatus FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+    IF ISNULL(@bordxed, 0) = 1
+    BEGIN
+        SELECT 2 AS Result;
+        RETURN;
+    END
+
+    UPDATE genisis.WS_Claim SET CLMPendingDate = @date, CLMPending = @status, CLMPendingUser = @userCode
+    WHERE CASNumber = @cas AND ClaimVersion = @version;
+    UPDATE genisis.WS_ClaimInvoice SET CLMInvPending = @status
+    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
+    UPDATE dbo.CAS SET CASPending = 'N' WHERE CASNumber = @cas;
+    UPDATE genisis.Maint_CASCrossReference SET CASPending = 'N' WHERE CASNumber = @cas;
+    SELECT 0 AS Result;
+END
+GO
+
+-- ComboListing (SearchINS): the insured types of the Ins Type drop-downs.
+CREATE OR ALTER PROCEDURE genisis.Worksheet_InsuredTypes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(INSCode) AS Code, RTRIM(INSDescription) AS Name FROM dbo.INS ORDER BY INSCode;
+END
+GO
+
+-- ===== main/240_worksheet_send_to_accounts.sql =====
+-- Worksheet > Worksheet Send to A/C (legacy FrmWksSendToAC, "Claims Send To A/C"). The desktop built the WHERE clause as text
+-- and ran it on dbo.VIEW_WKS2AC; here every criterion is a typed parameter. Reads genisis.WS_WKS2AC (HISWorkSheet.dbo.VIEW_WKS2AC).
+
+-- SearchRecord + WksDeliveryListing(2). @scan = 1: one case number; 0: a range. @tokenStatus: '0' both (the desktop's
+-- "Both" keeps status 0 and 1 only), '1' passed, '2' not yet passed, NULL no filter. Dates and amounts are inclusive.
+-- The view repeats a worksheet once per hospital / member payment; the desktop listed (and added up) every repeat and
+-- sent a ticked worksheet twice. Here a worksheet is one row, showing its latest cheque dates.
+CREATE OR ALTER PROCEDURE genisis.WorksheetAccounts_Search
+    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @payor nvarchar(4) = NULL,
+    @openFrom datetime = NULL, @openTo datetime = NULL, @amountFrom money = NULL, @amountTo money = NULL,
+    @sentFrom datetime = NULL, @sentTo datetime = NULL, @tokenStatus char(1) = NULL,
+    @bordxFrom nvarchar(40) = NULL, @bordxTo nvarchar(40) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(PAYCode) AS Payor, RTRIM(CASNumber) AS CaseNo, ClaimVersion, ClaimOpenDate AS WksDate,
+        CLMTotalApproved AS WksAmount, CLMTokenDate AS DateToAc, RTRIM(CLMUserToken) AS PassedBy,
+        CAST(ISNULL(CLMTokenStatus, 0) AS bit) AS Sent, MAX(PVHOSChequeDate) AS HosChequeDate, MAX(PVChequeDate) AS MbmChequeDate,
+        RTRIM(BordxRefNo) AS BordxNo
+    FROM genisis.WS_WKS2AC
+    WHERE (@payor IS NULL OR PAYCode = @payor)
+      AND (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+      AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+      AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+      AND (@openFrom IS NULL OR ClaimOpenDate >= @openFrom) AND (@openTo IS NULL OR ClaimOpenDate <= @openTo)
+      AND (@amountFrom IS NULL OR CLMTotalApproved >= @amountFrom) AND (@amountTo IS NULL OR CLMTotalApproved <= @amountTo)
+      AND (@sentFrom IS NULL OR CLMTokenDate >= @sentFrom) AND (@sentTo IS NULL OR CLMTokenDate <= @sentTo)
+      AND (@tokenStatus IS NULL
+           OR (@tokenStatus = '0' AND CLMTokenStatus IN (0, 1))
+           OR (@tokenStatus = '1' AND CLMTokenStatus = 1)
+           OR (@tokenStatus = '2' AND CLMTokenStatus = 0))
+      AND (@bordxFrom IS NULL OR BordxRefNo >= @bordxFrom) AND (@bordxTo IS NULL OR BordxRefNo <= @bordxTo)
+    GROUP BY PAYCode, CASNumber, ClaimVersion, ClaimOpenDate, CLMTotalApproved, CLMTokenDate, CLMUserToken, CLMTokenStatus, BordxRefNo
+    ORDER BY CASNumber, ClaimVersion;
+END
+GO
+
+-- UpdateSentAC: marks one worksheet as sent to accounts on @date and appends the "SENT TO ACCOUNT" line to the case remarks.
+-- Like the desktop (ChkStr), the remark line and the whole remarks page it is added to are trimmed and upper-cased, and the page
+-- is chosen from the lengths of the six remark pages exactly as that form did (it never measured the last page, so the
+-- first rule only looks at page 5). The desktop only stopped a worksheet already sent from being ticked; here the procedure
+-- refuses it too. Result: 0 done, 1 worksheet not found, 2 refused (already sent).
+CREATE OR ALTER PROCEDURE genisis.WorksheetAccounts_Send
+    @cas nvarchar(30), @version int, @date datetime, @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @sent bit;
+    SELECT @sent = CLMTokenStatus FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+    IF ISNULL(@sent, 0) = 1
+    BEGIN
+        SELECT 2 AS Result;
+        RETURN;
+    END
+
+    UPDATE genisis.WS_Claim SET CLMTokenDate = @date, CLMTokenStatus = 1, CLMUserToken = @userCode
+    WHERE CASNumber = @cas AND ClaimVersion = @version;
+
+    DECLARE @add nvarchar(max) = UPPER(LTRIM(RTRIM(N'~' + NCHAR(10) + CONVERT(nvarchar(10), GETDATE(), 103) + N'         FILE  -  '
+        + RTRIM(@cas) + N'-' + CAST(@version AS nvarchar(10)) + N' SENT TO ACCOUNT ON ' + CONVERT(nvarchar(10), @date, 103)
+        + REPLICATE(N' ', 24) + @userCode + N' ')));
+
+    DECLARE @p1 nvarchar(max), @p2 nvarchar(max), @p3 nvarchar(max), @p4 nvarchar(max), @p5 nvarchar(max), @p6 nvarchar(max);
+    SELECT @p1 = CASORemarks, @p2 = CASORemarksTwo FROM dbo.CASRemarks WHERE CASNumber = @cas;
+    SELECT @p3 = CASORemarks, @p4 = CASORemarksTwo FROM dbo.CASRemarksTwo WHERE CASNumber = @cas;
+    SELECT @p5 = CASRemarks, @p6 = CASRemarksFour FROM dbo.CASRemarkThree WHERE CASNumber = @cas;
+
+    -- Len() of a page that holds more than spaces; 0 for a missing or blank page.
+    DECLARE @l1 int = CASE WHEN LTRIM(RTRIM(ISNULL(@p1, N''))) <> N'' THEN LEN(@p1 + N'x') - 1 ELSE 0 END;
+    DECLARE @l2 int = CASE WHEN LTRIM(RTRIM(ISNULL(@p2, N''))) <> N'' THEN LEN(@p2 + N'x') - 1 ELSE 0 END;
+    DECLARE @l3 int = CASE WHEN LTRIM(RTRIM(ISNULL(@p3, N''))) <> N'' THEN LEN(@p3 + N'x') - 1 ELSE 0 END;
+    DECLARE @l4 int = CASE WHEN LTRIM(RTRIM(ISNULL(@p4, N''))) <> N'' THEN LEN(@p4 + N'x') - 1 ELSE 0 END;
+    DECLARE @l5 int = CASE WHEN LTRIM(RTRIM(ISNULL(@p5, N''))) <> N'' THEN LEN(@p5 + N'x') - 1 ELSE 0 END;
+
+    IF @l5 > 1800
+        UPDATE dbo.CASRemarkThree SET CASRemarksFour = UPPER(LTRIM(RTRIM(ISNULL(@p6, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF (@l5 <> 0 AND @l5 < 1800) OR @l4 > 1800
+        UPDATE dbo.CASRemarkThree SET CASRemarks = UPPER(LTRIM(RTRIM(ISNULL(@p5, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF (@l4 <> 0 AND @l4 < 1800) OR @l3 > 1800
+        UPDATE dbo.CASRemarksTwo SET CASORemarksTwo = UPPER(LTRIM(RTRIM(ISNULL(@p4, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF (@l3 <> 0 AND @l3 < 1800) OR @l2 > 1800
+        UPDATE dbo.CASRemarksTwo SET CASORemarks = UPPER(LTRIM(RTRIM(ISNULL(@p3, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF (@l2 <> 0 AND @l2 < 1800) OR @l1 > 1800
+        UPDATE dbo.CASRemarks SET CASORemarksTwo = UPPER(LTRIM(RTRIM(ISNULL(@p2, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF @l1 <> 0 AND @l1 < 1800
+        UPDATE dbo.CASRemarks SET CASORemarks = UPPER(LTRIM(RTRIM(ISNULL(@p1, N'') + @add))) WHERE CASNumber = @cas;
+    ELSE IF @l1 = 0
+        UPDATE dbo.CASRemarks SET CASORemarks = UPPER(LTRIM(RTRIM(ISNULL(@p1, N'') + @add))) WHERE CASNumber = @cas;
+
+    SELECT 0 AS Result;
+END
+GO
+
+-- ===== main/250_worksheet_send_to_ar.sql =====
+-- Worksheet > Worksheet Send to A/R (legacy FrmARRecFrCLM, "Date Send to Audit Review"). The desktop form also read CASOthers.CASDTC
+-- and copied the invoice number, date and amount into CASOthers.CASINVNo / InvDate / CASInvAmt; those four columns do not exist
+-- in the database, so only the three that do (CASDRC, CASRecBy, CASRecStatus) are read and written here.
+
+-- SearchRecord + WksDeliveryListing(2). @scan = 1: one case number; 0: a range. @status: '0' both (status 0, 1 or not set),
+-- '1' passed, '2' not yet passed, NULL no filter. The sent dates are inclusive.
+CREATE OR ALTER PROCEDURE genisis.WorksheetAr_Search
+    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL,
+    @sentFrom datetime = NULL, @sentTo datetime = NULL, @status char(1) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, CASDRC AS DateSent, RTRIM(CASRecBy) AS PassedBy, RTRIM(CASRecStatus) AS Status
+    FROM dbo.CASOthers
+    WHERE (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+      AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+      AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+      AND (@sentFrom IS NULL OR CASDRC >= @sentFrom) AND (@sentTo IS NULL OR CASDRC <= @sentTo)
+      AND (@status IS NULL
+           OR (@status = '0' AND (CASRecStatus IN ('0', '1') OR CASRecStatus IS NULL))
+           OR (@status = '1' AND CASRecStatus = '1')
+           OR (@status = '2' AND CASRecStatus = '0'))
+    ORDER BY CASNumber;
+END
+GO
+
+-- UpdateSentCLM: marks one case as sent to audit review today and by whom. Result: 0 done, 1 case not found.
+CREATE OR ALTER PROCEDURE genisis.WorksheetAr_Send
+    @cas nvarchar(30), @userCode nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.CASOthers SET CASDRC = CAST(CAST(GETDATE() AS date) AS datetime), CASRecStatus = '1', CASRecBy = @userCode
+    WHERE CASNumber = @cas;
+    SELECT CASE WHEN @@ROWCOUNT = 0 THEN 1 ELSE 0 END AS Result;
+END
+GO
+
+-- ===== main/260_worksheet_enquiry.sql =====
+-- Worksheet > Worksheet Enquiry (frmWorksheetEnq): read-only enquiry on a saved worksheet. The 29 benefit slots of ClaimActual /
+-- ClaimApprove / ClaimHos / ClaimMember / ClaimLimit use the row -> column map the desktop's save routines (saveActual, saveApprove,
+-- saveHos, saveMember, saveLimit) write: row 1 Room & Board ... row 29 Service Tax - Lodger. The amounts are stored as the text the
+-- grid showed ("1,200.00", "-", "(50.00)"), hence Worksheet_Amount.
+
+CREATE OR ALTER FUNCTION genisis.Worksheet_Amount (@s nvarchar(60))
+RETURNS decimal(18, 2)
+AS
+BEGIN
+    DECLARE @t nvarchar(60) = REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@s, N''))), N',', N''), N' ', N'');
+    DECLARE @neg bit = CASE WHEN LEFT(@t, 1) = N'(' AND RIGHT(@t, 1) = N')' THEN 1 ELSE 0 END;
+    IF @neg = 1 SET @t = SUBSTRING(@t, 2, LEN(@t) - 2);
+    RETURN CASE
+        WHEN @t = N'' OR LEN(@t) > 15 OR @t LIKE N'%[^0-9.-]%' OR @t NOT LIKE N'%[0-9]%'
+          OR @t LIKE N'%.%.%' OR @t LIKE N'%-%-%' OR (@t LIKE N'%-%' AND LEFT(@t, 1) <> N'-') THEN 0
+        WHEN @neg = 1 THEN -ABS(CAST(@t AS decimal(18, 2)))
+        ELSE CAST(@t AS decimal(18, 2))
+    END;
+END
+GO
+
+-- cmdSearchCase_Click (frmCASList): the cases to pick from, found by case / member number prefix, patient name, I/C or policy number.
+-- Versions is how many worksheet versions the case has (0: nothing to enquire on yet).
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Cases
+    @max int, @by nvarchar(20), @q nvarchar(100), @prefix nvarchar(200), @contains nvarchar(200)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(c.CASNumber) AS CaseNo, RTRIM(c.MBMNumber) AS MemberNo, RTRIM(COALESCE(cp.MBMCName, x.MBMName)) AS PatientName,
+        RTRIM(h.HOSName) AS Hospital, c.CASDateAdmitted AS Admitted, c.CASDischargeDate AS Discharged, RTRIM(x.MBMPolicyNo) AS PolicyNo,
+        RTRIM(x.PAYCode) AS Payor, RTRIM(c.CASStatus) AS CaseStatus, RTRIM(c.CASClaimability) AS Claimability,
+        (SELECT COUNT(*) FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber) AS Versions
+    FROM dbo.CAS c WITH (NOLOCK)
+    LEFT JOIN genisis.Maint_MBMCrossReference x ON c.MBMNumber = x.MBMNumber
+    LEFT JOIN dbo.MBMCoveredPersons cp WITH (NOLOCK) ON c.MBMNumber = cp.MBMCNumber AND c.MBMPatientCovID = cp.MBMCCoverID
+    LEFT JOIN dbo.HOS h WITH (NOLOCK) ON c.CASHOSCode = h.HOSCode
+    WHERE (@by = N'number' AND c.CASNumber LIKE @prefix)
+       OR (@by = N'member' AND c.MBMNumber LIKE @prefix)
+       OR (@by = N'patient' AND (cp.MBMCName LIKE @contains OR x.MBMName LIKE @contains))
+       OR (@by = N'ic' AND (x.MBMIcBcPp = @q OR REPLACE(x.MBMIcBcPp, '-', '') = REPLACE(@q, '-', '')))
+       OR (@by = N'policy' AND x.MBMPolicyNo LIKE @prefix)
+    ORDER BY c.CaseRegDate DESC, c.CASNumber
+    OPTION (RECOMPILE);
+END
+GO
+
+-- The versions of a case's worksheet (cboVersion lists each as "n" and "Mn", then "Master").
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Versions
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ClaimVersion, RTRIM(ClaimStatus) AS ClaimStatus, RTRIM(CLMWSStatus) AS WsStatus, CAST(ISNULL(ClaimBordxStatus, 0) AS bit) AS Bordxed
+    FROM genisis.WS_Claim WHERE CASNumber = @cas ORDER BY ClaimVersion;
+END
+GO
+
+-- cmdDisplay_Click: the case, member, policy and worksheet header of one version (SearchCasMBMClaim), the policy status text and the
+-- live limits. No row when the case has no such worksheet or its case / member is missing (the desktop query joins them: "Record not found!").
+-- Balance limit (txtBalLimit), for members without a top-up: the member's available limit; a "Q" member of a supplementary plan with
+-- limit status B / C and a dependant patient uses the covered person's limit instead (the principal's "01" row for B, the patient's for C).
+-- Top-up policies add their own balance in the desktop; that figure is shown from the saved worksheet on the Topup tab instead.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Header
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @mbm nvarchar(20), @cov nvarchar(4), @plan nvarchar(10), @ins nvarchar(4), @admit datetime, @type nvarchar(4),
+        @lifeStatus nvarchar(2), @guaRenewal nvarchar(2), @supp nvarchar(2), @available money, @lifetime money, @found int;
+
+    SELECT TOP (1) @mbm = RTRIM(MBMNumber), @cov = RTRIM(MBMPatientCovID), @ins = RTRIM(INSCode), @admit = CASDateAdmitted, @type = RTRIM(MBMMemberType),
+        @lifeStatus = RTRIM(PLNLifeTimeStatus), @guaRenewal = RTRIM(MBMGuaRenewal),
+        @plan = RTRIM(CASE WHEN RTRIM(MBMPatientCovID) <> N'00' AND ISNULL(RTRIM(MBMCPLNCode), N'') <> N'' THEN MBMCPLNCode ELSE PLNCode END)
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment WHERE CASNumber = @cas AND ClaimVersion = @version AND MBMNumber IS NOT NULL;
+    SET @found = @@ROWCOUNT;
+    IF @found = 0 RETURN;
+
+    SELECT TOP (1) @supp = RTRIM(SuppLimitStatus) FROM dbo.AnnualLimit
+    WHERE PLNCode = @plan AND INSCode = @ins AND AnnualEffDate <= @admit ORDER BY AnnualEffDate DESC;
+
+    SELECT TOP (1) @available = MBMAvailableLimit FROM dbo.MBM WHERE MBMNumber = @mbm;
+    IF @type = N'Q' AND @cov <> N'00' AND @supp IN (N'B', N'C')
+        SELECT TOP (1) @available = MBMCAvailableLimit FROM dbo.MBMCoveredPersons
+        WHERE MBMCNumber = @mbm AND MBMCCoverID = CASE WHEN @supp = N'B' THEN N'01' ELSE @cov END;
+
+    IF @lifeStatus = N'Y' AND @guaRenewal = N'3'
+        SELECT TOP (1) @lifetime = MBMLifeTimeLmt FROM dbo.MBMLifeTime
+        WHERE MBMNumber = @mbm AND MBMCovID = CASE WHEN @type = N'Q' AND @supp = N'B' AND @cov <> N'00' THEN N'01'
+                                                   WHEN @type = N'Q' AND @supp = N'C' AND @cov <> N'00' THEN @cov ELSE N'00' END;
+
+    SELECT TOP (1)
+        RTRIM(v.CASNumber) AS CaseNo, v.ClaimVersion, RTRIM(v.MBMNumber) AS MemberNo, RTRIM(v.MBMPatientCovID) AS PatientCovId,
+        RTRIM(v.MBMName) AS MemberName,
+        CASE WHEN RTRIM(v.MBMPatientCovID) <> N'00' AND ISNULL(RTRIM(v.MBMCName), N'') <> N'' THEN RTRIM(v.MBMCName) ELSE RTRIM(v.MBMName) END AS PatientName,
+        RTRIM(v.MBMPolicyNo) AS PolicyNo, RTRIM(v.PAYCode) AS Payor, RTRIM(v.PAYCompanyName) AS PayorName,
+        @plan AS PlanCode, RTRIM(v.INSCode) AS InsCode, RTRIM(v.HLTCode) AS HltCode, RTRIM(v.GRPCompany) AS GroupCompany,
+        v.MBMPayorEffDate AS PayorEffDate, v.MBMPayorExpDate AS PayorExpDate, v.MBMPolEffDate AS PolicyEffDate,
+        RTRIM(v.MBMStatus) AS PolicyStatusCode, RTRIM(ps.PStatusDesc) AS PolicyStatus, RTRIM(v.MBMExpiredStatus) AS ExpiredStatus,
+        RTRIM(v.CASStatus) AS CaseStatus, RTRIM(v.CASClaimability) AS Claimability, RTRIM(v.PayTypeCode) AS PayType,
+        RTRIM(v.CASHOSCode) AS HosCode, RTRIM(v.HOSName) AS Hospital, v.CASDateAdmitted AS Admitted, v.CASDischargeDate AS Discharged,
+        RTRIM(v.ClaimStatus) AS ClaimStatus, RTRIM(v.CLMWSStatus) AS WsStatus, v.ClaimOpenDate AS WorksheetOpened,
+        CAST(ISNULL(v.ClaimBordxStatus, 0) AS bit) AS Bordxed, RTRIM(v.BordxRefNo) AS BordxRefNo, RTRIM(v.CLMExGratia) AS ExGratia,
+        RTRIM(v.CLMMHBordx) AS BordxInd, RTRIM(v.CLMLinkCase) AS LinkCase, v.CLMLinkVersion AS LinkVersion, RTRIM(v.MBMGLIssuance) AS GlIssuance,
+        RTRIM(v.MBMTopupNumber) AS TopupNumber, RTRIM(v.MBMTopupInd) AS TopupInd,
+        @available AS AvailableLimit, @lifetime AS LifetimeLimit, v.CASTakeOverAmt AS TakeOverLimit,
+        v.CLMLimitExceeded AS LimitExceeded, v.CLMPreviousBalance AS PreviousBalance, v.CLMBalanceLimit AS BalanceAfterClaim,
+        v.CLMLifetimeBal AS LifetimeBalance, v.CLMTotalApproved AS TotalApproved, v.CLMFinalApprove AS FinalApprove,
+        RTRIM(v.LimitCollectedBy) AS LimitCollectedBy, RTRIM(v.ExcessCollectedBy) AS ExcessCollectedBy,
+        CASE WHEN RTRIM(v.CLMNonPayment) = N'Y' THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS NonPayment,
+        v.CLMExGratiaAmt AS ExGratiaAmount, v.CLMCaseMgmtFees AS ProcessingFee, v.CLMMajorMedFee AS MajorMedicalFee, v.CLMMainTUAmt AS MainTopupAmount,
+        v.CLMComApp AS CompanyApproved, v.CLMTopUpApp AS TopupApproved, v.CLMPreviousNewLimit AS TopupPreviousBalance, v.CLMPreviousUndExcess AS UnderwritingExcess,
+        RTRIM(v.DebitCreditRefNo) AS DebitCreditRefNo, v.DebitCreditDate, RTRIM(v.DebitCreditHRefNo) AS HosDebitCreditRefNo, v.DebitCreditHAmt AS HosDebitCreditAmount,
+        v.CLMLastDocDate AS LastDocumentDate, RTRIM(v.CLMPayTo) AS PayTo, RTRIM(v.CLMBank) AS Bank, RTRIM(v.CLMAccountNo) AS AccountNo, RTRIM(v.CLMGPName) AS GpName
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    LEFT JOIN dbo.PolicyStatus ps ON ps.PStatusCode = v.MBMStatus
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+END
+GO
+
+-- Display_Diagnosis: the first (preliminary) and final diagnoses of the case, up to three each.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Diagnoses
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT d.Source, d.Slot, RTRIM(d.Diagnosis) AS Diagnosis, RTRIM(d.OnsetDate) AS OnsetDate, RTRIM(d.IcdCode) AS IcdCode
+    FROM (
+        SELECT 1 AS SourceOrder, N'First' AS Source, s.Slot, s.Diagnosis, s.OnsetDate, s.IcdCode
+        FROM dbo.DIAFirst f CROSS APPLY (VALUES
+            (1, f.DIAPrelimDiag1, f.DIADOS1, f.ICDCode1), (2, f.DIAPrelimDiag2, f.DIADOS2, f.ICDCode2), (3, f.DIAPrelimDiag3, f.DIADOS3, f.ICDCode3)
+        ) s(Slot, Diagnosis, OnsetDate, IcdCode) WHERE f.CASNumber = @cas
+        UNION ALL
+        SELECT 2, N'Final', s.Slot, s.Diagnosis, s.OnsetDate, s.IcdCode
+        FROM dbo.DIAFinal f CROSS APPLY (VALUES
+            (1, f.DIAFinalDiag1, f.DIADOS1, f.ICDCode1), (2, f.DIAFinalDiag2, f.DIADOS2, f.ICDCode2), (3, f.DIAFinalDiag3, f.DIADOS3, f.ICDCode3)
+        ) s(Slot, Diagnosis, OnsetDate, IcdCode) WHERE f.CASNumber = @cas
+    ) d
+    WHERE LTRIM(RTRIM(ISNULL(d.Diagnosis, N''))) <> N'' OR LTRIM(RTRIM(ISNULL(d.OnsetDate, N''))) <> N'' OR LTRIM(RTRIM(ISNULL(d.IcdCode, N''))) <> N''
+    ORDER BY d.SourceOrder, d.Slot;
+END
+GO
+
+-- ShowInvoice: the invoices of one version (a numeric version) or every accepted invoice of the case (Mn / Master), optionally only the
+-- cashless (pay to hospital, 'H') or reimbursement (pay to member, 'M') ones. The last eight columns feed the Reimbursement Not Cover tab.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Invoices
+    @cas nvarchar(15), @version int = NULL, @payTo char(1) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT INVIndex AS InvIndex, CAST(ISNULL(INVBordxed, 0) AS bit) AS Bordxed, CAST(ISNULL(INVWSed, 0) AS bit) AS WsDone, RTRIM(INVWSversion) AS WsVersion,
+        RTRIM(INVNo) AS InvNo, InvDate, INVAmount AS InvAmount, RTRIM(InvPayTo) AS PayTo, RTRIM(INVPayee) AS Payee, RTRIM(ClaimType) AS ClaimType,
+        INVFolUpDate AS FollowUpDate, CLMBoardDay AS DailyRb, CLMRB AS RbRate, CLMICUDay AS IcuDays, CLMICU AS IcuRate, CLMServices AS HospitalServices,
+        CLMTheatre AS OperatingTheatre, CLMPreHSAmt AS PreHospitalService, CLMPhysician AS PhysicianVisit, CLMPost AS PostHospitalTreatment,
+        PreH60 AS PreHospitalOver60, PreGP AS PreHospitalGpFee, preMedic AS PreHospitalMedicine, PreMR AS PreHospitalMedicalReport, PreSpec AS PreHospitalSpecialistFee,
+        PostHosp AS PostHospitalOver31Days, PostNotSame AS PostHospitalDifferentPhysician, Others AS NotCoveredOthers
+    FROM genisis.WS_CASInvoice
+    WHERE CASNumber = @cas
+      AND ((@version IS NOT NULL AND INVWSversion = CAST(@version AS nvarchar(10))) OR (@version IS NULL AND ClaimStatus = N'C'))
+      AND (@payTo IS NULL OR InvPayTo = @payTo)
+    ORDER BY INVIndex;
+END
+GO
+
+-- The benefit rows of the worksheet grid (25 benefits, then Others - No Co-Pay and the three service-tax rows) for a range of versions (one version, "Mn" = 1..n, "Master" = all): actual, approved,
+-- payable to hospital and due to / (from) member are summed over the range; limit and days are those of the last version in the range.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Benefits
+    @cas nvarchar(15), @fromVersion int, @toVersion int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @last int = (SELECT MAX(CLMVersion) FROM genisis.WS_ClaimLimit WHERE CASNumber = @cas AND CLMVersion BETWEEN @fromVersion AND @toVersion);
+    DECLARE @days TABLE (Slot int PRIMARY KEY, Days nvarchar(30));
+    INSERT @days SELECT s.Slot, s.Days FROM genisis.WS_ClaimLimit l CROSS APPLY (VALUES
+        (1, l.CLMBoardDays), (2, l.CLMICUDays), (10, l.CLMINHOSPhyDays), (16, l.CLMKIDDCDays), (18, l.CLMCashDays), (19, l.CLMGurdianDays)
+    ) s(Slot, Days) WHERE l.CASNumber = @cas AND l.CLMVersion = @last;
+
+    WITH act AS (
+        SELECT v.Slot, SUM(genisis.Worksheet_Amount(v.Amt)) AS Amt
+        FROM genisis.WS_ClaimActual a
+        CROSS APPLY (VALUES
+            (1, a.CLMBoardAmt), (2, a.CLMICUAmt), (3, a.CLMServices), (4, a.CLMTheatre), (5, a.CLMMRI),
+            (6, a.CLMPreHSAmt), (7, a.CLMPreHosp), (8, a.CLMSurgicalAmt), (9, a.CLMAna), (10, a.CLMNSPreHos),
+            (11, a.CLMPhysician), (12, a.CLMPost), (13, a.CLMMPreHSAmt), (14, a.CLMAccPostAmt), (15, a.CLMAmbulance),
+            (16, a.CLMOutpatient), (17, a.CLMMonthly), (18, a.CLMOrgan), (19, a.CLMTax), (20, a.CLMGuardianAmt),
+            (21, a.CLMMedical), (22, a.CLMPhone), (23, a.CLMAdmin), (24, a.CLMHomeNCAmt), (25, a.CLMOthers1),
+            (26, a.CLMOthersNotCoPay), (27, a.CLMBoardTaxAmt), (28, a.CLMICUTaxAmt), (29, a.CLMLodgerTaxAmt)
+        ) v(Slot, Amt)
+        WHERE a.CASNumber = @cas AND a.CLMVersion BETWEEN @fromVersion AND @toVersion
+        GROUP BY v.Slot
+    ), app AS (
+        SELECT v.Slot, SUM(genisis.Worksheet_Amount(v.Amt)) AS Amt
+        FROM genisis.WS_ClaimApprove p
+        CROSS APPLY (VALUES
+            (1, p.CLMBoardAmt), (2, p.CLMICUAmt), (3, p.CLMServices), (4, p.CLMTheatre), (5, p.CLMMRI),
+            (6, p.CLMPreHSAmt), (7, p.CLMPreHosp), (8, p.CLMSurgicalAmt), (9, p.CLMAna), (10, p.CLMNSPreHos),
+            (11, p.CLMPhysician), (12, p.CLMPost), (13, p.CLMMPreHSAmt), (14, p.CLMAccPostAmt), (15, p.CLMAmbulance),
+            (16, p.CLMOutpatient), (17, p.CLMMonthly), (18, p.CLMOrgan), (19, p.CLMTax), (20, p.CLMGuardianAmt),
+            (21, p.CLMMedical), (22, p.CLMPhone), (23, p.CLMAdmin), (24, p.CLMHomeNCAmt), (25, p.CLMOthers1),
+            (26, p.CLMOthersNotCoPay), (27, p.CLMBoardTaxAmt), (28, p.CLMICUTaxAmt), (29, p.CLMLodgerTaxAmt)
+        ) v(Slot, Amt)
+        WHERE p.CASNumber = @cas AND p.CLMVersion BETWEEN @fromVersion AND @toVersion
+        GROUP BY v.Slot
+    ), hos AS (
+        SELECT v.Slot, SUM(genisis.Worksheet_Amount(v.Amt)) AS Amt
+        FROM genisis.WS_ClaimHos h
+        CROSS APPLY (VALUES
+            (1, h.CLMBoardAmt), (2, h.CLMICUAmt), (3, h.CLMServices), (4, h.CLMTheatre), (5, h.CLMMRI),
+            (6, h.CLMPreHSAmt), (7, h.CLMPreHosp), (8, h.CLMSurgicalAmt), (9, h.CLMAna), (10, h.CLMNSPreHos),
+            (11, h.CLMPhysician), (12, h.CLMPost), (13, h.CLMMPreHSAmt), (14, h.CLMAccPostAmt), (15, h.CLMAmbulance),
+            (16, h.CLMOutpatient), (17, h.CLMMonthly), (18, h.CLMOrgan), (19, h.CLMTax), (20, h.CLMGuardianAmt),
+            (21, h.CLMMedical), (22, h.CLMPhone), (23, h.CLMAdmin), (24, h.CLMHomeNCAmt), (25, h.CLMOthers1),
+            (26, h.CLMOthersNotCoPay), (27, h.CLMBoardTaxAmt), (28, h.CLMICUTaxAmt), (29, h.CLMLodgerTaxAmt)
+        ) v(Slot, Amt)
+        WHERE h.CASNumber = @cas AND h.CLMVersion BETWEEN @fromVersion AND @toVersion
+        GROUP BY v.Slot
+    ), mem AS (
+        SELECT v.Slot, SUM(genisis.Worksheet_Amount(v.Amt)) AS Amt
+        FROM genisis.WS_ClaimMember m
+        CROSS APPLY (VALUES
+            (1, m.CLMBoardAmt), (2, m.CLMICUAmt), (3, m.CLMServices), (4, m.CLMTheatre), (5, m.CLMMRI),
+            (6, m.CLMPreHSAmt), (7, m.CLMPreHosp), (8, m.CLMSurgicalAmt), (9, m.CLMAna), (10, m.CLMNSPreHos),
+            (11, m.CLMPhysician), (12, m.CLMPost), (13, m.CLMMPreHSAmt), (14, m.CLMAccPostAmt), (15, m.CLMAmbulance),
+            (16, m.CLMOutpatient), (17, m.CLMMonthly), (18, m.CLMOrgan), (19, m.CLMTax), (20, m.CLMGuardianAmt),
+            (21, m.CLMMedical), (22, m.CLMPhone), (23, m.CLMAdmin), (24, m.CLMHomeNCAmt), (25, m.CLMOthers1),
+            (26, m.CLMOthersNotCoPay), (27, m.CLMBoardTaxAmt), (28, m.CLMICUTaxAmt), (29, m.CLMLodgerTaxAmt)
+        ) v(Slot, Amt)
+        WHERE m.CASNumber = @cas AND m.CLMVersion BETWEEN @fromVersion AND @toVersion
+        GROUP BY v.Slot
+    ), lim AS (
+        SELECT v.Slot, genisis.Worksheet_Amount(v.Amt) AS Amt
+        FROM genisis.WS_ClaimLimit l
+        CROSS APPLY (VALUES
+            (1, l.CLMBoardAmt), (2, l.CLMICUAmt), (3, l.CLMServices), (4, l.CLMTheatre), (5, l.CLMMRI),
+            (6, l.CLMPreHSAmt), (7, l.CLMPreHosp), (8, l.CLMSurgicalAmt), (9, l.CLMAna), (10, l.CLMNSPreHos),
+            (11, l.CLMPhysician), (12, l.CLMPost), (13, l.CLMMPreHSAmt), (14, l.CLMAccPostAmt), (15, l.CLMAmbulance),
+            (16, l.CLMOutpatient), (17, l.CLMMonthly), (18, l.CLMOrgan), (19, l.CLMTax), (20, l.CLMGuardianAmt),
+            (21, l.CLMMedical), (22, l.CLMPhone), (23, l.CLMAdmin), (24, l.CLMHomeNCAmt), (25, l.CLMOthers1),
+            (26, l.CLMOthersNotCoPay), (27, l.CLMBoardTaxAmt), (28, l.CLMICUTaxAmt), (29, l.CLMLodgerTaxAmt)
+        ) v(Slot, Amt)
+        WHERE l.CASNumber = @cas AND l.CLMVersion = @last
+    )
+    SELECT n.Slot, n.BenefitCode, n.Category, n.Benefit, d.Days, lim.Amt AS Limit, act.Amt AS Actual, app.Amt AS Approved, hos.Amt AS Hospital, mem.Amt AS Member
+    FROM (
+        SELECT CAST(ROW_NUMBER() OVER (ORDER BY BNFSubCode) AS int) AS Slot, RTRIM(BNFSubCode) AS BenefitCode, RTRIM(CATDescription) AS Category, RTRIM(BNFSubName) AS Benefit
+        FROM dbo.view_bnf_cat_subcat WHERE BNFSubCode NOT IN (N'GenSurgBen', N'ine001')
+        UNION ALL SELECT 26, N'', N'Others', N'Others - No Co-Pay'
+        UNION ALL SELECT 27, N'', N'Service Tax', N'Service Tax - R&B'
+        UNION ALL SELECT 28, N'', N'Service Tax', N'Service Tax - ICU'
+        UNION ALL SELECT 29, N'', N'Service Tax', N'Service Tax - Lodger'
+    ) n
+    LEFT JOIN act ON act.Slot = n.Slot LEFT JOIN app ON app.Slot = n.Slot LEFT JOIN hos ON hos.Slot = n.Slot LEFT JOIN mem ON mem.Slot = n.Slot
+    LEFT JOIN lim ON lim.Slot = n.Slot LEFT JOIN @days d ON d.Slot = n.Slot
+    ORDER BY n.Slot;
+END
+GO
+
+-- The saved summary figures of the worksheet (the rows under the benefit grid: co-payment, excess, limit exceeded, ex-gratia, fees, final
+-- totals and the bordx amount, as getFinalTotal worked them out and SaveClaim stored them), added up over a range of versions.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Summary
+    @cas nvarchar(15), @fromVersion int, @toVersion int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT SUM(ISNULL(CLMTotalActual, 0)) AS TotalActual, SUM(ISNULL(CLMTotalApproved, 0)) AS TotalApproved, SUM(ISNULL(CLMCoPayRB, 0)) AS CoPayRb,
+        SUM(ISNULL(CLMExcess, 0)) AS TotalExcess, SUM(ISNULL(CLMLimitExceeded, 0)) AS LimitExceeded, SUM(ISNULL(CLMExGratiaAmt, 0)) AS ExGratia,
+        SUM(ISNULL(CLMBTBGAmt, 0)) AS Btbg, SUM(ISNULL(CLMCaseMgmtFees, 0)) AS ProcessingFee, SUM(ISNULL(CLMMajorMedFee, 0)) AS MajorMedicalFee,
+        SUM(ISNULL(CLMMainTUAmt, 0)) AS MainTopup, SUM(ISNULL(CLMHosPayColl, 0)) AS HospitalPayorToCollect,
+        SUM(ISNULL(CLMPayableByMedix2H, 0)) AS PayableToHospital, SUM(ISNULL(CLMPayableByMedix2M, 0)) AS PayableToMember,
+        SUM(ISNULL(CLMFinalApprove, 0)) AS FinalApprove, SUM(ISNULL(CLMBordxAmt, 0)) AS BordxAmount
+    FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion BETWEEN @fromVersion AND @toVersion;
+END
+GO
+
+-- ClaimOthers: payee address, note, attention, payment mode and the two remarks of one version.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEnquiry_Others
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(CLMWSRemarks) AS WorksheetRemarks, RTRIM(CLMDCNoteRemarks) AS CreditDebitRemarks, RTRIM(MBMAdd1) AS Address1, RTRIM(MBMAdd2) AS Address2,
+        RTRIM(MBMAdd3) AS Address3, RTRIM(CLMNote) AS Note, RTRIM(MBMPostCode) AS PostCode, RTRIM(MBMCity) AS City, RTRIM(MBMState) AS State,
+        RTRIM(CLMAttention) AS Attention, RTRIM(CLMPayMode) AS PaymentMode
+    FROM genisis.WS_ClaimOthers WHERE CASNumber = @cas AND CLaimVersion = @version;
+END
+GO
+
+-- ===== main/270_worksheet_engine.sql =====
+-- Worksheet calculation engine, step 1: the actual amounts of one worksheet version, added up from its invoices.
+-- This is getDatatoWS of the desktop's worksheet forms: A1..A29 add up the invoice columns below for every invoice of the version, and H1..H29 the same for
+-- the invoices paid to the hospital (InvPayTo = 'H'). The slot -> columns map was read out of the VB6 source (ShowInvoice puts each View_CAS_Invoice column in a
+-- list sub-item; getDatatoWS adds the sub-items of each slot) and is checked against the totals the desktop saved: it reproduces ClaimActual for 35,495 saved
+-- versions (99.96 to 100 per cent per slot; see WorksheetEngineTests).
+-- Slots 1 to 29 are the rows of the grid: 1 Room & Board ... 25 Emergency Sickness Treatment, 26 Others - No Co-Pay, 27 to 29 the service taxes.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_Actual
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    WITH inv AS (
+        SELECT i.InvPayTo, v.Slot, v.Amt
+        FROM genisis.WS_CASInvoice i
+        CROSS APPLY (VALUES
+            (1, genisis.Worksheet_Amount(i.CLMBoardAmt) + genisis.Worksheet_Amount(i.CLMNewRBTax)),
+            (2, genisis.Worksheet_Amount(i.CLMICUAmt) + genisis.Worksheet_Amount(i.CLMNewICUTax)),
+            (3, genisis.Worksheet_Amount(i.CLMServices)),
+            (4, genisis.Worksheet_Amount(i.CLMTheatre)),
+            (5, genisis.Worksheet_Amount(i.CLMMRI)),
+            (6, genisis.Worksheet_Amount(i.CLMPreHSAmt)),
+            (7, genisis.Worksheet_Amount(i.CLMPreHosp)),
+            (8, genisis.Worksheet_Amount(i.CLMSurgicalAmt)),
+            (9, genisis.Worksheet_Amount(i.CLMAna)),
+            (10, genisis.Worksheet_Amount(i.CLMNSPreHos)),
+            (11, genisis.Worksheet_Amount(i.CLMPhysician)),
+            (12, genisis.Worksheet_Amount(i.CLMPost)),
+            (13, genisis.Worksheet_Amount(i.CLMMPreHosAmt)),
+            (14, genisis.Worksheet_Amount(i.CLMAccPostAmt)),
+            (15, genisis.Worksheet_Amount(i.CLMAmbulance)),
+            (16, genisis.Worksheet_Amount(i.CLMOutpatient)),
+            (17, genisis.Worksheet_Amount(i.CLMMonthly)),
+            (18, genisis.Worksheet_Amount(i.CLMOrgan)),
+            (19, genisis.Worksheet_Amount(i.CLMCashAmt)),
+            (20, genisis.Worksheet_Amount(i.CLMGuardianAmt) + genisis.Worksheet_Amount(i.CLMNewLodgerTax)),
+            (21, genisis.Worksheet_Amount(i.CLMMedical)),
+            (22, genisis.Worksheet_Amount(i.CLMPhone)),
+            (23, genisis.Worksheet_Amount(i.CLMAdmin)),
+            (24, genisis.Worksheet_Amount(i.CLMHomeNCAmt)),
+            (25, genisis.Worksheet_Amount(i.CLMOthers1)),
+            (26, genisis.Worksheet_Amount(i.CLMOthersNotCoPay)),
+            (27, genisis.Worksheet_Amount(i.CLMRBTax)),
+            (28, genisis.Worksheet_Amount(i.CLMICUTax)),
+            (29, genisis.Worksheet_Amount(i.CLMLodgerTax))
+        ) v(Slot, Amt)
+        WHERE i.CASNumber = @cas AND i.INVWSversion = CAST(@version AS nvarchar(10))
+    )
+    SELECT n.Slot, ISNULL(SUM(inv.Amt), 0) AS Actual, ISNULL(SUM(CASE WHEN inv.InvPayTo = N'H' THEN inv.Amt END), 0) AS ToHospital
+    FROM (VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16), (17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29)) n(Slot)
+    LEFT JOIN inv ON inv.Slot = n.Slot
+    GROUP BY n.Slot
+    ORDER BY n.Slot;
+END
+GO
+
+-- Worksheet calculation engine, step 2: the limit text the desktop saved for each row of a version (ClaimLimit).
+-- The limit column of the grid is text: an amount ("200.00", "1,000.00"), the word FULL, or nothing / a dash. The approved amount of a row is worked out from
+-- the actual amount and this text (WorksheetRules.Approve). Reading the saved text lets a saved worksheet be re-evaluated; the limits of a worksheet that is
+-- being registered come from the plan (a later step).
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_Limits
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT v.Slot, LTRIM(RTRIM(v.LimitText)) AS LimitText
+    FROM genisis.WS_ClaimLimit l
+    CROSS APPLY (VALUES
+            (1, l.CLMBoardAmt),
+            (2, l.CLMICUAmt),
+            (3, l.CLMServices),
+            (4, l.CLMTheatre),
+            (5, l.CLMMRI),
+            (6, l.CLMPreHSAmt),
+            (7, l.CLMPreHosp),
+            (8, l.CLMSurgicalAmt),
+            (9, l.CLMAna),
+            (10, l.CLMNSPreHos),
+            (11, l.CLMPhysician),
+            (12, l.CLMPost),
+            (13, l.CLMMPreHSAmt),
+            (14, l.CLMAccPostAmt),
+            (15, l.CLMAmbulance),
+            (16, l.CLMOutpatient),
+            (17, l.CLMMonthly),
+            (18, l.CLMOrgan),
+            (19, l.CLMTax),
+            (20, l.CLMGuardianAmt),
+            (21, l.CLMMedical),
+            (22, l.CLMPhone),
+            (23, l.CLMAdmin),
+            (24, l.CLMHomeNCAmt),
+            (25, l.CLMOthers1),
+            (26, l.CLMOthersNotCoPay),
+            (27, l.CLMBoardTaxAmt),
+            (28, l.CLMICUTaxAmt),
+            (29, l.CLMLodgerTaxAmt)
+    ) v(Slot, LimitText)
+    WHERE l.CASNumber = @cas AND l.CLMVersion = @version
+    ORDER BY v.Slot;
+END
+GO
+
+-- Worksheet calculation engine, step 3: the inputs of the summary rows that come from the plan and the member: the co-payment (getFinalTotal's CoPayApp) and the
+-- member's available limit before the worksheet (CLMPreviousBalance), as saved with the version.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_SummaryInputs
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(CLMCoPayRB, 0) AS CoPayment, ISNULL(CLMPreviousBalance, 0) AS PreviousBalance
+    FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+END
+GO
+
+-- ===== main/280_worksheet_adjustment.sql =====
+-- Worksheet > Worksheet Adjustment (legacy frmWorksheetAdj2013), step 1: the Update button (cmdUpdate_Click / SaveOtherInfo), which saves the payment details
+-- and the remarks of one worksheet version. The rest of the form (Approve, credit / debit notes, letters) follows in later steps.
+
+-- The pay-to of a version's invoices as the form worked it out: MBMHosStatus is the pay-to of the last invoice listed (H hospital, M member).
+CREATE OR ALTER PROCEDURE genisis.WorksheetAdjustment_PayTo
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(InvPayTo) AS PayTo
+    FROM genisis.WS_CASInvoice
+    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(10))
+    ORDER BY INVIndex DESC;
+END
+GO
+
+-- cboBank: the banks that have accounts (Bank, from BankAccounts of the maintenance database).
+CREATE OR ALTER PROCEDURE genisis.WorksheetAdjustment_Banks
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(Bank) AS Name FROM genisis.Maint_BankAccounts WHERE Bank IS NOT NULL AND RTRIM(Bank) <> N'' GROUP BY RTRIM(Bank) ORDER BY RTRIM(Bank);
+END
+GO
+
+-- cboCLMState: the states (SearchState).
+CREATE OR ALTER PROCEDURE genisis.WorksheetAdjustment_States
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(STADescription) AS Name FROM dbo.STA WHERE STADescription IS NOT NULL AND RTRIM(STADescription) <> N'' ORDER BY RTRIM(STADescription);
+END
+GO
+
+-- SaveOtherInfo: Claim gets the last document date (only when one was given), pay-to, bank, account number and GP; ClaimOthers (when the version has a row) gets the
+-- remarks, the member's address, the note, the payment mode and the attention. Empty text is stored as empty text, as the desktop did.
+-- Result: 0 saved, 1 the worksheet version does not exist.
+CREATE OR ALTER PROCEDURE genisis.WorksheetAdjustment_UpdatePayment
+    @cas nvarchar(30), @version int, @lastDocDate datetime,
+    @payTo nvarchar(50), @gpName nvarchar(50), @bank nvarchar(40), @accountNo nvarchar(30),
+    @paymentMode nvarchar(50), @attention nvarchar(60),
+    @address1 nvarchar(50), @address2 nvarchar(50), @address3 nvarchar(50), @postCode nvarchar(6), @city nvarchar(50), @state nvarchar(50),
+    @note nvarchar(100), @wsRemarks nvarchar(200), @cdRemarks nvarchar(200)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF NOT EXISTS (SELECT 1 FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version)
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+
+    UPDATE genisis.WS_Claim
+    SET CLMLastDocDate = ISNULL(@lastDocDate, CLMLastDocDate), CLMPayTo = @payTo, CLMAccountNo = @accountNo, CLMBank = @bank, CLMGPName = @gpName
+    WHERE CASNumber = @cas AND ClaimVersion = @version;
+
+    UPDATE genisis.WS_ClaimOthers
+    SET CLMWSRemarks = @wsRemarks, CLMDCNoteRemarks = @cdRemarks, MBMAdd1 = @address1, MBMAdd2 = @address2, MBMAdd3 = @address3, MBMPostCode = @postCode,
+        MBMCity = @city, MBMState = @state, CLMNote = @note, CLMPayMode = @paymentMode, CLMAttention = @attention
+    WHERE CASNumber = @cas AND CLaimVersion = @version;
+    SELECT 0 AS Result;
+END
+GO
+
+-- ===== main/290_worksheet_documents.sql =====
+-- Worksheet > Worksheet Adjustment (legacy frmWorksheetAdj2013), step 2: the credit / debit note and the Excess letter. The desktop filled Excel and Word templates
+-- (CreditNote.xlt, DebitNote.xlt, DebitNoteCompany.xlt, EXCLetterMAS.DOT, ExcessLetterEtiqa.DOT, MedixExcLetter.DOT) that are not in the source package; these procedures
+-- return the data the templates were filled with.
+
+-- The member's address as the notes printed it (the member master, not the address typed on the worksheet) and whether the plan is billed to the company.
+CREATE OR ALTER PROCEDURE genisis.WorksheetNote_Member
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(v.MBMAddress1) AS Address1, RTRIM(v.MBMAddress2) AS Address2, RTRIM(v.MBMAddress3) AS Address3, RTRIM(v.MBMPostCode) AS PostCode,
+        CAST(CASE WHEN RTRIM(v.PLNCompanyDN) = N'C' THEN 1 ELSE 0 END AS bit) AS CompanyPlan
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+END
+GO
+
+-- cmdDebit_Click: a debit note that has no number yet gets the next one of its payor: D + payor + five digits (DRSeq, GenerateDebitNo), saved with today's date on the
+-- worksheet (UpdateCreditDebit). A worksheet that has a number keeps it. Result: 0 ok, 1 the worksheet version does not exist.
+CREATE OR ALTER PROCEDURE genisis.WorksheetNote_AssignDebitNo
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    DECLARE @number nvarchar(30);
+    SELECT @number = RTRIM(DebitCreditRefNo) FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 1 AS Result, CAST(NULL AS nvarchar(30)) AS Number;
+        RETURN;
+    END
+    IF ISNULL(@number, N'') <> N''
+    BEGIN
+        SELECT 0 AS Result, @number AS Number;
+        RETURN;
+    END
+
+    DECLARE @payor nvarchar(10) = LEFT(@cas, 2), @seq int;
+    IF NOT EXISTS (SELECT 1 FROM genisis.WS_DRSeq WITH (UPDLOCK, HOLDLOCK) WHERE Payor = @payor)
+    BEGIN
+        INSERT genisis.WS_DRSeq (DRSeq, Payor) VALUES (1, @payor);
+        SET @seq = 1;
+    END
+    ELSE
+        UPDATE genisis.WS_DRSeq SET @seq = DRSeq = DRSeq + 1 WHERE Payor = @payor;
+
+    SET @number = N'D' + @payor + CASE WHEN @seq > 99999 THEN CAST(@seq AS nvarchar(10)) ELSE RIGHT(N'00000' + CAST(@seq AS nvarchar(10)), 5) END;
+    UPDATE genisis.WS_Claim SET DebitCreditRefNo = @number, DebitCreditDate = CAST(CAST(GETDATE() AS date) AS datetime)
+    WHERE CASNumber = @cas AND ClaimVersion = @version;
+    SELECT 0 AS Result, @number AS Number;
+END
+GO
+
+-- cmdExcLetter_Click / bookmark: the excess record of the case (CAS_Excess), the one saved for the version when there is one, else the latest, with the amounts as numbers
+-- (they are text in the table: "-" or an amount), the hospital's contact and fax, and the member details the letter prints.
+CREATE OR ALTER PROCEDURE genisis.WorksheetExcess_Get
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1)
+        RTRIM(e.EXCNumber) AS ExcessNo, e.EXCDate AS ExcessDate, RTRIM(e.INVNo) AS InvoiceNo, genisis.Worksheet_Amount(e.INVAmt) AS InvoiceAmount,
+        genisis.Worksheet_Amount(e.EXCBoardAmt) AS RoomAndBoard, genisis.Worksheet_Amount(e.EXCICUAmt) AS Icu, genisis.Worksheet_Amount(e.EXCServices) AS Services,
+        genisis.Worksheet_Amount(e.EXCTheatre) AS Theatre, genisis.Worksheet_Amount(e.EXCSurgicalAmt) AS Surgical, genisis.Worksheet_Amount(e.EXCAna) AS Anaesthetist,
+        genisis.Worksheet_Amount(e.EXCPhysician) AS Physician, genisis.Worksheet_Amount(e.EXCAmbulance) AS Ambulance, genisis.Worksheet_Amount(e.EXCTax) AS Tax,
+        genisis.Worksheet_Amount(e.EXCGuardianAmt) AS Guardian, genisis.Worksheet_Amount(e.EXCMedical) AS MedicalReport, genisis.Worksheet_Amount(e.EXCAdmin) AS Admin,
+        genisis.Worksheet_Amount(e.EXCBoardTaxAmt) AS RoomAndBoardTax, genisis.Worksheet_Amount(e.EXCICUTaxAmt) AS IcuTax, genisis.Worksheet_Amount(e.EXCLodgerTaxAmt) AS LodgerTax,
+        genisis.Worksheet_Amount(e.EXCOthers1) AS Others, RTRIM(e.EXCOthersDesc) AS OthersDescription,
+        genisis.Worksheet_Amount(e.EXCTotalExceed) AS LimitExceeded, genisis.Worksheet_Amount(e.EXCCoPayment) AS CoPayment, genisis.Worksheet_Amount(e.EXCUndExcess) AS UndertakenExcess,
+        RTRIM(h.HOSContact) AS HospitalContact, RTRIM(h.HOSFaxNo) AS HospitalFax,
+        RTRIM(v.MBMEmployeeNo) AS StaffNo, RTRIM(v.MBMCostCenter) AS CostCenter, RTRIM(v.MBMDepartment) AS Department,
+        RTRIM(CASE WHEN RTRIM(v.MBMPatientCovID) <> N'00' AND ISNULL(RTRIM(cp.MBMCICBCPPNo), N'') <> N'' THEN cp.MBMCICBCPPNo ELSE v.MBMIcBcPp END) AS PatientIc,
+        RTRIM(v.PLNExcessPrivate) AS ExcessTemplate
+    FROM genisis.WS_ExcessLetter e
+    LEFT JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = e.CASNumber AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL
+    LEFT JOIN dbo.MBMCoveredPersons cp WITH (NOLOCK) ON cp.MBMCNumber = v.MBMNumber AND cp.MBMCCoverID = v.MBMPatientCovID
+    LEFT JOIN dbo.HOS h WITH (NOLOCK) ON h.HOSCode = v.CASHOSCode
+    WHERE e.CASNumber = @cas
+    ORDER BY CASE WHEN e.ClaimVersion = @version THEN 0 ELSE 1 END, e.EXCDate DESC;
+END
+GO
+
+-- cmdExcLetter_Click, after the letter is made: the case is marked as having had its excess letter (tblRecord.ExcessLetter = 'Y').
+CREATE OR ALTER PROCEDURE genisis.WorksheetExcess_MarkIssued
+    @cas nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_tblRecord SET ExcessLetter = 'Y' WHERE CaseNo = @cas;
+    SELECT @@ROWCOUNT AS Marked;
+END
+GO
+
+-- ===== main/300_worksheet_final_lg.sql =====
+-- Worksheet > Worksheet Adjustment (legacy frmWorksheetAdj2013), step 3: Final LG (cmdFinalLG_Click). The guarantee letter itself is issued by the same code as Case
+-- Adjustment's (CASLG, LG number, notification); what the worksheet adds, in the same transaction, is this: the invoices of the version carry the LG number
+-- (UpdateInvoiceLG) and the case is marked "FINAL GL Issued" with its worksheet done (tblRecord IsLGissued, IsWSdone, CaseProgress).
+CREATE OR ALTER PROCEDURE genisis.WorksheetFinalLg_Mark
+    @cas nvarchar(30), @version int, @lgNumber nvarchar(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_ClaimInvoice SET LGReference = @lgNumber
+    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
+    UPDATE genisis.Maint_tblRecord SET IsLGissued = '1', IsWSdone = '1', CaseProgress = N'FINAL GL Issued' WHERE CaseNo = @cas;
+END
+GO
+
+-- ===== main/310_worksheet_plan_limits.sql =====
+-- Worksheet calculation engine, step 4: the limits the plan fixes (display_benefit of the Registration form). The benefit rows (BNF) of the plan the desktop reads, the row with the latest
+-- effective date up to its bound for each benefit code. Which plan, in the desktop's order:
+--   1. a case with a take-over plan (CAS.CASTakeOverPlan): that plan and the insured type, whatever the health type and date;
+--   2. a member with a new plan after renewal (MBMNewPlanCode): the current plan with rows up to the payor effective date when the patient was admitted on or before it, otherwise
+--      the new plan with rows up to the new policy effective date;
+--   3. a dependant with a plan of their own (MBMCPLNCode): that plan, any date;
+--   4. otherwise the member's plan, any date.
+-- Not ported: the top-up policy's own plan.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_PlanBenefits
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @plancode nvarchar(20), @ins nvarchar(5), @hlt nvarchar(5), @bound datetime, @anyHealthType bit = 0;
+    DECLARE @own nvarchar(20), @dependant nvarchar(20), @newPlan nvarchar(20), @takeOver nvarchar(20), @patient nvarchar(2), @adm datetime, @payorEff datetime, @newEff datetime;
+    SELECT TOP (1)
+        @own = RTRIM(v.PLNCode), @dependant = RTRIM(v.MBMCPLNCode), @newPlan = RTRIM(v.MBMNewPlanCode), @patient = v.MBMPatientCovID,
+        @ins = RTRIM(v.INSCode), @hlt = RTRIM(v.HLTCode), @adm = v.CASDateAdmitted, @payorEff = v.MBMPayorEffDate, @newEff = v.MBMNewPolEffDate,
+        @takeOver = RTRIM(c.CASTakeOverPlan)
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    JOIN dbo.CAS c ON c.CASNumber = v.CASNumber
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+
+    IF ISNULL(@takeOver, N'') <> N'' BEGIN SET @plancode = @takeOver; SET @anyHealthType = 1; END
+    ELSE IF ISNULL(@newPlan, N'') <> N''
+    BEGIN
+        IF @adm <= @payorEff BEGIN SET @plancode = @own; SET @bound = @payorEff; END
+        ELSE BEGIN SET @plancode = @newPlan; SET @bound = @newEff; END
+    END
+    ELSE IF @patient <> N'00' AND ISNULL(@dependant, N'') <> N'' SET @plancode = @dependant;
+    ELSE SET @plancode = @own;
+
+    SELECT x.Code, x.Days, x.Claimable, x.[Limit]
+    FROM (SELECT RTRIM(b.BNFCode) AS Code, RTRIM(b.BNFNoOfDays) AS Days, RTRIM(b.BNFClaimAbleAmount) AS Claimable, LTRIM(RTRIM(b.BNFRMPerDis)) AS [Limit],
+                 ROW_NUMBER() OVER (PARTITION BY b.BNFCode ORDER BY b.BNFEffDate DESC) AS rn
+          FROM dbo.BNF b
+          WHERE b.PLNCode = @plancode AND b.INSCode = @ins AND (@anyHealthType = 1 OR b.HLTCode = @hlt)
+            AND (@bound IS NULL OR b.BNFEffDate <= @bound)) x
+    WHERE x.rn = 1
+    ORDER BY x.Code;
+END
+GO
+
+-- ===== main/320_worksheet_plan_terms.sql =====
+-- Worksheet calculation engine, step 5: the plan's co-payment terms. The plan row (PLN) of the patient's plan, payor and health type: the co-insurance percentage and its sign
+-- (PLNCoINSPerc, PLNCoInsSign: a share of the approved total the member pays), and the Room & Board co-payment percentage with its indicator (PLNCoPayPerc, CoPaymentInd).
+-- The plan is the covered person's own when the patient is a dependant and has one, otherwise the member's.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_PlanTerms
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1)
+        ISNULL(p.PLNCoINSPerc, 0) AS CoInsurancePercent, RTRIM(p.PLNCoInsSign) AS CoInsuranceSign,
+        ISNULL(p.PLNCoPayPerc, 0) AS RoomCoPayPercent, RTRIM(p.CoPaymentInd) AS CoPaymentInd
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    JOIN dbo.PLN p ON p.PLNCode = RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END)
+                  AND p.PAYCode = v.PAYCode AND p.HLTCode = v.HLTCode
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+END
+GO
+
+-- ===== main/330_worksheet_balance_limit.sql =====
+-- Worksheet calculation engine, step 5b: the member's available limit (the balance limit of the Registration screen). Whose limit it is depends on the plan's annual limit type
+-- (AnnualLimit.SuppLimitStatus, the latest row up to the admission date): for the principal, or a patient with cover 00, it is the member's (MBM.MBMAvailableLimit); for a dependant
+-- with type B it is the first covered person's (cover 01), with type C the patient's own (MBMCoveredPersons.MBMCAvailableLimit), and with any other type (A, or no row) the member's.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_BalanceLimit
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1)
+        CASE WHEN RTRIM(v.MBMMemberType) = N'P' OR v.MBMPatientCovID = N'00' THEN m.MBMAvailableLimit
+             WHEN a.SuppLimitStatus = N'B' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = N'01')
+             WHEN a.SuppLimitStatus = N'C' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = v.MBMPatientCovID)
+             ELSE m.MBMAvailableLimit END AS Balance,
+        RTRIM(a.SuppLimitStatus) AS LimitType
+    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
+    OUTER APPLY (SELECT TOP (1) al.SuppLimitStatus FROM dbo.AnnualLimit al
+                 WHERE al.PLNCode = RTRIM(v.PLNCode) AND al.INSCode = RTRIM(v.INSCode) AND al.AnnualEffDate <= v.CASDateAdmitted ORDER BY al.AnnualEffDate DESC) a
+    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+END
+GO
+
+-- ===== main/340_worksheet_stay_days.sql =====
+-- Worksheet calculation engine, step 7: the days of the stay. The invoices of a worksheet version carry the days they charge for (CLMBoardDay, CLMICUDay; fractional days such
+-- as 7.5 exist), and the days of the worksheet are their sum: the saved room days (ClaimLimit.CLMBoardDays) equal it for 98.6 per cent of the versions, the ICU days for 99.4 per cent.
+CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_StayDays
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(i.CLMBoardDay), 0) AS RoomDays, ISNULL(SUM(i.CLMICUDay), 0) AS IcuDays
+    FROM genisis.WS_CASInvoice i
+    WHERE i.CASNumber = @cas AND i.INVWSversion = CAST(@version AS nvarchar(10));
+END
+GO
+
+-- ===== main/350_worksheet_calculation.sql =====
+-- Worksheet calculation screen: what the page needs besides the engine. The captions of the 29 grid rows (the same list the Enquiry grid uses), the figures the desktop saved for a
+-- version (to show beside the calculated ones), and the versions a case has.
+
+CREATE OR ALTER PROCEDURE genisis.WorksheetCalc_Captions
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT n.Slot, n.BenefitCode, n.Category, n.Benefit
+    FROM (
+        SELECT CAST(ROW_NUMBER() OVER (ORDER BY BNFSubCode) AS int) AS Slot, RTRIM(BNFSubCode) AS BenefitCode, RTRIM(CATDescription) AS Category, RTRIM(BNFSubName) AS Benefit
+        FROM dbo.view_bnf_cat_subcat WHERE BNFSubCode NOT IN (N'GenSurgBen', N'ine001')
+        UNION ALL SELECT 26, N'', N'Others', N'Others - No Co-Pay'
+        UNION ALL SELECT 27, N'', N'Service Tax', N'Service Tax - R&B'
+        UNION ALL SELECT 28, N'', N'Service Tax', N'Service Tax - ICU'
+        UNION ALL SELECT 29, N'', N'Service Tax', N'Service Tax - Lodger'
+    ) n
+    ORDER BY n.Slot;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.WorksheetCalc_Saved
+    @cas nvarchar(15), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) ISNULL(CLMTotalApproved, 0) AS TotalApproved, ISNULL(CLMLimitExceeded, 0) AS LimitExceeded, ISNULL(CLMCoPayRB, 0) AS CoPayment, CLMPreviousBalance AS PreviousBalance
+    FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.WorksheetCalc_Versions
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ClaimVersion AS Version FROM genisis.WS_Claim WHERE CASNumber = @cas ORDER BY ClaimVersion;
 END
 GO
 

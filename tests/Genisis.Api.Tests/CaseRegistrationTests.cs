@@ -181,6 +181,26 @@ public class CaseRegistrationDatabaseTests
     }
 
     [Fact]
+    public async Task Member_without_policy_dates_loads_instead_of_failing_and_cannot_register()
+    {
+        if (MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(MainDb);
+        await using var conn = Db().MainDb();
+        await conn.OpenAsync();
+        // Roughly half of HISDB's members have no payor effective / expiry date (members registered through the web, imports).
+        var member = await conn.ExecuteScalarAsync<string>(
+            "SELECT TOP (1) RTRIM(m.MBMNumber) FROM dbo.MBM m JOIN dbo.MBMTwo t ON t.MBMNumber = m.MBMNumber WHERE m.MBMPayorEffDate IS NULL AND m.MBMPayorExpDate IS NULL AND m.MBMNumber LIKE 'DCHA%'");
+        Assert.NotNull(member);
+
+        var view = await Service().LoadMemberAsync(member);
+
+        Assert.NotNull(view);
+        Assert.False(view.CanRegister);
+        Assert.Contains(view.Alerts, a => a.Text.StartsWith("Membership has no policy period"));
+        Assert.DoesNotContain(view.Alerts, a => a.Text == "Membership has been expired!");
+    }
+
+    [Fact]
     public async Task Save_writes_case_tables_and_rolls_back()
     {
         if (MainDb is null) return;

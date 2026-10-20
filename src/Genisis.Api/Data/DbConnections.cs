@@ -2,12 +2,17 @@ using Microsoft.Data.SqlClient;
 
 namespace Genisis.Api.Data;
 
+/// <summary>Creates connections to the three databases from the <c>ConnectionStrings</c> section (all on one server, Windows authentication).</summary>
+/// <param name="configuration">Application configuration.</param>
 public class DbConnections(IConfiguration configuration)
 {
     private string? _maintenanceDbName;
 
+    /// <summary>A new, unopened connection to the main database (HISDB).</summary>
     public SqlConnection MainDb() => Open("MainDb");
+    /// <summary>A new, unopened connection to the maintenance database (HISMaintenance).</summary>
     public SqlConnection Maintenance() => Open("Maintenance");
+    /// <summary>A new, unopened connection to the worksheet database (HISWorkSheet).</summary>
     public SqlConnection WorkSheet() => Open("WorkSheet");
 
     /// <summary>
@@ -32,6 +37,7 @@ public class DbConnections(IConfiguration configuration)
         return _maintenanceDbName = QuoteName(name);
     }
 
+    /// <summary>Quotes a database or object name for use in SQL text (<c>QUOTENAME</c>).</summary>
     public static string QuoteName(string name) => "[" + name.Replace("]", "]]") + "]";
 
     private SqlConnection Open(string name) => new(ConnectionString(name));

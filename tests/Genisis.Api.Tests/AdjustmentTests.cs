@@ -129,7 +129,7 @@ public class AdjustmentTests
         r.Covered[0].Allergic = "PENICILLIN";
 
         var result = await AdjustmentService.SaveAsync(conn, tx, number, r, "TEST");
-        Assert.Equal("Updated Sucessfully", result.Message);
+        Assert.Equal("Updated Sucessfully", result!.Message);
         var after = (await AdjustmentService.LoadAsync(conn, tx, number))!;
         Assert.Equal(("1 JALAN TEST", "note from test", "A@B.C", "A"), (after.Member.Address1, after.Member.MgmtNotes, after.Member.Email, after.Member.Status));
         Assert.Equal("PENICILLIN", after.Covered[0].Allergic);

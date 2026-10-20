@@ -6,7 +6,9 @@ public interface ITrackingService
 {
     Task<TrackingMeta> GetMetaAsync(CancellationToken cancellationToken);
 
+    /// <param name="query">The report and its filters.</param>
     /// <param name="rowLimit">Rows to return (the totals always cover every row); <c>null</c> returns all rows.</param>
+    /// <param name="cancellationToken">Cancels the report.</param>
     Task<TrackingResult> RunAsync(TrackingQuery query, int? rowLimit, CancellationToken cancellationToken);
 
     Task<TrackingExport> ExportAsync(TrackingQuery query, CancellationToken cancellationToken);

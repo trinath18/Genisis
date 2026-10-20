@@ -164,7 +164,7 @@ belongs to. Every write runs in one transaction (the desktop ran most of them wi
 | Generate Membership ASCII (Pluto) | `/api/membership/pluto/ascii` | `frmMembershipASCIIPluto` | Fixed-width file of one payor and bordx date; `MBMGuaRenewal` is not a staging column, so its 5 characters are blank. |
 | Card Sending Mode | `/api/membership/card-control` | `frmMembershipCardControl` | Sending mode / sent date / doc reference on `MBMTwo` (cover 00) or `MBMCoveredPersonsTwo`. The mode filter is an exact match (the desktop used `<=`). |
 | Deletion | `/api/membership/deletion` | `frmDeleteMembers` | Copies to the archive database (`@ArchiveDb`, synonyms `genisis.Arch_*`) then deletes from MBM / MBMOthers / MBMCoveredPersons. Columns that moved to the `*Two` tables are read from there. |
-| Leaflet & Card | `/api/membership/leaflet-card` | `frmMainReport` | PDFs (PDFsharp-MigraDoc 6.2.4, MIT) in place of the Crystal reports `Leaflet.rpt` / `MBMCardPrinting.rpt`. Printed flags are not tracked: `dbo.MBMPrinting` does not exist. |
+| Leaflet & Card | `/api/membership/leaflet-card` | `frmMainReport` | PDFs (PDFsharp-MigraDoc 6.2.4, MIT) in place of the Crystal reports `Leaflet.rpt` / `MBMCardPrinting.rpt`. Printed flags are not tracked: `dbo.MBMPrinting` does not exist. On Windows the PDFs use Windows fonts; on a Linux host install `fonts-dejavu-core` (read by `LeafletCard/PdfFontResolver.cs`). |
 | Temp MBM Reg | `/api/membership/temp-registration/{no}` | `FrmTempMBMReg` | An older copy of Registration whose extra is loading a previous membership as a renewal; returns the pre-filled request, saved with the Registration endpoint. |
 | Temp MBM Adj | `/api/membership/temp-adjustment/{no}` | `FrmTempMBMAdj` | An older copy of Adjustment limited to temporary payors (`PAY.tempPayIND = 'Y'`); the UI opens the Adjustment editor for those memberships only. |
 ## Maintenance > Benefits
@@ -257,6 +257,14 @@ The update runs in one transaction (the desktop ran ~15 uncommitted writes acros
 "Upd &Add" button (no handler in the desktop), the SOAP device push, and client-side folder browsing (replaced by
 document list/upload/download endpoints). See `docs/case-adjustment-migration.md` for the full mapping.
 
+## Case screens (Panel Hospitals, Non-Disclosure, Pay & Claim, MMA/CPT, Audit Review, Transfer, Listing, Claim/Case ASCII)
+
+Nine more Case menu items are served under `/api/case/{panel-hospitals,non-disclosure,pay-claim,mma-cpt,audit-review,transfer,listing,claim-ascii,case-ascii}`
+(plus `GET /api/case/payors`). Writes run in one transaction across HISDB / HISMaintenance / HISWorkSheet through synonyms. The two ASCII exports write the
+payor file to `Ascii:ClaimFolder` / `Ascii:CaseFolder` (default `ClaimASCI` / `CaseASCII` under `Documents:RootPath`) and the UI downloads it.
+Endpoint-by-endpoint mapping, SQL objects, access positions and every deliberate difference from the desktop are in
+[docs/case-remaining-screens-backend.md](docs/case-remaining-screens-backend.md).
+
 ## Database procedures
 
 The API uses stored procedures in a `genisis` schema. Before starting a new version, run `sql/genisis-main.sql` on the
@@ -270,8 +278,19 @@ main database and `sql/genisis-maintenance.sql` on the maintenance database in S
 
 Produces `publish\Genisis\Genisis.Api.exe` with the UI in `wwwroot`. No .NET install is needed on the target PC.
 
+## Logging and errors
+
+Serilog writes to the console and to `logs/genisis-.log` (daily, 30 files; configure in the `Serilog` section). Every request is logged with its status, time and user; sign-ins are audited.
+Controllers do not catch exceptions: services throw `NotFoundException` / `ConflictException` / `BusinessRuleException` (400 / 404 / 409 with the message to show) and
+`ApiExceptionHandler` maps database errors (too-long text, deadlock, timeout, missing procedures) and hides everything else behind "Server error. Check the API log for details."
+See [docs/exception-handling-and-logging.md](docs/exception-handling-and-logging.md).
+
 ## Tests
 
 ```
 dotnet test
 ```
+
+Unit, service (fake repositories), integration (`WebApplicationFactory`) and architecture tests need no database; the database tests run when `GENISIS_TEST_MAINDB`
+(and `GENISIS_TEST_MAINTENANCE`, `GENISIS_TEST_WORKSHEET`) are set and roll every write back. CI: `.github/workflows/ci.yml`.
+Start with [docs/onboarding.md](docs/onboarding.md) and [docs/architecture.md](docs/architecture.md).

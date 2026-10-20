@@ -81,4 +81,4 @@ public record RegistrationQuote(
 
 public record RegistrationResult(string MembershipNo, string SecurityCode, RegistrationQuote Quote);
 
-public class RegistrationException(string message) : Exception(message);
+public class RegistrationException(string message) : Genisis.Api.Common.BusinessRuleException(message);

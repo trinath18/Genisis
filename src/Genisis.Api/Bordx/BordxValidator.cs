@@ -6,7 +6,9 @@ public static class BordxValidator
     public const string FileRequired = "Please Enter Filename";
     public const string NotATextFile = "The file is not a text bordereaux file.";
 
+    /// <param name="settings">The bordx format settings of the payor.</param>
     /// <param name="header">First line of the file, or <c>null</c> when the file is empty.</param>
+    /// <param name="upload">True when the file is being uploaded, false when it is only being checked.</param>
     public static string? Validate(BordxSettings settings, BordxLine? header, bool upload)
     {
         if (header is null) return "The file is empty.";

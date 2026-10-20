@@ -1,10 +1,18 @@
+using FluentValidation;
 using Genisis.Api.Auth;
+using Genisis.Api.Case;
+using Genisis.Api.Common;
 using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
+using Genisis.Api.Worksheet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Centralized logging: console + rolling files, configured in the "Serilog" section of appsettings.json.
+builder.Host.UseSerilog((context, services, logging) => logging.ReadFrom.Configuration(context.Configuration).Enrich.FromLogContext());
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.AddSingleton<TokenService>();
@@ -43,6 +51,10 @@ builder.Services.AddScoped<Genisis.Api.Case.CaseRegistrationService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseDocumentsService>();
 builder.Services.AddScoped<Genisis.Api.Case.CaseAdjustmentService>();
 builder.Services.AddSingleton<Genisis.Api.Case.CaseFilesService>();
+builder.Services.AddCaseScreens();
+builder.Services.AddWorksheetScreens();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
@@ -65,10 +77,12 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(corsOrigins)
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ProblemDetailsExceptionHandler>();
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>());
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    var xmlDocs = Path.Combine(AppContext.BaseDirectory, "Genisis.Api.xml");
+    if (File.Exists(xmlDocs)) options.IncludeXmlComments(xmlDocs);
     var bearer = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -93,19 +107,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
-{
-    var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
-    context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Genisis.Api")
-        .LogError(error, "Unhandled error processing {Method} {Path}", context.Request.Method, context.Request.Path);
-    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-    await context.Response.WriteAsJsonAsync(new
-    {
-        message = error is Microsoft.Data.SqlClient.SqlException { Number: StoredProcedures.MissingProcedure }
-            ? "The database is missing the stored procedures this version needs. Run sql/genisis-main.sql and sql/genisis-maintenance.sql (see sql/README.md)."
-            : "Server error. Check the API log for details.",
-    });
-}));
+app.UseSerilogRequestLogging(options =>
+    options.EnrichDiagnosticContext = (diagnostics, http) => diagnostics.Set("User", http.User.Identity?.Name ?? "anonymous"));
+app.UseExceptionHandler();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

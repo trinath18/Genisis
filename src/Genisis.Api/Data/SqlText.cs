@@ -1,5 +1,6 @@
 namespace Genisis.Api.Data;
 
+/// <summary>Helpers for building SQL Server LIKE patterns from user text.</summary>
 public static class SqlText
 {
     /// <summary>Makes user text match literally inside a SQL Server LIKE pattern.</summary>

@@ -159,3 +159,34 @@ END';
     EXEC (@uploadSql);
 END
 GO
+
+-- ===== Archive database (Membership > Deletion; optional: skipped when it does not exist)
+-- HISDMArchive on one server, HISDBArchive on another (the first that exists, as 000_setup.sql chooses). Read and write: Deletion archives the removed membership through the genisis.Arch_*
+-- synonyms. A restore of the archive database replaces its users, so run this again after one.
+-- Also after a restore: the clustered primary keys of MBMArchive and MBMCoveredPersonsArchive can arrive disabled (the backup carries them that way), which makes those tables unreadable;
+-- rebuild them: ALTER INDEX PK_MBMArchive ON <archive>.dbo.MBMArchive REBUILD; ALTER INDEX PK_MBMCoveredPersonsArchive ON <archive>.dbo.MBMCoveredPersonsArchive REBUILD;
+GO
+DECLARE @archiveDb sysname = CASE WHEN DB_ID(N'HISDMArchive') IS NOT NULL THEN N'HISDMArchive' WHEN DB_ID(N'HISDBArchive') IS NOT NULL THEN N'HISDBArchive' END;
+IF @archiveDb IS NOT NULL
+BEGIN
+    DECLARE @archiveSql nvarchar(max) = N'USE ' + QUOTENAME(@archiveDb) + N';
+DECLARE @login sysname = N''apiuser'', @q sysname, @s nvarchar(max) = N'''';
+SET @q = QUOTENAME(@login);
+IF USER_ID(@login) IS NULL
+BEGIN
+    SET @s = N''CREATE USER '' + @q + N'' FOR LOGIN '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datareader'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datareader ADD MEMBER '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datawriter'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datawriter ADD MEMBER '' + @q;
+    EXEC (@s);
+END';
+    EXEC (@archiveSql);
+END
+GO

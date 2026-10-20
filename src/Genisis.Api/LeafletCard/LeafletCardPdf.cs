@@ -23,8 +23,9 @@ public static class LeafletCardPdf
 
     static LeafletCardPdf()
     {
-        // PDFsharp 6 needs a font source; the API runs on Windows, whose fonts are used.
+        // PDFsharp 6 needs a font source: Windows fonts on Windows, the system font folders elsewhere (Linux hosts and CI runners).
         if (OperatingSystem.IsWindows()) GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+        else GlobalFontSettings.FontResolver ??= new PdfFontResolver();
     }
 
     private static string Date(DateTime? value) => value?.ToString(DateFormat, CultureInfo.InvariantCulture) ?? "";

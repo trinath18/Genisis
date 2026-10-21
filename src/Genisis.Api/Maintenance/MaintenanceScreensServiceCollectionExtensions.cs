@@ -1,4 +1,5 @@
 using Genisis.Api.Maintenance.AccountTransaction;
+using Genisis.Api.Maintenance.MmaEntry;
 using Genisis.Api.Maintenance.Security;
 
 namespace Genisis.Api.Maintenance;
@@ -15,6 +16,8 @@ public static class MaintenanceScreensServiceCollectionExtensions
         services.AddScoped<DepartmentService>();
         services.AddSingleton<ISecurityUserRepository, SecurityUserRepository>();
         services.AddScoped<SecurityUserService>();
+        services.AddSingleton<IMmaEntryRepository, MmaEntryRepository>();
+        services.AddScoped<MmaEntryService>();
         return services;
     }
 }

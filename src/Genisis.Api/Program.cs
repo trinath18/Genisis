@@ -85,6 +85,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     var xmlDocs = Path.Combine(AppContext.BaseDirectory, "Genisis.Api.xml");
     if (File.Exists(xmlDocs)) options.IncludeXmlComments(xmlDocs);
+    // Several screens have request / result types with the same class name (e.g. Membership and Case MmaProcedureRequest);
+    // schema ids carry the namespace so they stay unique.
+    options.CustomSchemaIds(Genisis.Api.Common.SwaggerSchemaIds.For);
     var bearer = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",

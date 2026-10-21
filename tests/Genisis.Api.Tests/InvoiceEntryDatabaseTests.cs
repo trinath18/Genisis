@@ -30,7 +30,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var (cas, hospital) = await ACaseAsync(session);
         var service = Service();
         var form = Form(cas, "H", hospital);
@@ -62,7 +62,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var (cas, _) = await ACaseAsync(session);
         foreach (var (receipt, followUp) in new[] { (true, true), (true, false), (false, true), (false, false) })
         {
@@ -83,7 +83,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var (cas, hospital) = await ACaseAsync(session);
         var other = await session.Connection.ExecuteScalarAsync<string>("SELECT TOP (1) RTRIM(HOSCode) FROM dbo.HOS WHERE RTRIM(HOSCode) <> @hospital ORDER BY HOSCode", new { hospital }, session.Transaction);
         var form = Form(cas, "H", other!);
@@ -103,7 +103,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var (cas, hospital) = await ACaseAsync(session);
         var form = Form(cas, "H", hospital);
         await Service().SaveAsync(session, form, "ZZTEST");
@@ -123,7 +123,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var (cas, hospital) = await ACaseAsync(session);
         var service = Service();
         var saved = await service.SaveAsync(session, Form(cas, "H", hospital), "ZZTEST");
@@ -149,7 +149,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var used = await session.Connection.QueryFirstAsync<(string Cas, int Index)>(
             "SELECT TOP (1) RTRIM(i.CASNumber), i.INVIndex FROM genisis.WS_ClaimInvoice i JOIN dbo.CAS c ON c.CASNumber = i.CASNumber JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber WHERE i.INVWSed = 1 AND i.CASNumber NOT LIKE 'ZZ%' " +
             "AND (i.INVBordxRefNo IS NULL OR RTRIM(i.INVBordxRefNo) = '') AND c.CASDischargeDate IS NOT NULL ORDER BY i.INVIndex", transaction: session.Transaction);
@@ -171,7 +171,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         foreach (var (synonym, expected) in InvoiceProcedures.Parameters)
         {
             var live = (await session.Connection.QueryAsync<string>(
@@ -183,12 +183,76 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
         Assert.Equal(16, InvoiceProcedures.Parameters.Count);
     }
 
+    private static string Shown(InvoiceStored row, string tableAndColumn)
+    {
+        var (table, column) = (tableAndColumn.Split('.')[0], tableAndColumn.Split('.')[1]);
+        var data = table switch { "ClaimInvoice" => row.Header, "ClaimInvoiceActual" => row.Actual, "ClaimInvoiceActualOthers" => row.Others, _ => row.NotCover };
+        return data is not null && data.TryGetValue(column, out var v) ? Convert.ToString(v) ?? "null" : "?";
+    }
+
+    private static async Task<int> CountAsync(string invoiceNo)
+    {
+        await using var read = await TestDb.Sessions().OpenAsync();
+        return await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ClaimInvoice WHERE InvNo = @invoiceNo", new { invoiceNo }, read.Transaction);
+    }
+
+    /// <summary>
+    /// The tests write in a session that is rolled back, and the real save is one transaction: an uncommitted session leaves nothing, and a save that fails after the header and the amounts are written
+    /// (a number of days that no column holds) leaves nothing either. The first version of these tests opened read-only sessions, which have no transaction, and left 50 invoices on a real case.
+    /// </summary>
+    [Fact]
+    public async Task What_a_test_session_writes_is_rolled_back_and_a_save_that_fails_halfway_leaves_nothing_behind()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        var number = "ZZ-" + Guid.NewGuid().ToString("N")[..10];
+        string cas, hospital;
+        await using (var session = await TestDb.Sessions().BeginAsync())
+        {
+            (cas, hospital) = await ACaseAsync(session);
+            Assert.NotNull((await Service().SaveAsync(session, Form(cas, "H", hospital) with { InvoiceNo = number }, "ZZTEST")).Index);
+            Assert.Equal(1, await session.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ClaimInvoice WHERE InvNo = @number", new { number }, session.Transaction));
+        }
+        Assert.Equal(0, await CountAsync(number));
+
+        var failing = Form(cas, "H", hospital) with { InvoiceNo = number };
+        failing.Amounts["CLMBoardDay"] = 300000m;
+        try
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => Service().SaveAsync(failing, "ZZTEST"));
+            Assert.Equal(0, await CountAsync(number));
+        }
+        finally
+        {
+            await using var cleanup = await TestDb.Sessions().BeginAsync();
+            foreach (var key in await cleanup.Connection.QueryAsync<int>("SELECT INVIndex FROM genisis.WS_ClaimInvoice WHERE InvNo = @number", new { number }, cleanup.Transaction))
+                await cleanup.Connection.ExecuteAsync("EXEC genisis.Invoice_Remove @key", new { key }, cleanup.Transaction);
+            await cleanup.CommitAsync();
+        }
+    }
+
+    [Fact]
+    public async Task An_empty_remark_adds_no_row_to_a_case_that_has_none_and_a_remark_is_kept_once_per_case()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        await using var session = await TestDb.Sessions().BeginAsync();
+        var (cas, hospital) = await ACaseAsync(session);
+        await session.Connection.ExecuteAsync("DELETE FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas", new { cas }, session.Transaction);
+        int Rows() => session.Connection.ExecuteScalar<int>("SELECT COUNT(*) FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas", new { cas }, session.Transaction);
+        await Service().SaveAsync(session, Form(cas, "H", hospital) with { Remarks = "" }, "ZZTEST");
+        Assert.Equal(0, Rows());
+        await Service().SaveAsync(session, Form(cas, "H", hospital) with { Remarks = "first" }, "ZZTEST");
+        await Service().SaveAsync(session, Form(cas, "H", hospital) with { Remarks = "second" }, "ZZTEST");
+        Assert.Equal((1, "second"), (Rows(), session.Connection.ExecuteScalar<string>("SELECT Remarks FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas", new { cas }, session.Transaction)));
+    }
+
     [Fact]
     public async Task Every_column_the_form_writes_is_a_column_of_its_table_in_any_capitals()
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         foreach (var (table, columns) in new[] { ("ClaimInvoiceActual", InvoiceFields.ActualColumns), ("ClaimInvoiceActualGST", InvoiceFields.ActualColumns), ("ClaimInvoiceActualOthers", InvoiceFields.OthersColumns), ("ClaimInvoiceNotCover", InvoiceFields.NotCoverColumns) })
         {
             var live = (await session.Connection.QueryAsync<string>("SELECT c.name FROM HISWorkSheet.sys.columns c WHERE c.object_id = OBJECT_ID(@name)", new { name = "HISWorkSheet.dbo." + table }, session.Transaction)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -206,7 +270,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
     {
         if (TestDb.MainDb is null) return;
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
-        await using var session = await TestDb.Sessions().OpenAsync();
+        await using var session = await TestDb.Sessions().BeginAsync();
         var sample = (await session.Connection.QueryAsync<(string Cas, int Index)>(
             "SELECT TOP (80) RTRIM(i.CASNumber), i.INVIndex FROM genisis.WS_ClaimInvoice i JOIN dbo.CAS c ON c.CASNumber = i.CASNumber JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber " +
             "WHERE ISNULL(i.INVWSed, 0) = 0 AND (i.INVBordxRefNo IS NULL OR RTRIM(i.INVBordxRefNo) = '') AND i.CASNumber NOT LIKE 'ZZ%' AND c.CASDischargeDate IS NOT NULL AND i.InvNo IS NOT NULL AND RTRIM(i.InvNo) <> '' " +
@@ -237,6 +301,7 @@ public class InvoiceEntryDatabaseTests(ITestOutputHelper output)
                     if (left != right && !(decimal.TryParse(left, out var l) && decimal.TryParse(right, out var r) && Math.Abs(l - r) < 0.0051m) && !(left == "" && decimal.TryParse(right, out var z) && z == 0)) bad.Add($"{name}.{column}");
                 }
             if (bad.Count == 0) same++;
+            else output.WriteLine($"{cas} {index}: {string.Join(", ", bad)} (before {string.Join(", ", bad.Select((c) => Shown(before, c)))}; after {string.Join(", ", bad.Select((c) => Shown(after, c)))})");
             foreach (var column in bad) differences[column] = differences.GetValueOrDefault(column) + 1;
         }
         output.WriteLine($"{sample.Count} invoices re-saved: {same} unchanged, {refused} refused; columns that changed: {string.Join(", ", differences.OrderByDescending((d) => d.Value).Select((d) => $"{d.Key} x{d.Value}"))}");

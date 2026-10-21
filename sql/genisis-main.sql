@@ -6827,13 +6827,15 @@ BEGIN
 END
 GO
 
--- SaveINVRemarks: one remark per case, added or replaced.
+-- SaveINVRemarks: one remark per case, added or replaced. An empty remark is not added for a case that has none (the desktop adds a blank row; it means nothing and every invoice save would leave one).
 CREATE OR ALTER PROCEDURE genisis.Invoice_SaveRemarks
     @cas nvarchar(15),
     @remarks nvarchar(max)
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas) AND ISNULL(@remarks, N'') = N''
+        RETURN;
     IF EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas)
         UPDATE genisis.WS_ClaimInvoiceRemarks SET Remarks = ISNULL(@remarks, N'') WHERE CASNumber = @cas;
     ELSE

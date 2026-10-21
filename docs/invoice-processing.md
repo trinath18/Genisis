@@ -144,6 +144,24 @@ Loading a saved invoice, saving it again and comparing every column found: the w
 received were reset; three columns (stents, balloons, implants) the snapshot's procedure does not know; saved credits made a "no negative amounts" rule wrong; and an `IsUpdate` flag the update procedure sets (expected).
 Two more were found by the browser: the field kind was sent as a number and not its name (so text fields were drawn as amounts), and the layout classes were used wrongly (one narrow column).
 
+### An incident: the first tests and the first save were not transactional
+
+`IDbSessions.OpenAsync()` is a **read-only** session with no transaction; `BeginAsync()` has one. The invoice save and remove, and every write test, opened `OpenAsync()`. So for about seven test runs:
+
+* **the tests wrote for real**: 50 test invoices (numbers `ZZ-…`, entered by `ZZTEST`) were left on case `ZN00007106`, with all their rows; that case's remark was overwritten with a test text; and **78 real invoices** were re-saved
+  by the re-save test (the update procedure sets `IsUpdate`, the three new columns went from empty to 0, and the invoice amount, the amount to pay and a hospital sum were recomputed on a few);
+* **the product's save was not one transaction** as this document said: a failure halfway would have left a header without its amounts. The save was never deployed; it was only reachable from the local API.
+
+It was found when the number of invoices came out 50 higher than before. **Put right the same day**: a verified backup of `HISWorkSheet` was taken first
+(`HISWorkSheet_before_test_damage_repair.bak`), then in one transaction the 50 test invoices were removed with their rows and the 78 real invoices (and the two remarks) were put back as `HISWorkSheet_backup` has
+them, and the transaction rolls back unless **no row of the six tables differs from the backup any more** (it did not: 0 differ, and 0 still differ after the corrected tests ran). The save and the remove now use
+`BeginAsync()`; `What_a_test_session_writes_is_rolled_back_and_a_save_that_fails_halfway_leaves_nothing_behind` proves a test session leaves nothing and that a save that fails after the header and the amounts are written
+(a number of days no column holds) leaves nothing. **The earlier "80 of 80 unchanged" was therefore not a clean result**: after the first runs had changed real rows, later runs re-saved the changed rows. On clean data it is 79 of 80: invoice
+2656665 of case ST00032453 has a saved `CLMMHospSum` of 435.00 where the rule gives 0; the hospital sums are kept for plans 2 to 5 and new SM plans, and the member's plan now is AF73 (the desktop reads the plan from the member's
+cross-reference row, which this member does not have in `HISMaintenance`), so the plan at the time of the save cannot be known.
+
+Also changed since: an empty remark is no longer added as a blank row for a case that has none (the desktop adds one; every save would leave one).
+
 ## 5. Order of work, and how each step is checked
 
 1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.
@@ -152,8 +170,9 @@ Two more were found by the browser: the field kind was sent as a number and not 
    worksheet has used, and shows the 29 rows. It says plainly that nothing can be added, changed or removed yet. 3 database tests, 15 browser checks.
 3. **Invoice Processing, write side** (done, with the limits below): `POST /api/invoice` (add, or change when `index` is given), `GET /api/invoice/{case}/{index}/form`, `DELETE /api/invoice/{case}/{index}`,
    `POST /api/invoice/calculate`, `GET /api/invoice/fields` and `/lookups`. The checks run in the order of section 2 and the writes are the legacy procedures (through `genisis.WS_*` synonyms) in one
-   transaction. **Checked by saving 80 saved invoices again with their own values: all 80 come back unchanged, column for column, in all four tables** (`Saving_a_saved_invoice_again_leaves_every_column_as_it_was`);
-   that test found several real defects before it passed (see "What the re-save test found").
+   transaction. **Checked by saving 80 saved invoices again with their own values: 79 come back unchanged, column for column, in all four tables** (`Saving_a_saved_invoice_again_leaves_every_column_as_it_was`);
+   the one that changes is a hospital sum saved under a plan the member no longer has (see below). That test found several real defects before it passed (see "What the re-save test found") and, run
+   the first time without a transaction, did real damage (see "An incident").
 4. **Registration save**, routine by routine in the order of section 3: regenerate the saved rows of a version from the engine and compare them with the saved ones column by column, before any of
    it writes to a real database. Registration's grid must let the user change a limit or an approved amount, as the desktop does, because the engine alone reproduces about 69 per cent.
 5. **Approve** reuses 4.

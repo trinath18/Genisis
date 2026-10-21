@@ -188,7 +188,7 @@ public class InvoiceEntryService(IDbSessions sessions, IInvoiceRepository read, 
     /// <param name="userCode">The user entering the invoice.</param>
     public async Task<InvoiceSaveResult> SaveAsync(InvoiceForm form, string userCode)
     {
-        await using var session = await sessions.OpenAsync();
+        await using var session = await sessions.BeginAsync();
         var result = await SaveAsync(session, form, userCode);
         if (result.Index is not null) await session.CommitAsync();
         return result;
@@ -280,7 +280,7 @@ public class InvoiceEntryService(IDbSessions sessions, IInvoiceRepository read, 
     /// <summary>Removes an invoice no worksheet has used. Throws <see cref="NotFoundException"/> when the case has no such invoice and <see cref="BusinessRuleException"/> when a worksheet has used it.</summary>
     public async Task RemoveAsync(string caseNo, int invoiceIndex)
     {
-        await using var session = await sessions.OpenAsync();
+        await using var session = await sessions.BeginAsync();
         await RemoveAsync(session, caseNo, invoiceIndex);
         await session.CommitAsync();
     }

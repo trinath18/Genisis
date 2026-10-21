@@ -327,7 +327,26 @@ Which cases: every case with an invoice that is not yet in a worksheet or has no
 | Cases that have an invoice but no worksheet (Registration candidates) | 0 | 638 (632 with case and member data) |
 | Cases in `HISDB.CAS` | 17,080 | 42,095 |
 
-`HISMaintenance` is still trimmed.
+### More data: `HISMaintenance_actual_backup`
+
+`HISMaintenance_actual_backup` (9.7 GB; the working `HISMaintenance` was 1.7 GB) has the same 129 tables with the same columns and 32 more that are temporary, backup or migration tables (`tmpZurichMigratedClaim`,
+`bckMBMSEQRenew05` and the like) and were not brought. Nine tables have more rows in the backup; the working database has 3 rows more than the backup in `LGSeq`, 2 in `MMAFees` and 3 in `MMAProcedures`
+(written by development work), which an additive copy leaves alone.
+
+Rows were **added only where missing, never changed**, in one transaction, after a verified backup (`HISMaintenance_before_data_restore.bak`), for the cases and members the working databases hold, and the transaction rolls back
+unless the number of working rows that differ from the backup is the same after as before (8, from development work; it was 8):
+
+| Table | Rows added |
+|---|---|
+| `CASLG` (guarantee letters) | 35,156 |
+| `CASCrossReference` | 24,389 |
+| `tblRecord` (case progress; its identity values were kept: working and backup both end at 2,282,038 and none collides) | 10,688 |
+| `MBMCrossReference` | 104,501 |
+| `tbl_member_data_master` | 53,944 |
+| `CASLG_INVEntry` | 0 (already complete) |
+
+Of the 42,095 cases in `HISDB`, 29,228 now have a guarantee-letter row, 23,349 a record and 36,662 a case cross-reference; of the 40,637 worksheet cases, 35,203 have a cross-reference (the others are not in the backup either);
+964,567 of the 964,578 members have a cross-reference. The logs (`Tbl_SMSLog`, `StaffAttendance`, `Tbl_ErrorLog`) were not brought.
 
 ### Step 4: limits the plan fixes (done for the rows the saved data confirms)
 

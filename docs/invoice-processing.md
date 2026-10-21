@@ -181,4 +181,4 @@ Also changed since: an empty remark is no longer added as a blank row for a case
 
 * **A full `HISWorkSheet` backup** (done: `HISWorkSheet_backup`, and 25,497 cases were copied across): more saved worksheets and invoices to check the rules and the engine against, and real unregistered
   invoices (638 cases that have an invoice but no worksheet) to register in a rolled-back transaction.
-* **A full `HISMaintenance` backup**, for the same reason on the per-case tables Registration writes (`tblRecord`, `CASLG`, `CASCrossReference`).
+* **A full `HISMaintenance` backup** (done: `HISMaintenance_actual_backup`; the per-case tables Registration writes, `tblRecord`, `CASLG` and `CASCrossReference`, and the member cross-references were copied for the cases and members held; see "More data" in [worksheet-screens.md](worksheet-screens.md)).

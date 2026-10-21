@@ -297,18 +297,26 @@ brought in (see "More data" below: 70,426 versions, 91,108 invoices) and the sam
 | Check | First measured (31,208 versions) | On 70,426 versions |
 |---|---|---|
 | Plan limits on rows with an amount: plain / case dependent / Others / Room & Board / tax | 97.0 / 90.1 / 97.8 / 97.7 / 96.3 per cent | 96.5 / 80.2 / 94.2 / 94.6 / 93.7 per cent |
-| Co-payment: how many saved co-payments the plan's percentage reproduces | 94.7 per cent (162 of 171) | **35 per cent (120 of 342)**; of the 145 the plan gives one for, 83 per cent are right |
+| Co-payment: how many saved co-payments the engine reproduces | 94.7 per cent (162 of 171) | 35 per cent (120 of 342) with the plan's percentage alone; **71 per cent (243 of 342) with the member's own share added** (see below); of the 303 it gives one for, 80 per cent are right |
 | The limit before the worksheet | 76.7 per cent | 68.9 per cent |
-| A worksheet from the invoices and the plan alone: approved total before the limit / total approved | 77.9 / 79.0 per cent | **68.0 / 68.7 per cent** (819 versions) |
+| A worksheet from the invoices and the plan alone: approved total before the limit / total approved | 77.9 / 79.0 per cent | 68.0 / 68.7 per cent, **69.7 / 70.5 per cent after the member's own share** (819 versions; the co-payment equals the saved one for 814 of them, 99.4 per cent) |
 | The summary rows from saved limits, co-payment and balance: total approved / limit exceeded | 97 / 99.4 per cent | 92.3 / 98.8 per cent |
 
-**Why the co-payment dropped.** The first sample was mostly payors whose co-payment is the plan's co-insurance percentage. The larger one has many more of other kinds. On 888 saved co-payments only 29
-per cent are explained by `PLNCoINSPerc`. The desktop has at least three mechanisms (read from `frmWorksheetRegGST2015`): the **Room & Board co-payment** (plan `CoPaymentInd`, `PLNCoPayPerc`):
-(approved total less approved Room & Board, less the MRI share for plan families 2 and 3 and new SM plans, less row 28, and less the tax for major-medical plans) times the percentage, only when the room
-charged exceeds the plan's limit, with a cent adjustment for invoices from April 2008; the **co-insurance** (`PLNCoIns` = Y, `PLNCoInsInd` 1, 2 or other, percentage from `AnnualLimit.AnnCoInsPerc`),
-whose result goes to the **Ex-Gratia row** (capped at 3,000), not the co-payment row; and a **flat share** that the saved worksheets show for some payors (TK 20 per cent of the approved total for 40 per cent of the
-sample, ST 10, AN 25, AJ 10, AX 10, XL about 19) and whose source is **not** in any of the plan, payor (`PAY.PAYCoPayment`), annual limit, member (`MBMCoPayGL`) or `MBMOthersTwo.MBMCoPayRB` columns that
-were searched. Finding where TK's 20 per cent comes from is the next step for the co-payment.
+**Why the co-payment dropped, and what was found.** The first sample was mostly payors whose co-payment is the plan's co-insurance percentage. The larger one has many more of other kinds. The desktop has
+at least three mechanisms (read from `frmWorksheetRegGST2015`):
+
+1. the **Room & Board co-payment** (plan `CoPaymentInd`, `PLNCoPayPerc`): (approved total less approved Room & Board, less the MRI share for plan families 2 and 3 and new SM plans, less row 28, and less the tax for
+   major-medical plans) times the percentage, only when the room charged exceeds the plan's limit, with a cent adjustment for invoices from April 2008. **Not ported.**
+2. the **co-insurance** (`PLNCoIns` = Y, `PLNCoInsInd` 1, 2 or other, percentage from `AnnualLimit.AnnCoInsPerc`), whose result goes to the **Ex-Gratia row** (capped at 3,000), not the co-payment row. **Not ported.**
+3. the plan's own co-insurance percentage (`PLNCoINSPerc`) of the approved total: the **ported** rule that the first sample was built on. Payors ST (10 per cent), AN (25) and AJ (10) are this: the percentage is in
+   the plan, in 100 per cent of the sampled worksheets of each. (An earlier version of this section called their share unexplained; that was wrong, they were explained already.)
+
+**The member's own share: found, ported.** What was unexplained for payor TK (20 per cent of the approved total, 40 per cent of the sampled co-payments) is a column of the **member**: `MBM.MBMTopupCopay` is 20 and
+`MBM.MBMTopupCopayInd` is Y for every TK worksheet sampled (400 of 400). The desktop's major-medical formula uses it: the percentage of (the approved total less the approved Room & Board less the approved taxes). It
+equals the saved co-payment to the cent in 94 of the 98 sampled worksheets of members who have one; `CoPaymentRules.MemberShare` is that formula, applied before the plan's co-insurance. Finding it took scanning every numeric
+column of the case, member, plan and payor tables for the value; an earlier search looked at `MBMCoPayGL` and `MBMOthersTwo.MBMCoPayRB`, not at `MBMTopupCopay`.
+
+**Still not explained:** about 29 per cent of the saved co-payments (the first two mechanisms above, and the few that differ in the third).
 
 ### More data: `HISWorkSheet_backup`
 
@@ -382,10 +390,10 @@ member's own balances, `MBMBnfLmt`), the day caps from a linked case (`ClaimSame
 ### Step 5: co-payment (co-insurance done)
 
 `genisis.WorksheetEngine_PlanTerms` reads the patient's plan row (`PLN`, by plan, payor and health type) and `CoPaymentRules.CoInsurance` takes the plan's percentage (`PLNCoINSPerc`, when
-`PLNCoInsSign` is Y) of the approved total, to the cent, rounding half away from zero. **It is right for 83 per cent of the versions where the plan gives a percentage, but it covers only about a third of the saved co-payments** (35 per cent of
-342 in the test's sample, 29 per cent of 888 in a wider one); see "Correction" above for the other mechanisms. The ratios in the data are plan specific: 5, 10, 15, 20, 25 and 30 per cent.
+`PLNCoInsSign` is Y) of the approved total, to the cent, rounding half away from zero. **The plan's percentage alone is right for 83 per cent of the versions where it gives one but covers only about a third of the saved co-payments** (35 per cent of
+342 in the test's sample, 29 per cent of 888 in a wider one); with the member's own share added it reproduces 71 per cent (see "Correction" above for the mechanisms). The ratios in the data are plan specific: 5, 10, 15, 20, 25 and 30 per cent.
 
-**Not ported yet:** the Room & Board co-payment, the co-insurance that goes to the Ex-Gratia row, the flat shares of some payors (source not found), and the cent adjustment for invoices from April 2008.
+**Not ported yet:** the Room & Board co-payment, the co-insurance that goes to the Ex-Gratia row, and the cent adjustment for invoices from April 2008. The member's own share (payor TK) is ported: see "Correction" above.
 
 ### Step 5b: the limit before the worksheet
 
@@ -482,7 +490,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 665 of 665 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 670 of 670 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
 staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 158 unit tests passed; browser suites 279 checks passed in all, no console or network
 errors (the four Worksheet suites are 148 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42, Registration 18; Invoice Processing 47 besides: 15 read, 32 write); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

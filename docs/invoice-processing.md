@@ -162,6 +162,26 @@ cross-reference row, which this member does not have in `HISMaintenance`), so th
 
 Also changed since: an empty remark is no longer added as a blank row for a case that has none (the desktop adds one; every save would leave one).
 
+## 4b. What Registration's save is (read from the desktop, before any of it is built)
+
+**Registration and Approve are one save.** `frmWorksheetRegGST2015` has a single write button, `cmdApprove_Click`, and Adjustment's `cmdApprove_Click` is the same sequence. After the checks (case number; member; at least one
+invoice, "Worksheet cannot be saved without any invoice!"; a final diagnosis, "Worksheet cannot be saved without Final Diagnosis!"; a worksheet status; the payable-to-hospital amount equal to the hospital total for a hospital-paid
+case, "Please verify Payable to Hospital amount"; bank name and account number together; for a member-paid case the address, post code, city and state) and "Are you sure?", one transaction runs, in this order:
+`SaveClaim("A")`, `SaveClaimRemarks`, `saveLimit`, `saveActual`, `saveActualGST`, `saveApprove`, `saveApproveGST`, `saveHos`, `saveMember`, `savePayMBMStatus`, `saveExcessLetter` (when an invoice exists),
+`saveSameLimit`, `UpdateInvoice`, `UpdateCasReserve`, then the member's balances (`UpdateMBMBalance`, or `UpdateMBMBalanceTU` for top-up members, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal` and
+`UpdateMBMLifeTimeBal` for lifetime plans, `UpdateCASTakeOverLmt`), the top-up grid, the credit or debit note (`UpdateCreditDebit`) and, for a top-up member, a duplicate claim in four databases (`SaveDuplClaim`),
+then commit, `HCreditDebit`, and "Record Save". That is 25 routines and several thousand lines of VB6.
+
+**`SaveClaim("A")` writes the version row of `Claim` through `Insert_WS_Claim_2012` (or `Insert_WS_Claim_2014V1`).** Of the 141 columns about 55 are written at registration: the case, version, dates, user and status
+(`ClaimStatus` C, bordx flags, `CLMWSStatus` from the worksheet status), the totals read from the grid (actual, approved, final, payable to the hospital and to the member, limit exceeded, excess, reimburse, balance
+limit, previous balance and limits, co-payment, BTBG, ex-gratia, bordx amount), the collected-by flags, the pay-to, bank and account, the stay and cash type, the last document date and the GP name. About 45 more
+(payment request, payor approval, TIMS, STMB, ...) are empty at registration and filled by later steps. Several of the 55 depend on state that is not in the saved rows (annual, per-disability, top-up and lifetime
+limits, and which branch applies), so they cannot be regenerated from an invoice and a plan alone yet.
+
+**Measured on saved versions (3,243):** `CLMFinalApprove` equals `CLMTotalApproved` in all of them; `CLMTotalApproved` equals the sum of the saved approved row in 95 per cent and `CLMTotalActual` the sum of the saved actual
+row in 93 per cent; `CLMPayableByMedix2H` / `2M` equal the sums of the saved hospital / member rows in only 66 / 70 per cent, because they are the grid's Final Total row, which has more in it than the 29 rows (co-payment,
+excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalApprove` in 95 per cent.
+
 ## 5. Order of work, and how each step is checked
 
 1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.

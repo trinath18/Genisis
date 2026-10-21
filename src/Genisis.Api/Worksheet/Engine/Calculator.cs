@@ -52,7 +52,7 @@ public class WorksheetCalculator(IDbSessions sessions, IWorksheetEngineRepositor
         var (room, icu) = (roomDays ?? days.RoomDays, icuDays ?? days.IcuDays);
         var limits = PlanLimitRules.Derive(rows, room, icu, withAmount);
         var grid = WorksheetRules.Evaluate(amounts, limits.ToDictionary(l => l.Key, l => (string?)l.Value));
-        var coPayment = CoPaymentRules.CoInsurance(grid.Totals.Approved, await terms.TermsAsync(session, cas, version));
+        var coPayment = CoPaymentRules.CoPayment(grid, await terms.TermsAsync(session, cas, version));
         var previous = BalanceLimitRules.PreviousBalance(limit.Balance, approvedByTheCase);
         return new WorksheetCalculation(grid, WorksheetRules.Final(grid, coPayment, previous), limits, previous, coPayment, room, icu, rows.Count > 0);
     }

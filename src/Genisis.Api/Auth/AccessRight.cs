@@ -22,6 +22,9 @@ public static class AccessRight
     /// <summary>Maintenance > Entity (mnuAgent_Click) and Maintenance > Accounts (MaintenanceAccounts_Click) check position 1 too.</summary>
     public const int EntityMaintenance = 1;
     public const int AccountsMaintenance = 1;
+
+    /// <summary>Maintenance > Account Transaction (MnuAccountTrans_Click) checks position 1 too.</summary>
+    public const int AccountTransaction = 1;
     /// <summary>Case > Inquiry (frmCaseInquiry) checks position 7 in mdiMain.</summary>
     public const int CaseEnquiry = 7;
 

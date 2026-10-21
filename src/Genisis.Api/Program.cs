@@ -1,3 +1,4 @@
+using Genisis.Api.Maintenance;
 using FluentValidation;
 using Genisis.Api.Auth;
 using Genisis.Api.Case;
@@ -53,6 +54,7 @@ builder.Services.AddScoped<Genisis.Api.Case.CaseAdjustmentService>();
 builder.Services.AddSingleton<Genisis.Api.Case.CaseFilesService>();
 builder.Services.AddCaseScreens();
 builder.Services.AddWorksheetScreens();
+builder.Services.AddMaintenanceScreens();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 

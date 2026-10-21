@@ -129,7 +129,7 @@ How to read the status column
 
 **Contribution Billing** (5): Generate Invoice; Generate Invoice (Endorsement); MCO Reinstatement; Refund Listing; Receipt MCO/Others
 
-**Invoice** (5): Invoice Processing (read side migrated at `/invoice/processing`: a case's invoices and an invoice's amounts by worksheet row; adding, changing and removing are not); Original Invoice Update; Invoice MBM Accounting; Invoice HOS Accounting; Invoice Tracking
+**Invoice** (5): Invoice Processing (migrated at `/invoice/processing`: a case's invoices, add, change and remove, with the limits in `invoice-processing.md`: an invoice a worksheet has used cannot be changed); Original Invoice Update; Invoice MBM Accounting; Invoice HOS Accounting; Invoice Tracking
 
 **Worksheet** (1): Worksheet Registration
 

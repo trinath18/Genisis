@@ -75,7 +75,8 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         Assert.True(services.Count >= 15, "expected the services of the Case and Worksheet screens");
         foreach (var service in services)
             foreach (var parameter in service.GetConstructors().Single().GetParameters().Select(p => p.ParameterType))
-                Assert.True(parameter.IsInterface || parameter.Name.EndsWith("Service", StringComparison.Ordinal), $"{service.Name} takes the concrete {parameter.Name}");
+                // an interface, an abstract type (the clock, TimeProvider) or another screen service
+                Assert.True(parameter.IsInterface || parameter.IsAbstract || parameter.Name.EndsWith("Service", StringComparison.Ordinal), $"{service.Name} takes the concrete {parameter.Name}");
     }
 
     [Fact]

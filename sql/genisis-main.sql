@@ -62,7 +62,7 @@ FROM (VALUES
     (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'), (N'Maint_CASLG', N'CASLG'),
     (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
     (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts')) v (s, t);
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -92,6 +92,18 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
+    (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
+    (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
+    (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- Invoice Processing writes through the legacy parameterized procedures of the worksheet database
+    (N'WS_Insert_ClaimInvoice_2013', @WorksheetDb, N'Insert_ClaimInvoice_2013'), (N'WS_Insert_ClaimInvoice_WODIR', @WorksheetDb, N'Insert_ClaimInvoice_WODIR'),
+    (N'WS_Insert_ClaimInvoice_WOFolDate', @WorksheetDb, N'Insert_ClaimInvoice_WOFolDate'), (N'WS_Insert_ClaimInvoice_WO2013', @WorksheetDb, N'Insert_ClaimInvoice_WO2013'),
+    (N'WS_Update_ClaimInvoice2013', @WorksheetDb, N'Update_ClaimInvoice2013'), (N'WS_Update_ClaimInvoice_WODIR2013', @WorksheetDb, N'Update_ClaimInvoice_WODIR2013'),
+    (N'WS_Update_ClaimInvoice_WOFolDate2013', @WorksheetDb, N'Update_ClaimInvoice_WOFolDate2013'), (N'WS_Update_ClaimInvoice_WO2013', @WorksheetDb, N'Update_ClaimInvoice_WO2013'),
+    (N'WS_Insert_ClaimInvActual2010', @WorksheetDb, N'Insert_ClaimInvActual2010'), (N'WS_Update_ClaimInvActual2010', @WorksheetDb, N'Update_ClaimInvActual2010'),
+    (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
+    (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
+    (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
@@ -6668,7 +6680,9 @@ BEGIN
     SELECT TOP (1) RTRIM(c.CASNumber) AS CaseNo, RTRIM(c.MBMNumber) AS MemberNo, RTRIM(c.MBMPatientCovID) AS CoverId, RTRIM(m.MBMName) AS MemberName, RTRIM(cp.MBMCName) AS PatientName,
         RTRIM(m.PAYCode) AS Payor, RTRIM(m.PLNCode) AS PlanCode, RTRIM(m.INSCode) AS InsuredType, RTRIM(m.HLTCode) AS HealthType, RTRIM(c.CASHOSCode) AS HospitalCode, RTRIM(h.HOSName) AS Hospital,
         c.CASDateAdmitted AS Admitted, c.CASDischargeDate AS Discharged, RTRIM(c.CASStayType) AS StayType, RTRIM(c.CASPAYType) AS PayType, RTRIM(c.CASClaimability) AS Claimability,
-        (SELECT MAX(w.ClaimVersion) FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber) AS LastWorksheetVersion
+        (SELECT MAX(w.ClaimVersion) FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber) AS LastWorksheetVersion,
+        (SELECT ISNULL(MAX(w.ClaimVersion), 0) + 1 FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber AND RTRIM(w.ClaimStatus) = N'C') AS NextWorksheetVersion, RTRIM(c.ModalityCode) AS Modality,
+        (SELECT TOP (1) r.Remarks FROM genisis.WS_ClaimInvoiceRemarks r WHERE r.CASNumber = c.CASNumber) AS Remarks
     FROM dbo.CAS c
     JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
     LEFT JOIN dbo.HOS h ON h.HOSCode = c.CASHOSCode
@@ -6740,6 +6754,135 @@ BEGIN
     ) inv ON inv.Slot = n.Slot
     GROUP BY n.Slot
     ORDER BY n.Slot;
+END
+GO
+
+-- ===== main/370_invoice_save.sql =====
+-- Invoice Processing (legacy frmInvoice), write side. The save itself calls the legacy parameterized procedures of HISWorkSheet through the genisis.WS_* synonyms (000_setup.sql);
+-- what is here are the reads the form needs and the two writes that have no legacy procedure (case remarks, remove).
+
+-- getVersion: the worksheet version a new invoice is attached to: the case's last completed version plus one, or 1.
+CREATE OR ALTER PROCEDURE genisis.Invoice_NextVersion
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(MAX(w.ClaimVersion), 0) + 1 AS NextVersion FROM genisis.WS_Claim w WHERE w.CASNumber = @cas AND RTRIM(w.ClaimStatus) = N'C';
+END
+GO
+
+-- Form_Load: the lists of the form. Stay types are PayType without the C (claim) and R (reimbursement) ones, as SearchStayType has them.
+CREATE OR ALTER PROCEDURE genisis.Invoice_StayTypes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PayTypeCode) AS Code, RTRIM(PayTypeName) AS Name FROM dbo.PayType
+    WHERE SUBSTRING(PayTypeCode, 1, 1) <> N'C' AND SUBSTRING(PayTypeCode, 1, 1) <> N'R' ORDER BY PayTypeCode;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Invoice_ReceiptModes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(RecModeCode) AS Code, RTRIM(RecModeDesc) AS Name FROM genisis.Maint_InvRecMode ORDER BY RecModeCode;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Invoice_RoomTypes
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(RoomType) AS Code FROM genisis.Maint_HOSRoomType ORDER BY RoomType;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Invoice_Hospitals
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(HOSCode) AS Code, RTRIM(HOSName) AS Name FROM dbo.HOS ORDER BY HOSName;
+END
+GO
+
+-- lstInvoice_Click: one invoice with every amount, as column name and value, so the form can be filled and saved again without the web page knowing the 106 columns.
+CREATE OR ALTER PROCEDURE genisis.Invoice_Form
+    @invoice int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT * FROM genisis.WS_ClaimInvoice WHERE INVIndex = @invoice;
+    SELECT * FROM genisis.WS_ClaimInvoiceActual WHERE INVIndex = @invoice;
+    SELECT * FROM genisis.WS_ClaimInvoiceActualOthers WHERE INVIndex = @invoice;
+    SELECT * FROM genisis.WS_ClaimInvoiceNotCover WHERE INVIndex = @invoice;
+END
+GO
+
+CREATE OR ALTER PROCEDURE genisis.Invoice_Remarks
+    @cas nvarchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT Remarks FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas;
+END
+GO
+
+-- SaveINVRemarks: one remark per case, added or replaced.
+CREATE OR ALTER PROCEDURE genisis.Invoice_SaveRemarks
+    @cas nvarchar(15),
+    @remarks nvarchar(max)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoiceRemarks WHERE CASNumber = @cas)
+        UPDATE genisis.WS_ClaimInvoiceRemarks SET Remarks = ISNULL(@remarks, N'') WHERE CASNumber = @cas;
+    ELSE
+        INSERT INTO genisis.WS_ClaimInvoiceRemarks (CASNumber, Remarks) VALUES (@cas, ISNULL(@remarks, N''));
+END
+GO
+
+-- CmdRemove_Click: the desktop deletes ClaimInvoice, ClaimInvoiceActual and ClaimInvoiceNotCover; the other two rows of the invoice (the entries and the GST amounts) are deleted too so none is left behind.
+CREATE OR ALTER PROCEDURE genisis.Invoice_Remove
+    @invoice int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM genisis.WS_ClaimInvoiceActualGST WHERE INVIndex = @invoice;
+    DELETE FROM genisis.WS_ClaimInvoiceActualOthers WHERE INVIndex = @invoice;
+    DELETE FROM genisis.WS_ClaimInvoiceNotCover WHERE INVIndex = @invoice;
+    DELETE FROM genisis.WS_ClaimInvoiceActual WHERE INVIndex = @invoice;
+    DELETE FROM genisis.WS_ClaimInvoice WHERE INVIndex = @invoice;
+END
+GO
+
+-- The new invoice's key: the legacy insert does not return it, so it is read back by case and number (the desktop takes the highest key of the table).
+CREATE OR ALTER PROCEDURE genisis.Invoice_Key
+    @cas nvarchar(15),
+    @invoiceNo nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) INVIndex AS InvoiceKey FROM genisis.WS_ClaimInvoice WHERE CASNumber = @cas AND RTRIM(InvNo) = RTRIM(@invoiceNo) ORDER BY INVIndex DESC;
+END
+GO
+
+-- The payee hospital: its name (the form tests the generic provider names) and whether a discount is due (AX).
+CREATE OR ALTER PROCEDURE genisis.Invoice_Hospital
+    @code nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(HOSCode) AS Code, RTRIM(HOSName) AS Name, RTRIM(HOSDiscInd) AS DiscountIndicator FROM dbo.HOS WHERE RTRIM(HOSCode) = RTRIM(@code);
+END
+GO
+
+-- saveActual: the hospital sums are kept for plans 2 to 5 and for new SM plans (PLN.NewSMPlan = Y).
+CREATE OR ALTER PROCEDURE genisis.Invoice_PlanIsNewSm
+    @plan nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.PLN WHERE RTRIM(PLNCode) = RTRIM(@plan) AND RTRIM(NewSMPlan) = N'Y') THEN 1 ELSE 0 END AS bit) AS NewSm;
 END
 GO
 

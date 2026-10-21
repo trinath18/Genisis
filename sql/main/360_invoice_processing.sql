@@ -9,7 +9,9 @@ BEGIN
     SELECT TOP (1) RTRIM(c.CASNumber) AS CaseNo, RTRIM(c.MBMNumber) AS MemberNo, RTRIM(c.MBMPatientCovID) AS CoverId, RTRIM(m.MBMName) AS MemberName, RTRIM(cp.MBMCName) AS PatientName,
         RTRIM(m.PAYCode) AS Payor, RTRIM(m.PLNCode) AS PlanCode, RTRIM(m.INSCode) AS InsuredType, RTRIM(m.HLTCode) AS HealthType, RTRIM(c.CASHOSCode) AS HospitalCode, RTRIM(h.HOSName) AS Hospital,
         c.CASDateAdmitted AS Admitted, c.CASDischargeDate AS Discharged, RTRIM(c.CASStayType) AS StayType, RTRIM(c.CASPAYType) AS PayType, RTRIM(c.CASClaimability) AS Claimability,
-        (SELECT MAX(w.ClaimVersion) FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber) AS LastWorksheetVersion
+        (SELECT MAX(w.ClaimVersion) FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber) AS LastWorksheetVersion,
+        (SELECT ISNULL(MAX(w.ClaimVersion), 0) + 1 FROM genisis.WS_Claim w WHERE w.CASNumber = c.CASNumber AND RTRIM(w.ClaimStatus) = N'C') AS NextWorksheetVersion, RTRIM(c.ModalityCode) AS Modality,
+        (SELECT TOP (1) r.Remarks FROM genisis.WS_ClaimInvoiceRemarks r WHERE r.CASNumber = c.CASNumber) AS Remarks
     FROM dbo.CAS c
     JOIN dbo.MBM m ON m.MBMNumber = c.MBMNumber
     LEFT JOIN dbo.HOS h ON h.HOSCode = c.CASHOSCode

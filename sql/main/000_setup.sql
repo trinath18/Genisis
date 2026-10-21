@@ -55,7 +55,7 @@ FROM (VALUES
     (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'), (N'Maint_CASLG', N'CASLG'),
     (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
     (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts')) v (s, t);
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -85,6 +85,18 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
+    (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
+    (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
+    (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- Invoice Processing writes through the legacy parameterized procedures of the worksheet database
+    (N'WS_Insert_ClaimInvoice_2013', @WorksheetDb, N'Insert_ClaimInvoice_2013'), (N'WS_Insert_ClaimInvoice_WODIR', @WorksheetDb, N'Insert_ClaimInvoice_WODIR'),
+    (N'WS_Insert_ClaimInvoice_WOFolDate', @WorksheetDb, N'Insert_ClaimInvoice_WOFolDate'), (N'WS_Insert_ClaimInvoice_WO2013', @WorksheetDb, N'Insert_ClaimInvoice_WO2013'),
+    (N'WS_Update_ClaimInvoice2013', @WorksheetDb, N'Update_ClaimInvoice2013'), (N'WS_Update_ClaimInvoice_WODIR2013', @WorksheetDb, N'Update_ClaimInvoice_WODIR2013'),
+    (N'WS_Update_ClaimInvoice_WOFolDate2013', @WorksheetDb, N'Update_ClaimInvoice_WOFolDate2013'), (N'WS_Update_ClaimInvoice_WO2013', @WorksheetDb, N'Update_ClaimInvoice_WO2013'),
+    (N'WS_Insert_ClaimInvActual2010', @WorksheetDb, N'Insert_ClaimInvActual2010'), (N'WS_Update_ClaimInvActual2010', @WorksheetDb, N'Update_ClaimInvActual2010'),
+    (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
+    (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
+    (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);

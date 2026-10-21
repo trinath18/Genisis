@@ -114,14 +114,46 @@ the exact columns are read when that routine is ported.
   cases were brought across (70,426 versions, 91,108 invoices, 8,310 invoices not yet in a worksheet and 638 cases that have an invoice but no worksheet: real Registration candidates). See
   "More data" in [worksheet-screens.md](worksheet-screens.md). The larger data lowered the engine's accuracy from 79 to 69 per cent (the first sample had been too easy).
 
+## 4a. The save, as built
+
+**Write path.** Add inserts the header (one of four procedures, by whether a follow-up and a receipt date are given), reads the new key back by case and number, then writes the amounts
+(`ClaimInvoiceActual`), the GST row (`ClaimInvoiceActualGST`: every GST amount is zero, since GST has been zero-rated since 2018; the invoice's own columns are passed through, as the desktop's
+`frmInvoiceGST` does: 2019 to 2021 invoices have an all-zero GST row, 18 of 55,882 have a non-zero amount), the entries (`ClaimInvoiceActualOthers`, by the 2019 procedure with its 44 parameters), what is not
+covered (`ClaimInvoiceNotCover`) and the case's remark. A change updates the same. The invoice amount is `getTotal`, the amount to pay is the amount less the excess for a hospital and 0 for a member (100 per
+cent of 2,601 hospital invoices; 94 per cent of 1,771 member invoices), the worksheet version is the case's last completed version plus one (or 1), and the hospital sums (`CLMCHospSum`, `CLMMHospSum`) are kept
+for plans 2 to 5 and new SM plans.
+
+**The page** (`/invoice/processing`): Add, Edit, Remove and Clear; the form is drawn from `GET /api/invoice/fields` (about 100 fields in 11 groups), the sums and totals come from the server as the amounts are
+typed, the entries of the plan's tax era and the case's modality are the ones enabled, and a sum can be typed only while none of its parts has a value. Different Hospital asks before saving.
+
+**Not done as the desktop does it** (deliberate, and in the code's comments):
+
+* Changing an invoice a worksheet has used is **refused**. The desktop then also saves the worksheet's limits (`saveLimit`, 260 lines on top of the plan engine). Removing such an invoice is refused as in the desktop.
+* The desktop's `SaveCASOthers` is not called. It overwrites the case's MMA data (procedures, CPT codes, surgeon fees, attending doctors) with whatever its MMA dialog holds; the MMA / CPT screen owns that data here.
+* The hospital is compared with the case's by code; the desktop compares the length of the names.
+* Removing an invoice deletes all five of its rows; the desktop deletes three and leaves the entries and the GST row behind.
+* Editing keeps the invoice's own pay type, upfront discount and discount received; the desktop's update procedures reset the last two.
+* Negative amounts are allowed (4 of 80 saved invoices have credits).
+* A `ClaimInvoiceActualOthers_New_2019` call is used, not the `_New` the source snapshot has: 123, 460 and 2,014 invoices of 2019, 2020 and 2021 have stents, balloons or implants amounts, so the desktop in
+  use is newer than the source we have (`frmInvoice.frm` of the snapshot has the nine hospital-supplies entries only). Registration's source should be checked for the same.
+
+### What the re-save test found
+
+Loading a saved invoice, saving it again and comparing every column found: the wrong name of one update procedure (the follow-up and receipt variants), the tables spell five columns with other capitals than the procedures' parameters (`CLMPreXray`, `CLMPreOthers`,
+`CLMInHosPhyVisitDay`, `CLMLodgerDay`, `preMedic`), so a change would have zeroed them; the invoice's own pay type (`INVPAYType`) was being replaced by the case's in 50 of 77; the upfront discount and the discount
+received were reset; three columns (stents, balloons, implants) the snapshot's procedure does not know; saved credits made a "no negative amounts" rule wrong; and an `IsUpdate` flag the update procedure sets (expected).
+Two more were found by the browser: the field kind was sent as a number and not its name (so text fields were drawn as amounts), and the layout classes were used wrongly (one narrow column).
+
 ## 5. Order of work, and how each step is checked
 
 1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.
 2. **Invoice Processing, read side** (done): `GET /api/invoice/{case}` (the case, its member, plan and hospital, and its invoices) and `GET /api/invoice/{case}/{index}` (one invoice with its amounts by worksheet row, the
    mapping the worksheet engine uses, so the rows add up to the invoice amount for 90 per cent or more of the saved invoices); the page `/invoice/processing` (position 22) lists the invoices, marks the ones no
    worksheet has used, and shows the 29 rows. It says plainly that nothing can be added, changed or removed yet. 3 database tests, 15 browser checks.
-3. **Invoice Processing, write side**: the 13 checks in order, then the procedures above in the form's order inside one transaction; checked by saving a saved invoice's own values again (in a
-   rolled-back transaction) and comparing every column, then by the same on invoices of the ZZ test case.
+3. **Invoice Processing, write side** (done, with the limits below): `POST /api/invoice` (add, or change when `index` is given), `GET /api/invoice/{case}/{index}/form`, `DELETE /api/invoice/{case}/{index}`,
+   `POST /api/invoice/calculate`, `GET /api/invoice/fields` and `/lookups`. The checks run in the order of section 2 and the writes are the legacy procedures (through `genisis.WS_*` synonyms) in one
+   transaction. **Checked by saving 80 saved invoices again with their own values: all 80 come back unchanged, column for column, in all four tables** (`Saving_a_saved_invoice_again_leaves_every_column_as_it_was`);
+   that test found several real defects before it passed (see "What the re-save test found").
 4. **Registration save**, routine by routine in the order of section 3: regenerate the saved rows of a version from the engine and compare them with the saved ones column by column, before any of
    it writes to a real database. Registration's grid must let the user change a limit or an approved amount, as the desktop does, because the engine alone reproduces about 69 per cent.
 5. **Approve** reuses 4.

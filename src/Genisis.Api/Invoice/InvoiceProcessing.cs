@@ -54,8 +54,17 @@ public record InvoiceCaseHeader
     /// <summary>Claimability code.</summary>
     public string? Claimability { get; set; }
 
-    /// <summary>The last worksheet version the case has; <c>null</c> when it has no worksheet yet (a new invoice then starts the first one).</summary>
+    /// <summary>The last worksheet version the case has; <c>null</c> when it has no worksheet yet.</summary>
     public int? LastWorksheetVersion { get; set; }
+
+    /// <summary>The worksheet version a new invoice is attached to: the last completed version plus one, or 1.</summary>
+    public int NextWorksheetVersion { get; set; }
+
+    /// <summary>The case's modality: <c>S</c> surgical, <c>N</c> non-surgical; the form enables the matching frame.</summary>
+    public string? Modality { get; set; }
+
+    /// <summary>The remark kept for the case (one per case); a new invoice's form starts from it so saving does not wipe it.</summary>
+    public string? Remarks { get; set; }
 }
 
 /// <summary>One invoice of a case, as the form's invoice list shows it.</summary>

@@ -108,6 +108,23 @@ BEGIN
     SET @s = N'';
 END
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.CaseEnquiryNotes TO ' + @q + N';';
+-- Invoice Processing: the legacy parameterized procedures its save calls through the genisis.WS_* synonyms
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WODIR TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WOFolDate TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WO2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WODIR2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WOFolDate2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WO2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvActual2010 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvActual2010 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceActOthers_New_2019 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceActOthers_New_2019 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceNotCov08 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceNotCov08 TO ' + @q + N';';
 EXEC (@s);
 GO
 

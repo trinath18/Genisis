@@ -417,7 +417,7 @@ does not contain them, as it did not contain the stents columns), so the calcula
    for the same benefit (TA admin is FULL in 56 of 477, AY row 10 is an amount in 5 of 5), so it is not a general rule.
 
 Measured on the 819-version oracle: the plan limits equal the saved ones for 671 (82 per cent, from 612), the approved total before the limit for 595 (72.6 per cent, from 69.8) and the total approved for 601 (73.4, from 70.6).
-**Not re-measured:** the tax-FULL rule and the notes were added after that run, when the test assembly started to be blocked by the machine's Code Integrity policy; they were checked on three TK worksheets through the API.
+**Re-measured with the final code** (the tax-FULL rule and the notes included; a Windows Code Integrity block on the test assembly had delayed this and then cleared): the same figures, 671 / 595 / 601 of 819, so the tax rule did not change the sample.
 
 **Still different (by slot, rows that differ over the 819 versions):** cash allowance (row 19) 33, Others (25) 29, Room & Board (1) 23, ICU (2) 16, medical pre-hospital (13) 11, guardian (20) 8, admin (23) 8, ICU tax (28) 7. Most are a
 limit the user typed or a rate times days the saved worksheet used with other days; some are plan rows that were changed after the worksheet was saved (the desktop reads the rows as they are when it works, we read them as they
@@ -526,7 +526,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 676 of 676 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 681 of 681 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
 staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 158 unit tests passed; browser suites 279 checks passed in all, no console or network
 errors (the four Worksheet suites are 148 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42, Registration 18; Invoice Processing 47 besides: 15 read, 32 write); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

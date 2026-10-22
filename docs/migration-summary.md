@@ -70,7 +70,7 @@ The VB6 code is the specification. For every migrated screen the following were 
 | Check | Result |
 |---|---|
 | `dotnet build -c Release -warnaserror` | 0 warnings, 0 errors |
-| `dotnet test` (validators and rules, services with fake repositories, HTTP pipeline, architecture, database tests against MYDELL with rollback) | **676 passed, 0 failed** (676 tests, merged branch; the Upload Bordx tests need the `UploadDb` staging database, created by `sql/hosting/create-upload-db.sql`) |
+| `dotnet test` (validators and rules, services with fake repositories, HTTP pipeline, architecture, database tests against MYDELL with rollback) | **681 passed, 0 failed** (681 tests, merged branch; the Upload Bordx tests need the `UploadDb` staging database, created by `sql/hosting/create-upload-db.sql`) |
 | `npm run lint` (oxlint) · `npm run format:check` · `npm run typecheck` · `npm run build` | 0 warnings, clean, clean, built |
 | `npm test` (Vitest: masks, validation, CSV, case helpers, listing rules, worksheet rules, scan codes, error boundary) | **103 passed** |
 | Browser suites (`GenisisUI/e2e`, headless Chrome, real API and databases) | **279 checks passed** (the four Worksheet suites are 148 of them, Invoice Processing 47: 15 read, 32 write), no console or network errors; data restored afterwards |

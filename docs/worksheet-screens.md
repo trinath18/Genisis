@@ -299,7 +299,7 @@ brought in (see "More data" below: 70,426 versions, 91,108 invoices) and the sam
 | Plan limits on rows with an amount: plain / case dependent / Others / Room & Board / tax | 97.0 / 90.1 / 97.8 / 97.7 / 96.3 per cent | 96.5 / 80.2 / 94.2 / 94.6 / 93.7 per cent |
 | Co-payment: how many saved co-payments the engine reproduces | 94.7 per cent (162 of 171) | 35 per cent (120 of 342) with the plan's percentage alone; 71 per cent with the member's own share; **78 per cent (267 of 342) with the Room & Board co-payment too, 86 per cent (293) when a payor's other Room & Board tax setting is accepted** (see below); of the 368 it gives one for, 80 per cent are right on that count |
 | The limit before the worksheet | 76.7 per cent | 68.9 per cent |
-| A worksheet from the invoices and the plan alone: approved total before the limit / total approved | 77.9 / 79.0 per cent | 68.0 / 68.7 per cent, 69.7 / 70.5 with the member's own share, **69.8 / 70.6 per cent with the Room & Board co-payment** (819 versions; the co-payment equals the saved one for 814 of them, 99.4 per cent; the gap that is left is the plan limits, which equal the saved ones for 75 per cent) |
+| A worksheet from the invoices and the plan alone: approved total before the limit / total approved | 77.9 / 79.0 per cent | 68.0 / 68.7 per cent, 69.8 / 70.6 with the co-payments, **72.6 / 73.4 per cent with the payor conventions below** (819 versions; the plan limits give the same approved sum as the saved ones for 82 per cent, from 75; the co-payment equals the saved one for 815 of them) |
 | The summary rows from saved limits, co-payment and balance: total approved / limit exceeded | 97 / 99.4 per cent | 92.3 / 98.8 per cent |
 
 **Why the co-payment dropped, and what was found.** The first sample was mostly payors whose co-payment is the plan's co-insurance percentage. The larger one has many more of other kinds. The desktop has
@@ -399,6 +399,29 @@ covered: with an amount in it the desktop saves 0.00 or "-" whatever the plan sa
 
 **Not derived yet:** the post-hospital / medical-expenses row 304 (mixed in the data), the tax rows of ICU and lodger, the kidney and cancer balances of members on a lifetime plan (they come from the
 member's own balances, `MBMBnfLmt`), the day caps from a linked case (`ClaimSameLimit`), and the days of the stay taken from the invoices (the oracle uses the days the desktop saved).
+
+### Step 4b: the plan limits that are not in the plan
+
+The plan limits were the biggest gap (the same approved sum as the saved limits for 75 per cent of 819 versions). **`dbo.BNF` is complete**: the working `HISDB` has every row of `HISDB_actual_backup` (377,987) and 7
+more, and the plan, annual-limit, category and payor tables are identical, so no data is missing. The gap is rules. Limits are Maintenance data (`/maintenance/benefits`, `/maintenance/plan`) that the Worksheet engine reads;
+nothing in Invoice Processing touches them.
+
+Profiling the 207 versions whose limits differ, by slot and payor, found two kinds of rule that the plan rows do not carry. **Both are inferred from the saved worksheets, not read from the desktop's code** (the snapshot we have
+does not contain them, as it did not contain the stents columns), so the calculation says where one was used ("The limit of ... is not from the plan ...") and they should be confirmed with the business.
+
+1. **Payor TK, hospital NP (non-panel): Room & Board is FULL**, whatever the plan's rate: 620 of 622 saved worksheets (the plan's row says 250 a day for 120 days and the desktop saved FULL; for TK at other hospitals it is the
+   plan's amount in 173 of 174). Only Room & Board has an amount in these worksheets. A FULL Room & Board makes its service tax FULL (the display routine does this with `tmpRBSearchTax`); a FULL ICU its tax.
+   `PlanLimitRules.NonPanelHospital`.
+2. **Where the payor's plan has no benefit row for a benefit and the row has an amount, some payors' saved limit is FULL**, the way hospital supplies, anaesthetist, physician visits and accident already are for every payor:
+   TK for row 10 (28 of 28), XL for row 10 (16 of 18) and row 7 (22 of 26), AX for row 24 (25 of 32), SE for row 23 (91 of 97). `PlanLimitRules.PayorDefaults` lists them with their evidence. Others behave differently
+   for the same benefit (TA admin is FULL in 56 of 477, AY row 10 is an amount in 5 of 5), so it is not a general rule.
+
+Measured on the 819-version oracle: the plan limits equal the saved ones for 671 (82 per cent, from 612), the approved total before the limit for 595 (72.6 per cent, from 69.8) and the total approved for 601 (73.4, from 70.6).
+**Not re-measured:** the tax-FULL rule and the notes were added after that run, when the test assembly started to be blocked by the machine's Code Integrity policy; they were checked on three TK worksheets through the API.
+
+**Still different (by slot, rows that differ over the 819 versions):** cash allowance (row 19) 33, Others (25) 29, Room & Board (1) 23, ICU (2) 16, medical pre-hospital (13) 11, guardian (20) 8, admin (23) 8, ICU tax (28) 7. Most are a
+limit the user typed or a rate times days the saved worksheet used with other days; some are plan rows that were changed after the worksheet was saved (the desktop reads the rows as they are when it works, we read them as they
+are now), which cannot be recovered.
 
 ### Step 5: co-payment (co-insurance done)
 

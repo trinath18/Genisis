@@ -11,7 +11,8 @@ namespace Genisis.Api.Worksheet.Engine;
 /// <param name="RoomDays">The Room &amp; Board days the limits were worked out with.</param>
 /// <param name="IcuDays">The ICU days the limits were worked out with.</param>
 /// <param name="PlanHasRows">Whether the plan has benefit rows at all.</param>
-public record WorksheetCalculation(WorksheetEvaluation Grid, WorksheetFinal Final, IReadOnlyDictionary<int, string> Limits, decimal PreviousBalance, decimal CoPayment, decimal RoomDays, decimal IcuDays, bool PlanHasRows);
+/// <param name="ConventionSlots">The rows whose limit comes from a payor's convention inferred from saved worksheets, not from the plan.</param>
+public record WorksheetCalculation(WorksheetEvaluation Grid, WorksheetFinal Final, IReadOnlyDictionary<int, string> Limits, decimal PreviousBalance, decimal CoPayment, decimal RoomDays, decimal IcuDays, bool PlanHasRows, IReadOnlyList<int>? ConventionSlots = null);
 
 /// <summary>Works a worksheet out from its invoices and the patient's plan.</summary>
 public interface IWorksheetCalculator
@@ -50,10 +51,11 @@ public class WorksheetCalculator(IDbSessions sessions, IWorksheetEngineRepositor
         var days = await stay.DaysAsync(session, cas, version);
         var rows = await benefits.BenefitsAsync(session, cas, version);
         var (room, icu) = (roomDays ?? days.RoomDays, icuDays ?? days.IcuDays);
-        var limits = PlanLimitRules.Derive(rows, room, icu, withAmount);
+        var planTerms = await terms.TermsAsync(session, cas, version);
+        var limits = PlanLimitRules.Derive(rows, room, icu, withAmount, planTerms?.PayorCode, planTerms?.HospitalCode);
         var grid = WorksheetRules.Evaluate(amounts, limits.ToDictionary(l => l.Key, l => (string?)l.Value));
-        var coPayment = CoPaymentRules.CoPayment(grid, await terms.TermsAsync(session, cas, version));
+        var coPayment = CoPaymentRules.CoPayment(grid, planTerms);
         var previous = BalanceLimitRules.PreviousBalance(limit.Balance, approvedByTheCase);
-        return new WorksheetCalculation(grid, WorksheetRules.Final(grid, coPayment, previous), limits, previous, coPayment, room, icu, rows.Count > 0);
+        return new WorksheetCalculation(grid, WorksheetRules.Final(grid, coPayment, previous), limits, previous, coPayment, room, icu, rows.Count > 0, PlanLimitRules.ConventionSlots(rows, withAmount, planTerms?.PayorCode, planTerms?.HospitalCode));
     }
 }

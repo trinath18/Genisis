@@ -57,13 +57,14 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
             var withSavedLimits = await engineService.EvaluateSavedAsync(v.Cas, v.Version);
             var sameLimits = Math.Abs(withSavedLimits.Totals.Approved - result.Grid.Totals.Approved) < 0.015m;
             var sameCoPay = Math.Abs(result.CoPayment - v.CoPayment) < 0.015m;
+            var who = sameLimits ? "" : await session.Connection.QueryFirstAsync<string>("SELECT LEFT(RTRIM(v.PAYCode), 2) + CASE WHEN RTRIM(c.CASHOSCode) = 'NP' THEN ' NP' ELSE '' END FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v JOIN dbo.CAS c ON c.CASNumber = v.CASNumber WHERE v.CASNumber = @cas AND v.ClaimVersion = @version", new { cas = v.Cas, version = v.Version }, session.Transaction);
             if (!sameLimits)
                 foreach (var line in result.Grid.Lines)
                 {
                     var savedLine = withSavedLimits.Lines.First(l => l.Slot == line.Slot);
                     if (Math.Abs(savedLine.Approved - line.Approved) < 0.015m) continue;
                     perSlot[line.Slot] = perSlot.GetValueOrDefault(line.Slot) + 1;
-                    var key = $"slot {line.Slot}: plan gave [{line.Limit ?? "none"}], saved [{savedLine.Limit ?? "none"}], actual {(line.Actual > 0 ? ">0" : line.Actual < 0 ? "<0" : "0")}";
+                    var key = $"{who} slot {line.Slot}: plan gave [{line.Limit ?? "none"}], saved [{savedLine.Limit ?? "none"}], actual {(line.Actual > 0 ? ">0" : line.Actual < 0 ? "<0" : "0")}";
                     examples[key] = examples.GetValueOrDefault(key) + 1;
                 }
             limitsOk += sameLimits ? 1 : 0;
@@ -74,7 +75,7 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
         output.WriteLine($"{sample.Count} versions, {done} calculated: approved total before the limit reproduced {beforeLimitSame} ({100.0 * beforeLimitSame / Math.Max(done, 1):0.0}%), total approved {totalSame} ({100.0 * totalSame / Math.Max(done, 1):0.0}%); {workedHard} with a non-zero saved total");
         output.WriteLine($"of {done}: the plan limits give the same approved sum as the saved limits for {limitsOk}; the co-payment equals the saved one for {coPayOk}; both for {limitsOkCoPayOk}, and of those the approved total before the limit equals the saved one for {limitsOkCoPayOkTotalOk}");
         output.WriteLine("rows that differ, by slot: " + string.Join(", ", perSlot.OrderByDescending(p => p.Value).Take(10).Select(p => $"{p.Key}={p.Value}")));
-        foreach (var e in examples.OrderByDescending(e => e.Value).Take(14)) output.WriteLine($"  {e.Value,4}x {e.Key}");
+        foreach (var e in examples.OrderByDescending(e => e.Value).Take(40)) output.WriteLine($"  {e.Value,4}x {e.Key}");
         Assert.True(done >= sample.Count * 0.9, $"calculated {done} of {sample.Count}");
         Assert.True(beforeLimitSame >= done * 0.62, $"approved total before the limit: {beforeLimitSame} of {done}");
         Assert.True(totalSame >= done * 0.62, $"total approved: {totalSame} of {done}");

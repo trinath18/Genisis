@@ -114,13 +114,16 @@ public static class CalculationRules
     /// The notes that say where a calculation cannot be trusted: no limit from the plan for a row that has an amount (the row is then shown as not covered, which can be wrong), and
     /// a plan that has no benefit rows at all.
     /// </summary>
-    public static List<string> Notes(IReadOnlyList<CalculationLine> lines, bool planHasRows)
+    public static List<string> Notes(IReadOnlyList<CalculationLine> lines, bool planHasRows, IReadOnlyCollection<int>? conventionSlots = null)
     {
         var notes = new List<string>();
         if (!planHasRows) notes.Add("The plan has no benefit rows in the database, so no limits could be taken from it; every row is shown as not covered.");
         var missing = lines.Where(l => l.Actual != 0 && string.IsNullOrWhiteSpace(l.Limit)).Select(l => l.Benefit).ToList();
         if (planHasRows && missing.Count > 0)
             notes.Add($"The plan gives no limit for: {string.Join(", ", missing)}. They are shown as not covered; the desktop may allow them, so check them before relying on the totals.");
+        var convention = lines.Where((l) => conventionSlots?.Contains(l.Slot) == true).Select((l) => l.Benefit).ToList();
+        if (convention.Count > 0)
+            notes.Add($"The limit of {string.Join(", ", convention)} is not from the plan: it follows the payor's usual treatment as the saved worksheets show it (inferred, not read from the desktop's code). Check it before relying on the totals.");
         return notes;
     }
 }
@@ -169,7 +172,7 @@ public class CalculationService(IDbSessions sessions, ICalculationRepository rep
             Lines = lines,
             Calculated = new CalculationSummary(final.SumApproved, final.CoPayment, final.LimitExceeded, final.TotalApproved, calculation.PreviousBalance),
             Saved = saved is null ? null : new CalculationSummary(0m, saved.CoPayment, saved.LimitExceeded, saved.TotalApproved, saved.PreviousBalance),
-            Notes = CalculationRules.Notes(lines, calculation.PlanHasRows),
+            Notes = CalculationRules.Notes(lines, calculation.PlanHasRows, calculation.ConventionSlots),
         };
     }
 }

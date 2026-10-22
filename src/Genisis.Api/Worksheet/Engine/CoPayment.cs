@@ -46,6 +46,12 @@ public record PlanTerms
 
     /// <summary>The latest invoice date of the version; from 1 April 2008 the co-payment is rounded to 5 cents.</summary>
     public DateTime? LastInvoiceDate { get; set; }
+
+    /// <summary>The payor: the first two letters of the case number (a few limits follow the payor's own convention, see <see cref="PlanLimitRules.PayorDefaults"/>).</summary>
+    public string? PayorCode { get; set; }
+
+    /// <summary>The case's hospital code (the non-panel hospital NP has its own Room &amp; Board limit for payor TK).</summary>
+    public string? HospitalCode { get; set; }
 }
 
 /// <summary>Rules of the co-payment, checked against the co-payment the desktop saved (<c>CLMCoPayRB</c>).</summary>

@@ -44,6 +44,18 @@ public static class PlanLimitRules
     /// </summary>
     public static readonly IReadOnlyList<(string Code, int Slot, string Text)> WhenThePlanHasNoRow = [("103", 3, "FULL"), ("204", 9, "FULL"), ("302", 11, "FULL"), ("401", 14, "FULL"), ("801", 21, "50.00")];
 
+    /// <summary>The hospital code of the non-panel hospital. For payor TK its Room &amp; Board limit is FULL, whatever the plan's rate (620 of 622 saved worksheets; only Room &amp; Board has an amount in them).</summary>
+    public const string NonPanelHospital = "NP";
+
+    /// <summary>
+    /// Limits that follow a payor's own convention, not the plan: where the payor's plan has no benefit row for the code and the row has an amount, the desktop saved FULL (evidence: the saved
+    /// worksheets of a one-in-eight sample). They are inferred from data and not from the desktop's code (the snapshot we have does not contain them), so the calculation says where one was used.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Payor, string Code, int Slot, string Text, string Evidence)> PayorDefaults =
+    [
+        ("TK", "301", 10, "FULL", "28 of 28"), ("XL", "301", 10, "FULL", "16 of 18"), ("XL", "202", 7, "FULL", "22 of 26"), ("AX", "804", 24, "FULL", "25 of 32"), ("SE", "803", 23, "FULL", "91 of 97"),
+    ];
+
     /// <summary>Worksheet row of "Others": expenses the plan does not cover. Whatever the plan says, the limit saved with an amount in it is 0.00 (in 99 per cent of the versions).</summary>
     public const int Others = 25;
 
@@ -55,6 +67,9 @@ public static class PlanLimitRules
 
     /// <summary>Worksheet row of the service tax on Room &amp; Board.</summary>
     public const int RoomAndBoardTax = 27;
+
+    /// <summary>Worksheet row of the service tax on ICU (a limit only when ICU is FULL).</summary>
+    public const int IcuTax = 28;
 
     /// <summary>The service tax limit is this share of the Room &amp; Board limit (6 per cent, in 98.6 per cent of the saved worksheets that have one).</summary>
     public const decimal TaxRate = 0.06m;
@@ -68,7 +83,7 @@ public static class PlanLimitRules
     /// The limit text of each row the plan fixes, keyed by worksheet row. Room &amp; Board and ICU are the rate per day times the days of the stay (<paramref name="roomDays"/>,
     /// <paramref name="icuDays"/>), held to the days the plan allows when it has such a limit (no Room &amp; Board days: no limit); the service tax is a share of the Room &amp; Board limit.
     /// </summary>
-    public static Dictionary<int, string> Derive(IEnumerable<PlanBenefit> benefits, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null)
+    public static Dictionary<int, string> Derive(IEnumerable<PlanBenefit> benefits, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null, string? payor = null, string? hospital = null)
     {
         var limits = new Dictionary<int, string>();
         var any = false;
@@ -91,9 +106,36 @@ public static class PlanLimitRules
         if (any && rowsWithAmount is not null)
             foreach (var (missingCode, slot, text) in WhenThePlanHasNoRow)
                 if (!seen.Contains(missingCode) && rowsWithAmount.Contains(slot) && !limits.ContainsKey(slot)) limits[slot] = text;
+        if (any && rowsWithAmount is not null)
+            foreach (var (defaultPayor, code, slot, text, _) in PayorDefaults)
+                if (string.Equals(payor?.Trim(), defaultPayor, StringComparison.OrdinalIgnoreCase) && !seen.Contains(code) && rowsWithAmount.Contains(slot) && !limits.ContainsKey(slot)) limits[slot] = text;
+        // payor TK's non-panel hospital: Room & Board FULL, the plan's rate notwithstanding
+        if (string.Equals(payor?.Trim(), "TK", StringComparison.OrdinalIgnoreCase) && string.Equals(hospital?.Trim(), NonPanelHospital, StringComparison.OrdinalIgnoreCase) && rowsWithAmount?.Contains(RoomAndBoard) == true) limits[RoomAndBoard] = "FULL";
         if (any && rowsWithAmount?.Contains(Others) == true) limits[Others] = Money(0);
-        if (limits.TryGetValue(RoomAndBoard, out var room) && Number(room) is { } roomLimit and > 0) limits[RoomAndBoardTax] = Money(Math.Round(roomLimit * TaxRate, 2, MidpointRounding.AwayFromZero));
+        if (limits.TryGetValue(RoomAndBoard, out var room))
+        {
+            // a FULL Room & Board makes its service tax FULL too, and a FULL ICU its tax (the display routine, tmpRBSearchTax / TotalICU)
+            if (string.Equals(room.Trim(), "FULL", StringComparison.OrdinalIgnoreCase)) limits[RoomAndBoardTax] = "FULL";
+            else if (Number(room) is { } roomLimit and > 0) limits[RoomAndBoardTax] = Money(Math.Round(roomLimit * TaxRate, 2, MidpointRounding.AwayFromZero));
+        }
+        if (limits.TryGetValue(Icu, out var icu) && string.Equals(icu.Trim(), "FULL", StringComparison.OrdinalIgnoreCase)) limits[IcuTax] = "FULL";
         return limits;
+    }
+
+    /// <summary>
+    /// The worksheet rows whose limit <see cref="Derive"/> took from a payor's convention and not from the plan (<see cref="PayorDefaults"/> and the non-panel Room &amp; Board of payor TK), so the calculation can say so.
+    /// </summary>
+    public static List<int> ConventionSlots(IEnumerable<PlanBenefit> benefits, IReadOnlySet<int>? rowsWithAmount, string? payor, string? hospital)
+    {
+        var slots = new List<int>();
+        if (rowsWithAmount is null) return slots;
+        var seen = benefits.Select((b) => b.Code.Trim()).ToHashSet();
+        var tk = string.Equals(payor?.Trim(), "TK", StringComparison.OrdinalIgnoreCase);
+        if (tk && string.Equals(hospital?.Trim(), NonPanelHospital, StringComparison.OrdinalIgnoreCase) && rowsWithAmount.Contains(RoomAndBoard)) slots.Add(RoomAndBoard);
+        if (seen.Count > 0)
+            foreach (var (defaultPayor, code, slot, _, _) in PayorDefaults)
+                if (string.Equals(payor?.Trim(), defaultPayor, StringComparison.OrdinalIgnoreCase) && !seen.Contains(code) && rowsWithAmount.Contains(slot) && !slots.Contains(slot)) slots.Add(slot);
+        return slots;
     }
 
     /// <summary>
@@ -130,9 +172,9 @@ public sealed class PlanBenefitRepository : IPlanBenefitRepository
 public class PlanLimitService(IDbSessions sessions, IPlanBenefitRepository repository)
 {
     /// <summary>The limit text of the rows the plan fixes for a saved version, given the days of the stay in Room &amp; Board and ICU and the rows that have an amount.</summary>
-    public async Task<Dictionary<int, string>> LimitsAsync(string caseNo, int version, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null)
+    public async Task<Dictionary<int, string>> LimitsAsync(string caseNo, int version, decimal roomDays, decimal icuDays, IReadOnlySet<int>? rowsWithAmount = null, string? payor = null, string? hospital = null)
     {
         await using var session = await sessions.OpenAsync();
-        return PlanLimitRules.Derive(await repository.BenefitsAsync(session, caseNo.Trim(), version), roomDays, icuDays, rowsWithAmount);
+        return PlanLimitRules.Derive(await repository.BenefitsAsync(session, caseNo.Trim(), version), roomDays, icuDays, rowsWithAmount, payor, hospital);
     }
 }

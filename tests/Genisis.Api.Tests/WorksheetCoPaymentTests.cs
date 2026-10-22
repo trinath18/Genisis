@@ -46,6 +46,66 @@ public class WorksheetCoPaymentRulesTests
         Assert.Equal(0m, CoPaymentRules.CoPayment(grid, null));
     }
 
+    private static PlanTerms RoomTerms(string family = "M", string payorRoomTax = "N", string? majorMed = null, DateTime? date = null) => new()
+    {
+        CoPaymentInd = "Y", RoomCoPayPercent = 20, PlanFamily = family, PayorRoomTax = payorRoomTax, MajorMedInd = majorMed, MriPercent = 50, LastInvoiceDate = date ?? new DateTime(2013, 11, 8),
+    };
+
+    /// <summary>Room and Board approved 600 of 900 charged, other rows 2,500 and a Room and Board tax row of 30: an approved total of 3,130 (plus any change).</summary>
+    private static WorksheetEvaluation Room(decimal other = 2500m, decimal boardActual = 900m, string? limit = "600.00") =>
+        new([new WorksheetLine(1, boardActual, limit, 600m, 0, 0), new WorksheetLine(3, other, null, other, 0, 0), new WorksheetLine(5, 400m, null, 400m, 0, 0), new WorksheetLine(27, 30m, null, 30m, 0, 0)],
+            new WorksheetTotals(boardActual + other + 430m, 600m + other + 430m, 0, 0));
+
+    [Fact]
+    public void The_room_and_board_co_payment_of_a_payor_without_the_room_tax_leaves_the_tax_out_of_the_base()
+    {
+        // total 3,530 (600 + 2,500 + 400 MRI + 30 tax); base = total - tax - room and board = 2,900; 20 per cent = 580
+        Assert.Equal(580.00m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms()));
+    }
+
+    [Fact]
+    public void The_branch_of_a_payor_with_the_room_tax_leaves_the_tax_in_unless_the_plan_is_major_medical()
+    {
+        Assert.Equal(586.00m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms(payorRoomTax: "Y")));
+        Assert.Equal(580.00m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms(payorRoomTax: "Y", majorMed: "Y")));
+    }
+
+    [Fact]
+    public void Families_2_and_3_and_new_sm_plans_take_the_mri_share_off_and_not_the_tax()
+    {
+        // base = 3,530 - 600 - 400 x 50 per cent = 2,730; 20 per cent = 546
+        Assert.Equal(546.00m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms(family: "2")));
+        Assert.Equal(546.00m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms() with { NewSmPlan = "Y" }));
+    }
+
+    [Fact]
+    public void The_room_and_board_co_payment_is_rounded_to_5_cents_from_april_2008_only()
+    {
+        var grid = Room(other: 2503.33m);
+        Assert.Equal(580.65m, CoPaymentRules.RoomAndBoard(grid, RoomTerms()));
+        Assert.Equal(580.67m, CoPaymentRules.RoomAndBoard(grid, RoomTerms(date: new DateTime(2008, 3, 31))));
+        Assert.Equal(580.65m, CoPaymentRules.RoomAndBoard(grid, RoomTerms(date: new DateTime(2008, 4, 1))));
+    }
+
+    [Fact]
+    public void There_is_no_room_and_board_co_payment_when_the_room_is_within_the_limit_the_indicator_is_off_or_the_limit_is_full()
+    {
+        Assert.Equal(0m, CoPaymentRules.RoomAndBoard(Room(boardActual: 600m), RoomTerms()));
+        Assert.Equal(0m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms() with { CoPaymentInd = "N" }));
+        Assert.Equal(0m, CoPaymentRules.RoomAndBoard(Room(), RoomTerms() with { RoomCoPayPercent = 0 }));
+        Assert.Equal(0m, CoPaymentRules.RoomAndBoard(Room(limit: "FULL"), RoomTerms(payorRoomTax: "Y")));
+        Assert.Equal(0m, CoPaymentRules.RoomAndBoard(Room(), null));
+    }
+
+    [Fact]
+    public void The_members_share_beats_the_room_and_board_co_payment_which_beats_the_co_insurance()
+    {
+        var terms = RoomTerms() with { CoInsurancePercent = 10, CoInsuranceSign = "Y" };
+        Assert.Equal(580.00m, CoPaymentRules.CoPayment(Room(), terms));
+        Assert.Equal(353.00m, CoPaymentRules.CoPayment(Room(boardActual: 600m), terms));
+        Assert.Equal(( 3530m - 600m - 30m) * 0.2m, CoPaymentRules.CoPayment(Room(boardActual: 600m), terms with { MemberCoPayPercent = 20, MemberCoPayInd = "Y" }));
+    }
+
     [Fact]
     public void A_half_cent_rounds_away_from_zero() => Assert.Equal(0.13m, CoPaymentRules.CoInsurance(2.5m, Terms(5)));
 
@@ -69,7 +129,7 @@ public class WorksheetCoPaymentRulesTests
 public class WorksheetCoPaymentOracleTests(ITestOutputHelper output)
 {
     /// <summary>
-    /// Two directions, over about a sixth of the versions that qualify: of the versions with a saved co-payment, how many does the plan's percentage reproduce (71 per cent in the larger data with the member's own share and the co-insurance; the rest are the Room & Board co-payment and the ex-gratia row);
+    /// Two directions, over about a sixth of the versions that qualify: of the versions with a saved co-payment, how many does the plan's percentage reproduce (78 per cent in the larger data with the member's own share, the Room & Board co-payment and the co-insurance, 86 per cent accepting a payor's other Room & Board tax setting; the rest are mostly the ex-gratia row and approved totals the engine gets wrong);
     /// and of the versions whose plan has a percentage and an approved total, how many have that saved (about 89 per cent). The approved total is the engine's own, from the invoices and the
     /// saved limit text.
     /// </summary>
@@ -91,18 +151,41 @@ public class WorksheetCoPaymentOracleTests(ITestOutputHelper output)
         var engine = new WorksheetEngineService(TestDb.Sessions(), new WorksheetEngineRepository());
         var service = new CoPaymentService(TestDb.Sessions(), new PlanTermsRepository());
         int savedN = 0, savedOk = 0, derivedN = 0, derivedOk = 0;
+        var bySource = new Dictionary<string, (int N, int Ok)>();
+        int savedLenient = 0, derivedLenient = 0;
+        var wrong = new List<string>();
+        var terms = new PlanTermsRepository();
         foreach (var v in sample)
         {
             var grid = await engine.EvaluateSavedAsync(v.Cas, v.Version);
             if (grid is null) continue;
             var derived = await service.CoPaymentAsync(v.Cas, v.Version, grid);
-            if (v.Saved != 0) { savedN++; savedOk += Math.Abs(derived - v.Saved) < 0.015m ? 1 : 0; }
-            if (derived != 0) { derivedN++; derivedOk += Math.Abs(derived - v.Saved) < 0.015m ? 1 : 0; }
+            await using var termsRead = await TestDb.Sessions().OpenAsync();
+            var planTerms = await new PlanTermsRepository().TermsAsync(termsRead, v.Cas, v.Version);
+            // a payor's Room & Board tax setting has changed over the years (XL: Y until about 2012, N now) and only today's is stored, so a worksheet made under the other setting differs by the tax;
+            // the lenient count accepts the other branch's amount too
+            var other = planTerms is null ? 0m : CoPaymentRules.RoomAndBoard(grid, planTerms with { PayorRoomTax = string.Equals(planTerms.PayorRoomTax?.Trim(), "Y", StringComparison.OrdinalIgnoreCase) ? "N" : "Y" });
+            bool Lenient() => Math.Abs(derived - v.Saved) < 0.015m || (other != 0m && !CoPaymentRules.HasMemberShare(planTerms) && Math.Abs(other - v.Saved) < 0.015m);
+            if (v.Saved != 0) { savedN++; savedOk += Math.Abs(derived - v.Saved) < 0.015m ? 1 : 0; savedLenient += Lenient() ? 1 : 0; }
+            if (derived != 0)
+            {
+                derivedN++;
+                derivedOk += Math.Abs(derived - v.Saved) < 0.015m ? 1 : 0;
+                derivedLenient += Lenient() ? 1 : 0;
+                await using var read = await TestDb.Sessions().OpenAsync();
+                var t = await terms.TermsAsync(read, v.Cas, v.Version);
+                var source = CoPaymentRules.HasMemberShare(t) ? "member share" : CoPaymentRules.RoomAndBoard(grid, t) != 0 ? "room and board" : "co-insurance";
+                var ok = Math.Abs(derived - v.Saved) < 0.015m;
+                bySource[source] = (bySource.GetValueOrDefault(source).N + 1, bySource.GetValueOrDefault(source).Ok + (ok ? 1 : 0));
+                if (!ok && source == "room and board" && wrong.Count < 12) wrong.Add($"{v.Cas} v{v.Version} {t?.PlanFamily} {t?.PayorRoomTax} {t?.RoomCoPayPercent}%: saved {v.Saved} derived {derived}");
+            }
         }
-        output.WriteLine($"{sample.Count} versions: of {savedN} with a saved co-payment {savedOk} reproduced; of {derivedN} the plan gives one for, {derivedOk} equal the saved amount");
-        // with the member's own share (payor TK) and the plan's co-insurance: 80 per cent of those given are right and 71 per cent of the saved co-payments are reproduced; the rest are the Room & Board
-        // co-payment and the co-insurance that goes to the ex-gratia row, not ported
-        Assert.True(derivedN >= 50 && derivedOk >= derivedN * 0.75, $"derived co-payments that equal the saved one: {derivedOk} of {derivedN}");
-        Assert.True(savedN >= 50 && savedOk >= savedN * 0.65, $"saved co-payments reproduced: {savedOk} of {savedN}");
+        foreach (var (source, (n, ok)) in bySource) output.WriteLine($"  {source}: {ok} of {n} equal the saved amount");
+        foreach (var line in wrong) output.WriteLine("  wrong room and board: " + line);
+        output.WriteLine($"{sample.Count} versions: of {savedN} with a saved co-payment {savedOk} reproduced ({savedLenient} when the payor's other Room & Board tax setting is accepted); of {derivedN} the plan gives one for, {derivedOk} equal the saved amount ({derivedLenient} accepting it)");
+        // with the member's own share (payor TK), the Room & Board co-payment and the plan's co-insurance: 80 per cent of those given are right and 86 per cent of the saved co-payments are reproduced
+        // (78 per cent strictly); the rest are mostly the co-insurance that goes to the ex-gratia row, not ported, and approved totals the engine gets wrong
+        Assert.True(derivedN >= 50 && derivedLenient >= derivedN * 0.75, $"derived co-payments that equal the saved one: {derivedLenient} of {derivedN}");
+        Assert.True(savedN >= 50 && savedLenient >= savedN * 0.80, $"saved co-payments reproduced: {savedLenient} of {savedN}");
     }
 }

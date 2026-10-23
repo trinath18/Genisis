@@ -182,6 +182,28 @@ limits, and which branch applies), so they cannot be regenerated from an invoice
 row in 93 per cent; `CLMPayableByMedix2H` / `2M` equal the sums of the saved hospital / member rows in only 66 / 70 per cent, because they are the grid's Final Total row, which has more in it than the 29 rows (co-payment,
 excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalApprove` in 95 per cent.
 
+## 4c. Registration's save: what is built and what is not
+
+**Built and checked** (no endpoint writes anything yet; see below):
+
+* `RegistrationChecks` (`Worksheet/Calculation`): the checks of `cmdApprove_Click` in the desktop's order with its messages: case number, record, an invoice, a final diagnosis, a worksheet status, the payable-to-hospital
+  amount equal to the invoices' for a hospital-paid worksheet, then for a member-paid one the bank and account number together, the address, post code, city and state; and the bank account's digit count
+  (`BankAccounts.AccountDigits`), which the desktop checks first, shows its message at once, and lets stop the save only when nothing else does. 12 unit tests.
+* `WorksheetRows` (`Worksheet/Engine`): the rows of `ClaimActual`, `ClaimApprove`, `ClaimHos` and `ClaimMember` as `saveActual`, `saveApprove`, `saveHos` and `saveMember` write them: which worksheet row goes to
+  which column (rows 8 and 13 go to `CLMCOPreHSSum` / `CLMCOMPreHSSum` and rows 6, 7, 9 to 12 are not written for plan families 2 to 5 and payor IB; row 19 is `CLMTax`), and the text of each cell (the grid's
+  `#,#.00`: ".50" under one, "-" for an empty cell; the member's column saves an amount under 1, which includes everything the member owes, as VB's number, "-94.4"; the approved cell of the monthly and organ rows
+  is "0" when empty in the desktop in use since 2020 and was "-" before 2019).
+  **Checked against the saved rows**: each saved row of a sample (about one version in twenty of those opened since July 2020: 1,786 versions) is read back into numbers and written again, and every cell compared:
+  `ClaimActual`, `ClaimHos` and `ClaimMember` are **100.00 per cent of cells equal** (1,786 of 1,786 rows entirely), `ClaimApprove` 99.35 per cent (1,660 rows entirely). The rest of `ClaimApprove` is the monthly row
+  saved as "-" in 111 versions where the organ row is "0", and 9 versions whose whole approved row is "0" (a status that approves nothing, not worked out). This checks the map and the formats, with the engine out of it;
+  the numbers themselves come from the engine, which is right for about 73 per cent of the totals (see step 6).
+
+**Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
+the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `SaveClaim` (about 55 of the 141 `Claim` columns, several from state not in
+the saved rows), `SaveClaimRemarks`, `saveLimit` (the limits and the days they were worked out with), the GST copies of actual and approved, `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit`,
+`UpdateInvoice` (marks the invoices used), `UpdateCasReserve`, the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
+`UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`), the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`) and, for top-up members, `SaveDuplClaim` in four databases.
+
 ## 5. Order of work, and how each step is checked
 
 1. **Invoice rules** (done): `getTotal` and the ten sums as pure code (`InvoiceRules`), checked on saved invoices: the sums 430 of 430, the invoice amount 96.5 per cent.

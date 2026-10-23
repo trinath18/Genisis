@@ -1,0 +1,86 @@
+using System.Globalization;
+
+namespace Genisis.Api.Worksheet.Engine;
+
+/// <summary>
+/// The rows the desktop's Registration save writes to <c>ClaimActual</c>, <c>ClaimApprove</c>, <c>ClaimHos</c> and <c>ClaimMember</c> (<c>saveActual</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c> of
+/// <c>frmWorksheetRegGST2015</c>): the cells of the worksheet grid as text, one column of the grid each (Actual, Approved, Payable to hospital, Payable to member), by the column of the table each row goes to.
+/// </summary>
+public static class WorksheetRows
+{
+    /// <summary>The text of a cell with nothing in it.</summary>
+    public const string Dash = "-";
+
+    /// <summary>
+    /// Whether the plan is written the flat way: plan families 2 to 5 and payor IB keep two sums (<c>CLMCOPreHSSum</c>, <c>CLMCOMPreHSSum</c>) in rows 8 and 13 and no pre- and post-hospital rows 6, 7, 9, 10, 11, 12.
+    /// </summary>
+    public static bool Flat(string? planFamily, string? payor) => planFamily?.Trim() is "2" or "3" or "4" or "5" || string.Equals(payor?.Trim(), "IB", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly (int Slot, string Column)[] Always =
+    [
+        (1, "CLMBoardAmt"), (2, "CLMICUAmt"), (3, "CLMServices"), (4, "CLMTheatre"), (5, "CLMMRI"), (14, "CLMAccPostAmt"), (15, "CLMAmbulance"), (16, "CLMOutpatient"), (17, "CLMMonthly"), (18, "CLMOrgan"),
+        (19, "CLMTax"), (20, "CLMGuardianAmt"), (21, "CLMMedical"), (22, "CLMPhone"), (23, "CLMAdmin"), (24, "CLMHomeNCAmt"), (25, "CLMOthers1"), (26, "CLMOthersNotCoPay"), (27, "CLMBoardTaxAmt"),
+        (28, "CLMICUTaxAmt"), (29, "CLMLodgerTaxAmt"),
+    ];
+
+    private static readonly (int Slot, string Column)[] Itemised =
+        [(6, "CLMPreHSAmt"), (7, "CLMPreHosp"), (8, "CLMSurgicalAmt"), (9, "CLMAna"), (10, "CLMNSPreHos"), (11, "CLMPhysician"), (12, "CLMPost"), (13, "CLMMPreHSAmt")];
+
+    private static readonly (int Slot, string Column)[] FlatSums = [(8, "CLMCOPreHSSum"), (13, "CLMCOMPreHSSum")];
+
+    /// <summary>The column each worksheet row (grid row) is written to.</summary>
+    public static IReadOnlyList<(int Slot, string Column)> Columns(bool flat) => [.. Always, .. (flat ? FlatSums : Itemised)];
+
+    /// <summary>Which column of the worksheet grid a table holds.</summary>
+    public enum Kind
+    {
+        /// <summary>What the invoices add up to.</summary>
+        Actual,
+
+        /// <summary>What the plan lets through.</summary>
+        Approved,
+
+        /// <summary>Payable to the hospital.</summary>
+        Hospital,
+
+        /// <summary>Payable to, or (negative) due from, the member.</summary>
+        Member,
+    }
+
+    /// <summary>A cell as the grid shows it, VB's <c>Format(x, "#,#.00")</c>: thousands separated, two decimals, no digit before the point for an amount under one (".50").</summary>
+    public static string Grid(decimal value)
+    {
+        var text = Math.Abs(value).ToString("#,##0.00", CultureInfo.InvariantCulture);
+        if (text.StartsWith("0.", StringComparison.Ordinal)) text = text[1..];
+        return value < 0 ? "-" + text : text;
+    }
+
+    /// <summary>VB's string of a number (no separators, no trailing zeros): <c>-94.4</c>, <c>0.5</c>.</summary>
+    public static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    /// <summary>The worksheet rows of the monthly (kidney dialysis) and organ benefits, whose approved cell the desktop in use since 2020 saves as "0" when it is empty (718 of 771 approved rows of 2021; before 2019 always a dash).</summary>
+    public static readonly IReadOnlySet<int> ApprovedZeroRows = new HashSet<int> { 17, 18 };
+
+    /// <summary>
+    /// The text one cell is saved as. An empty cell is a dash (for the approved cell of the monthly and organ rows, <see cref="ApprovedZeroRows"/>, a "0"). The member's column is the exception: an amount under 1, which includes everything the member owes (a negative number), is saved as the number VB
+    /// makes of it (<c>-94.4</c>, <c>0.5</c>) and not as the grid shows it (<c>saveMember</c>: <c>(Fgrid.Text * -1) * -1</c>).
+    /// </summary>
+    public static string Cell(decimal value, Kind kind, int slot = 0)
+    {
+        if (value == 0m) return kind == Kind.Approved && ApprovedZeroRows.Contains(slot) ? "0" : Dash;
+        return kind == Kind.Member && value < 1m ? Number(value) : Grid(value);
+    }
+
+    /// <summary>The columns and texts of one table for an evaluated worksheet. Rows the plan family does not write are left out.</summary>
+    public static Dictionary<string, string> Build(WorksheetEvaluation grid, bool flat, Kind kind)
+    {
+        var rows = new Dictionary<string, string>();
+        foreach (var (slot, column) in Columns(flat))
+        {
+            var line = grid.Lines.FirstOrDefault((l) => l.Slot == slot);
+            var value = kind switch { Kind.Actual => line?.Actual, Kind.Approved => line?.Approved, Kind.Hospital => line?.ToHospital, _ => line?.ToMember } ?? 0m;
+            rows[column] = Cell(value, kind, slot);
+        }
+        return rows;
+    }
+}

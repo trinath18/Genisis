@@ -65,6 +65,10 @@ dotnet_diagnostic.CS1591.severity = error
 [src/Genisis.Api/Controllers/{PayorsController,PanelHospitalsController,CaseNonDisclosureController,CasePayClaimController,CaseMmaController,CaseAuditReviewController,CaseTransferController,CaseListingController,ClaimAsciiController,CaseAsciiController}.cs]
 dotnet_diagnostic.CS1591.severity = error
 
+[src/Genisis.Api/Maintenance/**.cs]
+dotnet_diagnostic.CS1591.severity = error
+[src/Genisis.Api/Controllers/{AccountTransactionController,SecurityDepartmentsController,SecurityUsersController,SecurityPermissionsController,MmaEntryController}.cs]
+dotnet_diagnostic.CS1591.severity = error
 [src/Genisis.Api/Worksheet/*.cs]
 dotnet_diagnostic.CS1591.severity = error
 
@@ -75,4 +79,10 @@ dotnet_diagnostic.CS1591.severity = error
 dotnet_diagnostic.CS1591.severity = error
 
 [src/Genisis.Api/Invoice/*.cs]
+dotnet_diagnostic.CS1591.severity = error
+
+[src/Genisis.Api/Finance/**.cs]
+dotnet_diagnostic.CS1591.severity = error
+
+[src/Genisis.Api/Controllers/Finance*Controller.cs]
 dotnet_diagnostic.CS1591.severity = error

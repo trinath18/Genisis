@@ -27,14 +27,21 @@ Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when
 
 | Position | Screen |
 | --- | --- |
-| 1 | Membership > Registration and Temp MBM Reg; also the Maintenance screens (Plan, Benefits, Entity, Accounts), as in the desktop |
+| 1 | Membership > Registration and Temp MBM Reg; also the Maintenance screens (Plan, Benefits, Entity, Accounts, Account Transaction), as in the desktop |
 | 2 | Membership > Adjustment; also Member Reinstatement, MCO Pending, Card Sending Mode, Deletion and Temp MBM Adj |
 | 3 | Membership > Enquiry; also Leaflet & Card |
 | 4 | Membership > Upload Bordx; also Upload Membership Excel (Pluto) and Generate Membership ASCII (Pluto) |
 | 14 | Membership > Tracking |
+| 111 | Maintenance > Security > Department |
+| 112 | Maintenance > Security > Role Management and User Permission |
+| 147 | Maintenance > MMA (Procedures/OPCS) |
 
 The desktop menu items for the screens after "also" have no click handler (they were hidden and dead in the desktop), so they
 have no access position of their own; each uses the position of the closest screen, as agreed for this migration.
+
+The desktop opened all three Security screens with `CheckAccess(2)`, which is the Membership > Adjustment right. The web screens use
+the access matrix's own Security checkboxes (111 Department, 112 User Permission) instead, so adjusting memberships no longer lets
+someone manage users and grant themselves rights. MMA had no handler; it uses the matrix's Maintenance MMA checkbox (147).
 
 Every endpoint checks its position on the server (`[RequireAccess]`); hiding a menu item in the UI is not the protection.
 
@@ -200,6 +207,27 @@ Differences from the desktop: a fee row needs at least one category and cannot b
 or anaesthetist category (the desktop saved empty rows and deleted without a check); OPCS Narrative is limited to the
 table's 400 characters (the desktop box allowed 3000, which the database rejected); the Accounts MMA surgeon fee is the
 `MMAFees` fee for the procedure's category (the desktop showed the view's `SurgeonsFees` column, which is the 14th Schedule fee).
+## Maintenance > Account Transaction, Security and MMA
+
+Layered like the Case screens (`Maintenance/<Screen>`: repository behind an interface, service, FluentValidation validator, XML
+docs; covered by the architecture tests and the CI whitespace check).
+
+| Endpoint | VB6 | Notes |
+| --- | --- | --- |
+| `GET /api/maintenance/account-transaction` | `frmMMASchedule` ("MMA Schedule of Fees") | Read-only search of `VIEW_MMA_Schedule`; categories match what is listed (the desktop dropped the first typed character). |
+| `/api/maintenance/security/departments` (GET, POST, PUT/DELETE `{code}`) | `frmGroupMaintenance` | The desktop handler opens `frmUserCreation`, which is missing from the source. A department with users cannot be deleted. |
+| `/api/maintenance/security/users` (GET `?search=`, GET `{code}`, GET `lookups`, POST, PUT/DELETE `{code}`) | `frmUserMaintenance` (Role Management) | List, details, lookups (departments, service providers, the 178-position access matrix) and delete are shared with User Permission. |
+| `/api/maintenance/security/permissions` (POST, PUT `{code}`) | `frmUserPermissionMaintenance` | Also LG ID, service provider, authorised status and rights; positions after the matrix are kept. |
+| `POST /api/maintenance/mma-entry/calculate` | `frmMMAEntry` ("Procedures/OPCS") | Up to six surgical / non-surgical procedures against the MMA and 13th Schedule; writes nothing. |
+
+Users and passwords: passwords are scrambled with the desktop's `Crypt` (so sign-in keeps working), must be 7 to 10 characters
+(`USRPassword` holds 10) and are never returned; a blank password on edit keeps the current one, and a password set here must be
+changed at the next sign-in. Role Management in the desktop stored plain text, and User Permission scrambled the already scrambled
+value again on every edit; both broke sign-in. Nobody can delete or suspend their own user or remove their own User Permission
+right. Deleting a user records it in `HISDMArchive.dbo.USRArchive` (updated when the code was archived before). Every change is
+logged with who made it. `GRP` / `USR` are reached through `genisis.Maint_GRP` / `genisis.Maint_USR`, `USRArchive` through
+`genisis.Arch_USRArchive`.
+
 ## Case > Registration
 
 `/api/case/registration` replaces `frmCaseAdmission` (menu position 11). The UI page keeps every desktop field, the same

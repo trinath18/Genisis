@@ -22,6 +22,18 @@ public static class AccessRight
     /// <summary>Maintenance > Entity (mnuAgent_Click) and Maintenance > Accounts (MaintenanceAccounts_Click) check position 1 too.</summary>
     public const int EntityMaintenance = 1;
     public const int AccountsMaintenance = 1;
+
+    /// <summary>Maintenance > Account Transaction (MnuAccountTrans_Click) checks position 1 too.</summary>
+    public const int AccountTransaction = 1;
+
+    /// <summary>Maintenance > Security > Department: the matrix's own Department right (ACS 111), not the desktop's CheckAccess(2), which is Membership > Adjustment.</summary>
+    public const int SecurityDepartment = 111;
+
+    /// <summary>Maintenance > Security > Role Management and User Permission: the matrix's User Permission right (ACS 112), not the desktop's CheckAccess(2).</summary>
+    public const int SecurityUsers = 112;
+
+    /// <summary>Maintenance > MMA (Procedures/OPCS): the desktop menu item had no handler; the matrix's Maintenance MMA checkbox is 147.</summary>
+    public const int MmaEntry = 147;
     /// <summary>Case > Inquiry (frmCaseInquiry) checks position 7 in mdiMain.</summary>
     public const int CaseEnquiry = 7;
 
@@ -63,6 +75,19 @@ public static class AccessRight
     public const int WorksheetEnquiry = 13;
     public const int WorksheetSendToAccounts = 24;
     public const int WorksheetSendToAr = 24;
+
+    // Finance menu (mdiMain.frm): Invoice Receipt, Short Payment Receipt and Reverse Receipt check 9 (Invoice_Click, mnuInvRecAdj_Click,
+    // ReceiptReverse_Click); Notification / Suspension and Suspend / Active 12 (mnuRecMCOOthMan_Click, Suspend_Click); Electronic Banking 10
+    // (mnuElectronicBank_Click); SUN Posting 13 (mnuInvoicePositve_Click).
+    // Receipt Enquiry has no check in the desktop: gated like Invoice Receipt, the closest sibling. Keep in step with GenisisUI/src/auth/access.ts.
+    public const int FinanceReceiptEnquiry = 9;
+    public const int FinanceInvoiceReceipt = 9;
+    public const int FinanceShortPayment = 9;
+    public const int FinanceReverseReceipt = 9;
+    public const int FinanceReceiptManual = 12;
+    public const int FinanceSuspendActive = 12;
+    public const int FinanceElectronicBanking = 10;
+    public const int FinanceSunPosting = 13;
 
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';

@@ -30,7 +30,7 @@ jobs:
           dotnet format whitespace Genisis.sln --verify-no-changes --no-restore
           --include src/Genisis.Api/Common src/Genisis.Api/Data src/Genisis.Api/Case/Ascii src/Genisis.Api/Case/AuditReview
           src/Genisis.Api/Case/Listing src/Genisis.Api/Case/Lookups src/Genisis.Api/Case/Mma src/Genisis.Api/Case/NonDisclosure
-          src/Genisis.Api/Case/PanelHospitals src/Genisis.Api/Case/PayClaim src/Genisis.Api/Case/Transfer
+          src/Genisis.Api/Case/PanelHospitals src/Genisis.Api/Case/PayClaim src/Genisis.Api/Case/Transfer src/Genisis.Api/Maintenance
 
       - name: Fonts for the PDF documents (Leaflet & Card render with system fonts on Linux)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core

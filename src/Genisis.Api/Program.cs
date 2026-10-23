@@ -1,3 +1,4 @@
+using Genisis.Api.Maintenance;
 using FluentValidation;
 using Genisis.Api.Auth;
 using Genisis.Api.Case;
@@ -5,6 +6,7 @@ using Genisis.Api.Invoice;
 using Genisis.Api.Common;
 using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
+using Genisis.Api.Finance;
 using Genisis.Api.Worksheet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -55,6 +57,8 @@ builder.Services.AddSingleton<Genisis.Api.Case.CaseFilesService>();
 builder.Services.AddCaseScreens();
 builder.Services.AddWorksheetScreens();
 builder.Services.AddInvoiceScreens();
+builder.Services.AddMaintenanceScreens();
+builder.Services.AddFinanceScreens();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
@@ -85,6 +89,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     var xmlDocs = Path.Combine(AppContext.BaseDirectory, "Genisis.Api.xml");
     if (File.Exists(xmlDocs)) options.IncludeXmlComments(xmlDocs);
+    // Several screens have request / result types with the same class name (e.g. Membership and Case MmaProcedureRequest);
+    // schema ids carry the namespace so they stay unique.
+    options.CustomSchemaIds(Genisis.Api.Common.SwaggerSchemaIds.For);
     var bearer = new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Name = "Authorization",

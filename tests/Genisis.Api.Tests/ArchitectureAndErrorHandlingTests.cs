@@ -25,6 +25,8 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         typeof(CaseMmaController), typeof(CaseAuditReviewController), typeof(CaseTransferController), typeof(CaseListingController),
         typeof(ClaimAsciiController), typeof(CaseAsciiController),
         typeof(WorksheetLookupsController), typeof(WorksheetTrackingController), typeof(WorksheetSendToAccountsController), typeof(WorksheetSendToArController), typeof(WorksheetEnquiryController),
+        typeof(AccountTransactionController), typeof(SecurityDepartmentsController), typeof(SecurityUsersController), typeof(SecurityPermissionsController), typeof(MmaEntryController),
+        typeof(FinanceSunPostingController), typeof(FinanceReceiptEnquiryController), typeof(FinanceInvoiceReceiptController), typeof(FinanceReverseReceiptController), typeof(FinanceSuspendActiveController), typeof(FinanceElectronicBankingController),
     ];
 
     private static readonly string[] ScreenNamespaces =
@@ -32,10 +34,14 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         "Genisis.Api.Case.Ascii", "Genisis.Api.Case.AuditReview", "Genisis.Api.Case.Listing", "Genisis.Api.Case.Lookups", "Genisis.Api.Case.Mma",
         "Genisis.Api.Case.NonDisclosure", "Genisis.Api.Case.PanelHospitals", "Genisis.Api.Case.PayClaim", "Genisis.Api.Case.Transfer",
         "Genisis.Api.Invoice", "Genisis.Api.Worksheet.Calculation", "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
+        "Genisis.Api.Maintenance.AccountTransaction", "Genisis.Api.Maintenance.Security", "Genisis.Api.Maintenance.MmaEntry",
+        "Genisis.Api.Finance.SunPosting", "Genisis.Api.Finance.ReceiptEnquiry", "Genisis.Api.Finance.InvoiceReceipt", "Genisis.Api.Finance.ReverseReceipt", "Genisis.Api.Finance.SuspendActive", "Genisis.Api.Finance.ElectronicBanking",
     ];
 
     private static bool IsScreenNamespace(string? ns) =>
-        ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Invoice", StringComparison.Ordinal));
+        ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal)
+            || ns.StartsWith("Genisis.Api.Invoice", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Maintenance", StringComparison.Ordinal)
+            || ns.StartsWith("Genisis.Api.Finance", StringComparison.Ordinal));
 
     private static string ApiSourceRoot()
     {

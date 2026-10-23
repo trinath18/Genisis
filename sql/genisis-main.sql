@@ -62,7 +62,8 @@ FROM (VALUES
     (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'), (N'Maint_CASLG', N'CASLG'),
     (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
     (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType')) v (s, t);
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType'),
+    (N'Maint_USR', N'USR'), (N'Maint_GRP', N'GRP'), (N'Maint_AccPeriod', N'AccPeriod'), (N'Maint_TimeMain', N'TimeMain')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -72,7 +73,7 @@ WHERE DB_ID(@CisDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@CisDb) + N'.dbo.CISCas'
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@ArchiveDb) + N'.dbo.' + t + N';
 '
-FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive')) v (s, t)
+FROM (VALUES (N'Arch_MBM', N'MBMArchive'), (N'Arch_MBMOthers', N'MBMOthersArchive'), (N'Arch_MBMCoveredPersons', N'MBMCoveredPersonsArchive'), (N'Arch_USRArchive', N'USRArchive')) v (s, t)
 WHERE DB_ID(@ArchiveDb) IS NOT NULL AND OBJECT_ID(QUOTENAME(@ArchiveDb) + N'.dbo.MBMArchive', N'U') IS NOT NULL;
 SELECT @sql += N'IF OBJECT_ID(N''genisis.WS_AccountHistory'', N''SN'') IS NOT NULL DROP SYNONYM genisis.WS_AccountHistory;
 CREATE SYNONYM genisis.WS_AccountHistory FOR ' + QUOTENAME(@WorksheetDb) + N'.dbo.VIEW_Account_History;
@@ -104,6 +105,11 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
     (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
     (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
+    (N'WS_SUNPosting', @WorksheetDb, N'SUNPosting'), (N'WS_SunPostBatch', @WorksheetDb, N'SunPostBatch'),
+    (N'WS_SunPostingMbmInv', @WorksheetDb, N'VIEW_SUN_Posting_MBMInv'),
+    (N'Pay_Payment2MBM', @PaymentDb, N'Payment2MBM'), (N'Pay_PVNSeq2013', @PaymentDb, N'PVNSeq2013'),
+    (N'Pay_PVMedicaSeq2013', @PaymentDb, N'PVMedicaSeq2013'), (N'Pay_PVMedicaMXSeq', @PaymentDb, N'PVMedicaMXSeq'),
+    (N'Pay_ReceiptSummary', @PaymentDb, N'ReceiptSummary'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
@@ -6681,6 +6687,105 @@ BEGIN
 END
 GO
 
+-- ===== main/360_finance_receipt_enquiry.sql =====
+-- Finance > Receipt Enquiry (legacy frmReceiptEnquiry; its source is not available). Rebuilt from the production data: the receipt
+-- header is HISPayment.dbo.ReceiptSummary (receipt no. from RecSeq, type IPCLM / OPCLM / IPFEE / OPFEE, SUN batch and posted flag);
+-- claim receipts have their allocation lines in HISPayment.dbo.ReceiptfrPAY (same ReceiptNo, one line per case / version / bordx,
+-- CheckAmt = amount allocated); fee receipts name the member MCO invoice (HISDB.dbo.MBMMCOInvoice.MCOInvNo) in ReceiptDesc.
+-- Read only: nothing is written.
+
+-- The receipt types in use and the payors.
+CREATE OR ALTER PROCEDURE genisis.ReceiptEnquiry_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT DISTINCT RTRIM(ReceiptType) AS Code, RTRIM(ReceiptType) AS Name
+    FROM genisis.Pay_ReceiptSummary WHERE RTRIM(ISNULL(ReceiptType, N'')) <> N'' ORDER BY Code;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+END
+GO
+
+-- The receipts that match; NULL = no criterion, ranges inclusive. @posted '1': posted to SUN (RecPayStatus 1), '0': not posted.
+-- @caseNo: receipts with an allocation line for that case. Each row carries its number of allocation lines and their total, and
+-- ReversedBy: the receipt that reversed it (Reverse Receipt writes the reversal's description as "REV <receipt no>-...").
+CREATE OR ALTER PROCEDURE genisis.ReceiptEnquiry_Search
+    @receiptFrom nvarchar(40) = NULL, @receiptTo nvarchar(40) = NULL, @dateFrom date = NULL, @dateTo date = NULL,
+    @type nvarchar(30) = NULL, @payor nvarchar(4) = NULL, @chequeNo nvarchar(40) = NULL, @batchNo nvarchar(30) = NULL,
+    @posted char(1) = NULL, @description nvarchar(100) = NULL, @caseNo nvarchar(30) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CASE WHEN CHARINDEX(N'-', ReceiptDesc, 5) > 5 THEN SUBSTRING(ReceiptDesc, 5, CHARINDEX(N'-', ReceiptDesc, 5) - 5) END AS OriginalNo,
+        RTRIM(ReceiptNo) AS ReversalNo
+    INTO #rev FROM genisis.Pay_ReceiptSummary WHERE ReceiptDesc LIKE N'REV %-%';
+
+    SELECT TOP (@max)
+        s.ReceiptIndex AS Id, RTRIM(s.ReceiptNo) AS ReceiptNo, s.ReceiptDate, s.ReceiptAmt AS Amount, RTRIM(s.ReceiptType) AS ReceiptType,
+        RTRIM(s.ReceiptDesc) AS Description, RTRIM(s.RecChqNo) AS ChequeNo, RTRIM(s.RecPayCode) AS Payor, RTRIM(s.RecBatchNo) AS BatchNo,
+        CAST(CASE WHEN s.RecPayStatus = N'1' THEN 1 ELSE 0 END AS bit) AS Posted, s.RecPostDate AS PostDate, RTRIM(s.RecPostUser) AS PostUser,
+        ISNULL(a.Lines, 0) AS AllocationLines, a.Allocated, rv.ReversalNo AS ReversedBy
+    FROM genisis.Pay_ReceiptSummary s
+    OUTER APPLY (SELECT COUNT(*) AS Lines, SUM(p.CheckAmt) AS Allocated FROM genisis.Pay_ReceiptfrPAY p
+                 WHERE p.ReceiptNo = s.ReceiptNo AND RTRIM(ISNULL(s.ReceiptNo, N'')) <> N'') a
+    OUTER APPLY (SELECT TOP 1 r.ReversalNo FROM #rev r WHERE r.OriginalNo = RTRIM(s.ReceiptNo) AND RTRIM(ISNULL(s.ReceiptNo, N'')) <> N'') rv
+    WHERE (@receiptFrom IS NULL OR s.ReceiptNo >= @receiptFrom) AND (@receiptTo IS NULL OR s.ReceiptNo <= @receiptTo)
+      AND (@dateFrom IS NULL OR s.ReceiptDate >= @dateFrom) AND (@dateTo IS NULL OR s.ReceiptDate <= @dateTo)
+      AND (@type IS NULL OR s.ReceiptType = @type)
+      AND (@payor IS NULL OR s.RecPayCode = @payor)
+      AND (@chequeNo IS NULL OR s.RecChqNo = @chequeNo)
+      AND (@batchNo IS NULL OR s.RecBatchNo = @batchNo)
+      AND (@posted IS NULL OR (@posted = '1' AND s.RecPayStatus = N'1') OR (@posted = '0' AND ISNULL(s.RecPayStatus, N'') <> N'1'))
+      AND (@description IS NULL OR s.ReceiptDesc LIKE N'%' + @description + N'%')
+      AND (@caseNo IS NULL OR EXISTS (SELECT 1 FROM genisis.Pay_ReceiptfrPAY p WHERE p.ReceiptNo = s.ReceiptNo AND p.CASNumber = @caseNo))
+    ORDER BY s.ReceiptDate DESC, s.ReceiptNo DESC, s.ReceiptIndex DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- One receipt: the header, its claim allocation lines, the fee invoice it names (ReceiptDesc = MCOInvNo, or the part after the last
+-- '-', e.g. "IC-S33942") and its SUN posting rows (SUNPosting.TransRef = receipt no.). Four result sets; the first is empty when the
+-- receipt does not exist.
+CREATE OR ALTER PROCEDURE genisis.ReceiptEnquiry_Get
+    @id int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @no nvarchar(40), @desc nvarchar(100);
+    SELECT @no = RTRIM(ReceiptNo), @desc = RTRIM(ReceiptDesc) FROM genisis.Pay_ReceiptSummary WHERE ReceiptIndex = @id;
+
+    SELECT s.ReceiptIndex AS Id, RTRIM(s.ReceiptNo) AS ReceiptNo, s.ReceiptDate, s.ReceiptAmt AS Amount, RTRIM(s.ReceiptType) AS ReceiptType,
+        RTRIM(s.ReceiptDesc) AS Description, RTRIM(s.RecChqNo) AS ChequeNo, RTRIM(s.RecPayCode) AS Payor, RTRIM(s.RecBatchNo) AS BatchNo,
+        CAST(CASE WHEN s.RecPayStatus = N'1' THEN 1 ELSE 0 END AS bit) AS Posted, s.RecPostDate AS PostDate, RTRIM(s.RecPostUser) AS PostUser,
+        0 AS AllocationLines, CAST(NULL AS money) AS Allocated,
+        (SELECT TOP 1 RTRIM(r.ReceiptNo) FROM genisis.Pay_ReceiptSummary r
+         WHERE @no IS NOT NULL AND @no <> N'' AND r.ReceiptDesc LIKE N'REV ' + @no + N'-%' ORDER BY r.ReceiptIndex) AS ReversedBy
+    FROM genisis.Pay_ReceiptSummary s WHERE s.ReceiptIndex = @id;
+
+    SELECT p.RecPAYIndex AS Id, RTRIM(p.CASNumber) AS CaseNo, RTRIM(p.ClaimVersion) AS ClaimVersion, RTRIM(p.BordxNo) AS BordxNo,
+        p.CheckAmt AS Allocated, p.RecPAYAmt AS ReceiptAmount, p.PAYBankCharge AS BankCharge, RTRIM(p.ChequeNo) AS ChequeNo,
+        CASE WHEN p.RECAccPeriodMth IS NULL THEN NULL
+             ELSE RIGHT(N'0' + CAST(CAST(p.RECAccPeriodMth AS int) AS nvarchar(2)), 2) + N'/' + CAST(CAST(p.RECAccPeriodYR AS int) AS nvarchar(4)) END AS AccPeriod,
+        RTRIM(p.Remark) AS Remark, RTRIM(p.PAYLastUpdateUser) AS UpdatedBy, p.PAYLastUpdatedate AS UpdatedOn
+    FROM genisis.Pay_ReceiptfrPAY p
+    WHERE @no IS NOT NULL AND @no <> N'' AND p.ReceiptNo = @no
+    ORDER BY p.CASNumber, p.ClaimVersion, p.RecPAYIndex;
+
+    DECLARE @invoice nvarchar(40) = CASE WHEN CHARINDEX(N'-', ISNULL(@desc, N'')) > 0 THEN RIGHT(@desc, CHARINDEX(N'-', REVERSE(@desc)) - 1) ELSE @desc END;
+    SELECT RTRIM(i.MCOInvNo) AS InvoiceNo, MIN(i.MCOInvDate) AS InvoiceDate, COUNT(*) AS Members, SUM(i.BillMCOAmt) AS BillAmount,
+        SUM(ISNULL(i.GSTAmt, 0)) AS GstAmount
+    FROM dbo.MBMMCOInvoice i
+    WHERE @desc IS NOT NULL AND @desc <> N'' AND (i.MCOInvNo = @desc OR i.MCOInvNo = @invoice)
+    GROUP BY i.MCOInvNo;
+
+    SELECT RTRIM(PostType) AS PostType, RTRIM(BatchNo) AS BatchNo, PostDate, RTRIM(PostBy) AS PostBy,
+        RTRIM(AccMonth) + N'/' + RTRIM(AccYear) AS AccPeriod, COUNT(*) AS Rows
+    FROM genisis.WS_SUNPosting
+    WHERE @no IS NOT NULL AND @no <> N'' AND TransRef = @no
+    GROUP BY PostType, BatchNo, PostDate, PostBy, AccMonth, AccYear
+    ORDER BY PostDate;
+END
+GO
+
 -- ===== main/360_invoice_processing.sql =====
 -- Invoice Processing (legacy frmInvoice, menu Invoice > Invoice Processing), read side: the case an invoice belongs to, the case's invoices, and one invoice's amounts by worksheet row.
 -- The row mapping is the one the worksheet engine uses (WorksheetEngine_Actual), so an invoice's rows add up to the worksheet's actual amounts.
@@ -6767,6 +6872,479 @@ BEGIN
     ) inv ON inv.Slot = n.Slot
     GROUP BY n.Slot
     ORDER BY n.Slot;
+END
+GO
+
+-- ===== main/361_finance_invoice_receipt.sql =====
+-- Finance > Invoice Receipt (Outstanding) and Notification / Suspension (legacy FrmRecMCO / frmRecMCOManual). The desktop forms in the
+-- source write RECMCO / RECOthers, which have no rows since 2010; the receipts entered since then are in HISPayment.dbo.ReceiptSummary
+-- (fee receipts: ReceiptType IPFEE / OPFEE, ReceiptDesc = the member MCO invoice number, sometimes "<payor>-<invoice>", RecPayCode =
+-- the invoice's payor, receipt number from RecSeq exactly like the desktop's GenerateSRecNo). The screens are rebuilt on those
+-- tables; nothing existing is altered.
+
+-- The receipt number prefixes in use (RecSeq.RCInd).
+CREATE OR ALTER PROCEDURE genisis.InvoiceReceipt_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(RCInd) AS Code, RTRIM(RCInd) AS Name FROM genisis.Pay_RecSeq WHERE RTRIM(ISNULL(RCInd, N'')) <> N'' ORDER BY RCInd;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+END
+GO
+
+-- The member MCO invoices with what has been received against them. Received = fee receipts whose description is the invoice
+-- number or ends with "-<invoice number>". @payor: invoices with a member of that payor (membership numbers start with the payor
+-- code). @outstandingOnly 1: invoices with nothing received or a balance above zero. @partPaidOnly 1 (Short Payment Receipt):
+-- invoices with at least one receipt and a balance still above zero.
+CREATE OR ALTER PROCEDURE genisis.InvoiceReceipt_SearchInvoices
+    @invoiceFrom nvarchar(40) = NULL, @invoiceTo nvarchar(40) = NULL, @dateFrom datetime = NULL, @dateTo datetime = NULL,
+    @payor nvarchar(4) = NULL, @outstandingOnly bit = 1, @partPaidOnly bit = 0, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(ReceiptDesc) AS ReceiptDesc, ReceiptAmt INTO #fees
+    FROM genisis.Pay_ReceiptSummary WHERE ReceiptType IN (N'IPFEE', N'OPFEE') AND RTRIM(ISNULL(ReceiptDesc, N'')) <> N'';
+
+    SELECT RTRIM(i.MCOInvNo) AS InvoiceNo, MIN(i.MCOInvDate) AS InvoiceDate, COUNT(*) AS Members, SUM(ISNULL(i.BillMCOAmt, 0)) AS BillAmount,
+        MIN(LEFT(i.MBMNumber, 2)) AS Payor
+    INTO #inv
+    FROM dbo.MBMMCOInvoice i
+    WHERE RTRIM(ISNULL(i.MCOInvNo, N'')) <> N''
+      AND (@invoiceFrom IS NULL OR i.MCOInvNo >= @invoiceFrom) AND (@invoiceTo IS NULL OR i.MCOInvNo <= @invoiceTo)
+      AND (@dateFrom IS NULL OR i.MCOInvDate >= @dateFrom) AND (@dateTo IS NULL OR i.MCOInvDate <= @dateTo)
+    GROUP BY i.MCOInvNo
+    HAVING @payor IS NULL OR SUM(CASE WHEN LEFT(i.MBMNumber, 2) = @payor THEN 1 ELSE 0 END) > 0
+    OPTION (RECOMPILE);
+
+    SELECT TOP (@max) v.InvoiceNo, v.InvoiceDate, v.Members, v.BillAmount, v.Payor, ISNULL(r.Receipts, 0) AS Receipts,
+        ISNULL(r.Received, 0) AS Received, v.BillAmount - ISNULL(r.Received, 0) AS Outstanding
+    FROM #inv v
+    OUTER APPLY (SELECT COUNT(*) AS Receipts, SUM(f.ReceiptAmt) AS Received FROM #fees f
+                 WHERE f.ReceiptDesc = v.InvoiceNo OR f.ReceiptDesc LIKE N'%-' + v.InvoiceNo) r
+    WHERE (@outstandingOnly = 0 OR r.Receipts IS NULL OR r.Receipts = 0 OR v.BillAmount - ISNULL(r.Received, 0) > 0)
+      AND (@partPaidOnly = 0 OR (r.Receipts > 0 AND v.BillAmount - ISNULL(r.Received, 0) > 0))
+    ORDER BY v.InvoiceDate DESC, v.InvoiceNo DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- The fee receipts recorded against one invoice (same matching as above), newest first.
+CREATE OR ALTER PROCEDURE genisis.InvoiceReceipt_Receipts
+    @invoiceNo nvarchar(40)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ReceiptIndex AS Id, RTRIM(ReceiptNo) AS ReceiptNo, ReceiptDate, ReceiptAmt AS Amount, RTRIM(ReceiptType) AS ReceiptType,
+        RTRIM(ReceiptDesc) AS Description, RTRIM(RecChqNo) AS ChequeNo, RTRIM(RecPayCode) AS Payor, RTRIM(RecBatchNo) AS BatchNo,
+        CAST(CASE WHEN RecPayStatus = N'1' THEN 1 ELSE 0 END AS bit) AS Posted
+    FROM genisis.Pay_ReceiptSummary
+    WHERE ReceiptType IN (N'IPFEE', N'OPFEE') AND (RTRIM(ReceiptDesc) = @invoiceNo OR RTRIM(ReceiptDesc) LIKE N'%-' + @invoiceNo)
+    ORDER BY ReceiptDate DESC, ReceiptIndex DESC;
+END
+GO
+
+-- GenerateSRecNo(prefix): the next receipt number <prefix><5 digits> from RecSeq, locked so two users cannot take the same one.
+-- Numbers already used in ReceiptSummary / ReceiptfrPAY are skipped. A prefix without a RecSeq row starts at 10001 (the desktop
+-- returned "10001" without the prefix there; here the prefix is kept). Runs inside the caller's transaction.
+CREATE OR ALTER PROCEDURE genisis.FinanceReceipt_NextNumber
+    @prefix nvarchar(2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @seq int, @no nvarchar(40);
+    SELECT @seq = CAST(RecSeqNo AS int) FROM genisis.Pay_RecSeq WITH (UPDLOCK, HOLDLOCK) WHERE RCInd = @prefix;
+    IF @seq IS NULL
+    BEGIN
+        SET @seq = 10001;
+        INSERT INTO genisis.Pay_RecSeq (RecSeqNo, RCInd) VALUES (N'10001', @prefix);
+    END
+    ELSE
+        SET @seq = @seq + 1;
+    SET @no = @prefix + RIGHT(N'00000' + CAST(@seq AS nvarchar(10)), 5);
+    WHILE EXISTS (SELECT 1 FROM genisis.Pay_ReceiptSummary WHERE ReceiptNo = @no) OR EXISTS (SELECT 1 FROM genisis.Pay_ReceiptfrPAY WHERE ReceiptNo = @no)
+    BEGIN
+        SET @seq = @seq + 1;
+        SET @no = @prefix + RIGHT(N'00000' + CAST(@seq AS nvarchar(10)), 5);
+    END
+    UPDATE genisis.Pay_RecSeq SET RecSeqNo = RIGHT(N'00000' + CAST(@seq AS nvarchar(10)), 5) WHERE RCInd = @prefix;
+    SELECT @no AS ReceiptNo;
+END
+GO
+
+-- Saves one receipt header (unposted: no SUN batch). Refused when the receipt number is already used. Result: 0 done (with the new
+-- ReceiptIndex), 2 refused.
+CREATE OR ALTER PROCEDURE genisis.FinanceReceipt_Insert
+    @receiptNo nvarchar(40), @receiptDate date, @amount money, @receiptType nvarchar(30), @description nvarchar(100),
+    @chequeNo nvarchar(40), @payor nvarchar(4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.Pay_ReceiptSummary WITH (UPDLOCK, HOLDLOCK) WHERE ReceiptNo = @receiptNo)
+       OR EXISTS (SELECT 1 FROM genisis.Pay_ReceiptfrPAY WHERE ReceiptNo = @receiptNo)
+    BEGIN
+        SELECT 2 AS Result, CAST(NULL AS int) AS Id;
+        RETURN;
+    END
+    INSERT INTO genisis.Pay_ReceiptSummary (ReceiptNo, ReceiptDate, ReceiptAmt, ReceiptType, ReceiptDesc, RecChqNo, RecPayCode)
+    VALUES (@receiptNo, @receiptDate, @amount, @receiptType, @description, @chequeNo, @payor);
+    SELECT 0 AS Result, CAST(SCOPE_IDENTITY() AS int) AS Id;
+END
+GO
+
+-- ===== main/363_finance_reverse_receipt.sql =====
+-- Finance > Reverse Receipt (legacy frmReverseReceipt; its source is not available). Rebuilt on the pattern in the data: a receipt is
+-- reversed by a NEW receipt with the negative amount (as RB47998 / RB53907), never by deleting it. The reversal's description is
+-- "REV <original receipt no>-<original description>": it names the receipt it reverses, and a reversed fee receipt still matches its
+-- invoice (the invoice balance logic matches descriptions ending in "-<invoice no>"). A claim receipt's allocation lines
+-- (ReceiptfrPAY) are copied with negative amounts under the new number. Claim / Bordx receipt status columns are not changed.
+
+-- Reverses receipt @id under @newNo (taken from FinanceReceipt_NextNumber in the same transaction). Result: 0 done (with the new
+-- id and the number of claim lines copied), 1 receipt not found, 2 refused: it is itself a reversal / not positive, or already reversed.
+CREATE OR ALTER PROCEDURE genisis.ReverseReceipt_Reverse
+    @id int, @newNo nvarchar(40), @reversalDate date, @accMonth int, @accYear int, @userCode nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @no nvarchar(40), @desc nvarchar(100), @amount money, @type nvarchar(30), @cheque nvarchar(40), @payor nvarchar(4);
+    SELECT @no = RTRIM(ReceiptNo), @desc = RTRIM(ReceiptDesc), @amount = ReceiptAmt, @type = ReceiptType, @cheque = RecChqNo, @payor = RecPayCode
+    FROM genisis.Pay_ReceiptSummary WITH (UPDLOCK, HOLDLOCK) WHERE ReceiptIndex = @id;
+    IF @no IS NULL
+    BEGIN
+        SELECT 1 AS Result, CAST(NULL AS int) AS Id, 0 AS Lines;
+        RETURN;
+    END
+    IF @no = N'' OR ISNULL(@amount, 0) <= 0 OR ISNULL(@desc, N'') LIKE N'REV %'
+       OR EXISTS (SELECT 1 FROM genisis.Pay_ReceiptSummary WHERE ReceiptDesc LIKE N'REV ' + @no + N'-%')
+       OR EXISTS (SELECT 1 FROM genisis.Pay_ReceiptSummary WHERE ReceiptNo = @newNo)
+    BEGIN
+        SELECT 2 AS Result, CAST(NULL AS int) AS Id, 0 AS Lines;
+        RETURN;
+    END
+
+    INSERT INTO genisis.Pay_ReceiptSummary (ReceiptNo, ReceiptDate, ReceiptAmt, ReceiptType, ReceiptDesc, RecChqNo, RecPayCode)
+    VALUES (@newNo, @reversalDate, -@amount, @type, LEFT(N'REV ' + @no + N'-' + ISNULL(@desc, N''), 100), @cheque, @payor);
+    DECLARE @newId int = CAST(SCOPE_IDENTITY() AS int);
+
+    INSERT INTO genisis.Pay_ReceiptfrPAY (ReceiptNo, ReceiptDate, ReceiptAmt, PAYBankCharge, ChequeNo, Remark, BordxNo, CASNumber, ClaimVersion,
+        PAYLastUpdatedate, PAYLastUpdateUser, RecPAYAmt, CheckAmt, RECAccPeriodYR, RECAccPeriodMth, PAYGainLoss, PAYMisc, PAYDiscount,
+        PAYWriteOff, PAYMedixReceipt, PAYRemarks)
+    SELECT @newNo, @reversalDate, -p.ReceiptAmt, -ISNULL(p.PAYBankCharge, 0), p.ChequeNo, LEFT(N'REVERSAL OF ' + @no, 400), p.BordxNo, p.CASNumber,
+        p.ClaimVersion, CONVERT(datetime, CONVERT(char(8), GETDATE(), 112)), @userCode, -p.RecPAYAmt, -p.CheckAmt, @accYear, @accMonth,
+        -ISNULL(p.PAYGainLoss, 0), -ISNULL(p.PAYMisc, 0), -ISNULL(p.PAYDiscount, 0), -ISNULL(p.PAYWriteOff, 0), -ISNULL(p.PAYMedixReceipt, 0),
+        N'REVERSAL OF ' + @no
+    FROM genisis.Pay_ReceiptfrPAY p WHERE p.ReceiptNo = @no;
+    DECLARE @lines int = @@ROWCOUNT;
+
+    SELECT 0 AS Result, @newId AS Id, @lines AS Lines;
+END
+GO
+
+-- ===== main/364_finance_suspend_active.sql =====
+-- Finance > Suspend / Active (legacy frmPaymentMBMReissue; its source is not available). Rebuilt on the member payment vouchers in
+-- HISPayment.dbo.Payment2MBM and the status codes frmPostingPay2MBM lists: A Active, C Cancel, E Expired, R Reissue. The data shows:
+--   * stopping a payment (cancel / expired cheque) adds a row with the SAME PV no., the negative amount, the original cheque no. and
+--     cheque date, the action date as PV date, status C or E and cheque status Y; the original row stays A;
+--   * re-issuing adds a row with a NEW PV no. of the same prefix (CB: PVNSeq2013, CC: PVMedicaSeq2013, CG: PVMedicaMXSeq), the positive
+--     amount, the new cheque no. / transfer reference, the action date and status R.
+-- Nothing is updated or deleted; SUN posting (frmPostingPay2MBM) picks the C / E / R rows up as before.
+
+-- The vouchers that match; NULL = no criterion. Each row says whether it has been stopped (the C / E row of its PV no.) and the
+-- reissue that replaced it (an R row of the same case / version added after the stop).
+CREATE OR ALTER PROCEDURE genisis.SuspendActive_Search
+    @pvFrom nvarchar(30) = NULL, @pvTo nvarchar(30) = NULL, @dateFrom datetime = NULL, @dateTo datetime = NULL,
+    @caseNo nvarchar(30) = NULL, @chequeNo nvarchar(40) = NULL, @payee nvarchar(120) = NULL, @status char(1) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max)
+        p.PVMBMIndex AS Id, RTRIM(p.PVNo) AS PvNo, p.PVDate, p.PVChequeAmt AS Amount, RTRIM(p.PVChequeNo) AS ChequeNo, p.PVChequeDate AS ChequeDate,
+        RTRIM(p.PVStatus) AS Status, RTRIM(p.PVChequeStatus) AS ChequeStatus, RTRIM(p.PVPymtMode) AS PaymentMode, RTRIM(p.PVPayto) AS PayTo,
+        RTRIM(p.PVPayeeBank) AS PayeeBank,
+        CASE WHEN LEN(RTRIM(ISNULL(p.PVPayeeACNo, N''))) > 4 THEN N'****' + RIGHT(RTRIM(p.PVPayeeACNo), 4) ELSE RTRIM(p.PVPayeeACNo) END AS PayeeAccount,
+        RTRIM(p.CASNumber) AS CaseNo, RTRIM(p.ClaimVersion) AS ClaimVersion, RTRIM(p.Remark) AS Remark,
+        RTRIM(p.Pay2MBMLastUpdateUser) AS UpdatedBy, p.Pay2MBMLastUpdateDate AS UpdatedOn,
+        st.StopStatus AS StoppedAs, st.StopDate AS StoppedOn, ri.PvNo AS ReissuedAs
+    FROM genisis.Pay_Payment2MBM p
+    OUTER APPLY (SELECT TOP 1 RTRIM(s.PVStatus) AS StopStatus, s.PVDate AS StopDate, s.PVMBMIndex AS StopId FROM genisis.Pay_Payment2MBM s
+                 WHERE RTRIM(s.PVNo) = RTRIM(p.PVNo) AND s.PVStatus IN ('C', 'E') AND s.PVMBMIndex <> p.PVMBMIndex
+                 ORDER BY s.PVMBMIndex) st
+    OUTER APPLY (SELECT TOP 1 RTRIM(r.PVNo) AS PvNo FROM genisis.Pay_Payment2MBM r
+                 WHERE st.StopId IS NOT NULL AND r.CASNumber = p.CASNumber AND r.ClaimVersion = p.ClaimVersion AND r.PVStatus = 'R'
+                   AND r.PVMBMIndex > st.StopId
+                 ORDER BY r.PVMBMIndex) ri
+    WHERE LEFT(p.PVNo, 2) IN (N'CB', N'CC', N'CG')
+      AND (@pvFrom IS NULL OR p.PVNo >= @pvFrom) AND (@pvTo IS NULL OR p.PVNo <= @pvTo)
+      AND (@dateFrom IS NULL OR p.PVDate >= @dateFrom) AND (@dateTo IS NULL OR p.PVDate <= @dateTo)
+      AND (@caseNo IS NULL OR p.CASNumber = @caseNo)
+      AND (@chequeNo IS NULL OR p.PVChequeNo = @chequeNo)
+      AND (@payee IS NULL OR p.PVPayto LIKE N'%' + @payee + N'%')
+      AND (@status IS NULL OR p.PVStatus = @status)
+    ORDER BY p.PVDate DESC, p.PVNo DESC, p.PVMBMIndex DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- Cancel (C) or expire (E) voucher @id. Only an active (A) or re-issued (R) voucher with a positive amount that has not been stopped
+-- yet. Result: 0 done, 1 not found, 2 refused.
+CREATE OR ALTER PROCEDURE genisis.SuspendActive_Stop
+    @id int, @status char(1), @actionDate datetime, @remark nvarchar(400), @userCode nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @pv nvarchar(30), @amount money, @current char(1);
+    SELECT @pv = RTRIM(PVNo), @amount = PVChequeAmt, @current = PVStatus FROM genisis.Pay_Payment2MBM WITH (UPDLOCK, HOLDLOCK) WHERE PVMBMIndex = @id;
+    IF @pv IS NULL
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+    IF @status NOT IN ('C', 'E') OR ISNULL(@current, '') NOT IN ('A', 'R') OR ISNULL(@amount, 0) <= 0
+       OR EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM WITH (UPDLOCK, HOLDLOCK) WHERE RTRIM(PVNo) = @pv AND PVStatus IN ('C', 'E'))
+    BEGIN
+        SELECT 2 AS Result;
+        RETURN;
+    END
+    INSERT INTO genisis.Pay_Payment2MBM (PVNo, PVDate, PVChequeAmt, PVChequeDate, PVChequeNo, PVPayto, PVPayeeBank, PVPayeeACNo, InvNo, CASNumber,
+        ClaimVersion, Remark, Pay2MBMLastUpdateDate, Pay2MBMLastUpdateUser, MBMPaidAmt, PAYAccPeriodMth, PAYAccPeriodYr, PVPayMBMStatus, PVStatus,
+        PVChequeStatus, PVCaseRemark)
+    SELECT PVNo, CONVERT(datetime, CONVERT(char(8), @actionDate, 112)), -PVChequeAmt, PVChequeDate, PVChequeNo, PVPayto, PVPayeeBank, PVPayeeACNo,
+        InvNo, CASNumber, ClaimVersion, ISNULL(NULLIF(@remark, N''), Remark), CONVERT(datetime, CONVERT(char(8), GETDATE(), 112)), @userCode,
+        -MBMPaidAmt, RIGHT(N'0' + CAST(MONTH(@actionDate) AS nvarchar(2)), 2), CAST(YEAR(@actionDate) AS nvarchar(4)), PVPayMBMStatus, @status,
+        'Y', PVCaseRemark
+    FROM genisis.Pay_Payment2MBM WHERE PVMBMIndex = @id;
+    SELECT 0 AS Result;
+END
+GO
+
+-- Re-issue stopped voucher @id under a new PV no. of its prefix. Only a voucher that has been stopped and not re-issued yet.
+-- Result: 0 done (with the new PV no.), 1 not found, 2 refused.
+CREATE OR ALTER PROCEDURE genisis.SuspendActive_Reissue
+    @id int, @actionDate datetime, @chequeNo nvarchar(40), @paymentMode nvarchar(20), @payeeBank nvarchar(200), @payeeAccount nvarchar(60),
+    @remark nvarchar(400), @userCode nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @pv nvarchar(30), @prefix nvarchar(2), @cas nvarchar(30), @ver nvarchar(100), @stopId int, @seq int, @newPv nvarchar(30);
+    SELECT @pv = RTRIM(PVNo), @prefix = LEFT(PVNo, 2), @cas = CASNumber, @ver = ClaimVersion
+    FROM genisis.Pay_Payment2MBM WITH (UPDLOCK, HOLDLOCK) WHERE PVMBMIndex = @id AND ISNULL(PVChequeAmt, 0) > 0;
+    IF @pv IS NULL
+    BEGIN
+        SELECT 1 AS Result, CAST(NULL AS nvarchar(30)) AS PvNo;
+        RETURN;
+    END
+    SELECT TOP 1 @stopId = PVMBMIndex FROM genisis.Pay_Payment2MBM WHERE RTRIM(PVNo) = @pv AND PVStatus IN ('C', 'E') ORDER BY PVMBMIndex;
+    IF @stopId IS NULL OR @prefix NOT IN (N'CB', N'CC', N'CG')
+       OR EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM WITH (UPDLOCK, HOLDLOCK)
+                  WHERE CASNumber = @cas AND ClaimVersion = @ver AND PVStatus = 'R' AND PVMBMIndex > @stopId)
+    BEGIN
+        SELECT 2 AS Result, CAST(NULL AS nvarchar(30)) AS PvNo;
+        RETURN;
+    END
+
+    IF @prefix = N'CB'
+    BEGIN
+        SELECT @seq = CAST(PVSeqNo AS int) FROM genisis.Pay_PVNSeq2013 WITH (UPDLOCK, HOLDLOCK);
+        SET @seq = @seq + 1;
+        WHILE EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM WHERE RTRIM(PVNo) = N'CB' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+           OR EXISTS (SELECT 1 FROM genisis.Pay_Payment2HOS WHERE RTRIM(PVHOSNo) = N'CB' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+            SET @seq = @seq + 1;
+        UPDATE genisis.Pay_PVNSeq2013 SET PVSeqNo = RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8);
+    END
+    ELSE IF @prefix = N'CC'
+    BEGIN
+        SELECT @seq = CAST(PVSeqNo AS int) FROM genisis.Pay_PVMedicaSeq2013 WITH (UPDLOCK, HOLDLOCK);
+        SET @seq = @seq + 1;
+        WHILE EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM WHERE RTRIM(PVNo) = N'CC' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+           OR EXISTS (SELECT 1 FROM genisis.Pay_Payment2HOS WHERE RTRIM(PVHOSNo) = N'CC' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+            SET @seq = @seq + 1;
+        UPDATE genisis.Pay_PVMedicaSeq2013 SET PVSeqNo = RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8);
+    END
+    ELSE
+    BEGIN
+        SELECT @seq = CAST(PVSeqNo AS int) FROM genisis.Pay_PVMedicaMXSeq WITH (UPDLOCK, HOLDLOCK);
+        SET @seq = @seq + 1;
+        WHILE EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM WHERE RTRIM(PVNo) = N'CG' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+           OR EXISTS (SELECT 1 FROM genisis.Pay_Payment2HOS WHERE RTRIM(PVHOSNo) = N'CG' + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8))
+            SET @seq = @seq + 1;
+        UPDATE genisis.Pay_PVMedicaMXSeq SET PVSeqNo = RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8);
+    END
+    SET @newPv = @prefix + RIGHT(N'00000000' + CAST(@seq AS nvarchar(10)), 8);
+
+    INSERT INTO genisis.Pay_Payment2MBM (PVNo, PVDate, PVChequeAmt, PVChequeDate, PVChequeNo, PVPayto, PVPayeeBank, PVPayeeACNo, InvNo, CASNumber,
+        ClaimVersion, Remark, Pay2MBMLastUpdateDate, Pay2MBMLastUpdateUser, MBMPaidAmt, PAYAccPeriodMth, PAYAccPeriodYr, PVPayMBMStatus, PVStatus,
+        PVPymtMode, PVCaseRemark)
+    SELECT @newPv, CONVERT(datetime, CONVERT(char(8), @actionDate, 112)), PVChequeAmt, CONVERT(datetime, CONVERT(char(8), @actionDate, 112)), @chequeNo,
+        PVPayto, ISNULL(NULLIF(@payeeBank, N''), PVPayeeBank), ISNULL(NULLIF(@payeeAccount, N''), PVPayeeACNo), InvNo, CASNumber, ClaimVersion,
+        @remark, CONVERT(datetime, CONVERT(char(8), GETDATE(), 112)), @userCode, MBMPaidAmt, RIGHT(N'0' + CAST(MONTH(@actionDate) AS nvarchar(2)), 2),
+        CAST(YEAR(@actionDate) AS nvarchar(4)), PVPayMBMStatus, 'R', NULLIF(@paymentMode, N''), PVCaseRemark
+    FROM genisis.Pay_Payment2MBM WHERE PVMBMIndex = @id;
+    SELECT 0 AS Result, @newPv AS PvNo;
+END
+GO
+
+-- ===== main/365_finance_electronic_banking.sql =====
+-- Finance > Electronic Banking (legacy frmFileExportBankESP; its source is not available, and no bank file layout exists in the code or
+-- databases). Rebuilt from the data: electronic payments are the payment vouchers with PVPymtMode 'ONLINE' in HISPayment.dbo.Payment2MBM
+-- (members: payee, bank, account on the voucher) and Payment2HOS (hospitals: one PV no. per payment, one row per case; no bank details
+-- on the voucher). PVChequeNo holds the crediting date (ddmmyyyy) on ONLINE vouchers. The account length each bank expects is in
+-- HISMaintenance.dbo.BankAccounts. Read only: the API builds the file; nothing is marked as exported.
+
+-- One row per ONLINE payment (PV no.). @payeeType 'M' members, 'H' hospitals, NULL both. Member payments that were stopped (a C / E row
+-- with the same PV no.) and the stop rows themselves are left out; so are hospital vouchers that are not active.
+CREATE OR ALTER PROCEDURE genisis.ElectronicBanking_Search
+    @payeeType char(1) = NULL, @dateFrom datetime = NULL, @dateTo datetime = NULL, @creditRef nvarchar(40) = NULL,
+    @pvFrom nvarchar(30) = NULL, @pvTo nvarchar(30) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) x.PayeeType, x.PvNo, x.PvDate, x.CreditRef, x.Payee, x.Bank, x.Account, x.Amount, x.Cases,
+        d.AccountDigits, d.AccountDigitsTwo
+    FROM (
+        SELECT 'M' AS PayeeType, RTRIM(m.PVNo) AS PvNo, MIN(m.PVDate) AS PvDate, MIN(RTRIM(m.PVChequeNo)) AS CreditRef, MIN(RTRIM(m.PVPayto)) AS Payee,
+            MIN(RTRIM(m.PVPayeeBank)) AS Bank, MIN(RTRIM(m.PVPayeeACNo)) AS Account, SUM(m.PVChequeAmt) AS Amount, COUNT(*) AS Cases
+        FROM genisis.Pay_Payment2MBM m
+        WHERE (@payeeType IS NULL OR @payeeType = 'M') AND m.PVPymtMode = N'ONLINE' AND m.PVChequeAmt > 0 AND ISNULL(m.PVStatus, 'A') IN ('A', 'R')
+          AND NOT EXISTS (SELECT 1 FROM genisis.Pay_Payment2MBM s WHERE RTRIM(s.PVNo) = RTRIM(m.PVNo) AND s.PVStatus IN ('C', 'E'))
+          AND (@dateFrom IS NULL OR m.PVDate >= @dateFrom) AND (@dateTo IS NULL OR m.PVDate <= @dateTo)
+          AND (@creditRef IS NULL OR m.PVChequeNo = @creditRef)
+          AND (@pvFrom IS NULL OR m.PVNo >= @pvFrom) AND (@pvTo IS NULL OR m.PVNo <= @pvTo)
+        GROUP BY RTRIM(m.PVNo)
+        UNION ALL
+        SELECT 'H', RTRIM(h.PVHOSNo), MIN(h.PVHOSDate), MIN(RTRIM(h.PVHOSChequeNo)), MIN(RTRIM(h.PVPayee)), MIN(RTRIM(h.PVBank)), MIN(RTRIM(h.PVAccountNo)),
+            MAX(h.PVHOSChequeAmt), COUNT(*)
+        FROM genisis.Pay_Payment2HOS h
+        WHERE (@payeeType IS NULL OR @payeeType = 'H') AND h.PVPymtMode = N'ONLINE' AND h.PVHOSChequeAmt > 0 AND ISNULL(h.PVStatus, 'A') = 'A'
+          AND (@dateFrom IS NULL OR h.PVHOSDate >= @dateFrom) AND (@dateTo IS NULL OR h.PVHOSDate <= @dateTo)
+          AND (@creditRef IS NULL OR h.PVHOSChequeNo = @creditRef)
+          AND (@pvFrom IS NULL OR h.PVHOSNo >= @pvFrom) AND (@pvTo IS NULL OR h.PVHOSNo <= @pvTo)
+        GROUP BY RTRIM(h.PVHOSNo)
+    ) x
+    OUTER APPLY (SELECT TOP 1 b.AccountDigits, b.AccountDigitsTwo FROM genisis.Maint_BankAccounts b WHERE RTRIM(b.Bank) = x.Bank) d
+    ORDER BY x.PvDate DESC, x.PvNo DESC
+    OPTION (RECOMPILE);
+END
+GO
+
+-- ===== main/370_finance_sun_posting.sql =====
+-- Finance > SUN Posting (legacy frmPostingInvoiceMBM, "Member Invoice Posting", PostType 'InvMBM').
+-- The desktop sent a WHERE fragment to the legacy dbo.SUN_HIS_Posting (dynamic SQL over HISWorkSheet.dbo.VIEW_SUN_Posting_MBMInv);
+-- here every criterion is a typed parameter. Reads genisis.WS_SunPostingMbmInv, writes genisis.WS_SUNPosting / genisis.WS_SunPostBatch.
+
+-- ComboListing: health types, payors and accounting periods (the post / bordx status and post type lists are fixed in the API).
+CREATE OR ALTER PROCEDURE genisis.SunPostingMbm_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(HLTCode) AS Code, RTRIM(HLTDescription) AS Name FROM dbo.HLT ORDER BY HLTCode;
+    SELECT RTRIM(PAYCode) AS Code, RTRIM(PAYCompanyName) AS Name FROM dbo.PAY ORDER BY PAYCode;
+    SELECT RTRIM(AccMonth) + N'/' + RTRIM(AccYear) AS Code, RTRIM(AccMonth) + N'/' + RTRIM(AccYear) AS Name
+    FROM genisis.Maint_AccPeriod
+    ORDER BY AccYear DESC, AccMonth DESC;
+END
+GO
+
+-- SearchRecords + MBMInvListing / MBMInvCRListing / MBMInvDRListing: the invoices of the view with the desktop's filters.
+-- Inclusive ranges; NULL = no criterion. Dates compare with the stored datetime exactly as the desktop's 'yyyy/mm/dd' text did
+-- (a "to" date matches rows stamped at midnight of that day). @postStatus '0': not posted (InvMStatus and PostStatus blank or 0),
+-- '1': posted. @bordxStatus '0': no bordx reference, '1': has one. @amountSign 1: INVAmount > 0 (post type P), -1: < 0 (N),
+-- NULL: either (the credit / debit lists). The patient name (covered person when the cover id is not 00) and the product
+-- category (PLN.PLNProCat for the health type / payor; the API uses 'SM' for health type S) are joined here instead of one
+-- query per row.
+CREATE OR ALTER PROCEDURE genisis.SunPostingMbm_Search
+    @healthType nvarchar(4) = NULL, @payor nvarchar(4) = NULL,
+    @invoiceFrom datetime = NULL, @invoiceTo datetime = NULL,
+    @caseFrom nvarchar(30) = NULL, @caseTo nvarchar(30) = NULL,
+    @postStatus char(1) = NULL, @postFrom datetime = NULL, @postTo datetime = NULL,
+    @bordxStatus char(1) = NULL, @batchFrom nvarchar(5) = NULL, @batchTo nvarchar(5) = NULL,
+    @bordxFrom datetime = NULL, @bordxTo datetime = NULL,
+    @amountSign smallint = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max)
+        RTRIM(v.CASNumber) AS CaseNo, RTRIM(v.INVWSversion) AS ClaimVersion, RTRIM(v.MBMNumber) AS MembershipNo,
+        RTRIM(v.MBMPatientCovID) AS PatientCoverId, RTRIM(v.MBMName) AS MemberName,
+        CASE WHEN RTRIM(ISNULL(v.MBMPatientCovID, N'')) <> N'00' THEN RTRIM(cp.MBMCName) ELSE RTRIM(v.MBMName) END AS PatientName,
+        RTRIM(v.InvMStatus) AS InvMStatus, RTRIM(v.PostStatus) AS PostStatus, v.PostDate, RTRIM(v.AccMonth) AS AccMonth, RTRIM(v.AccYear) AS AccYear,
+        RTRIM(v.HLTCode) AS HealthType, RTRIM(v.PAYCode) AS Payor, RTRIM(v.MBMGroupCompany) AS GroupCompany,
+        v.INVEnteredDate AS InvoiceDate, v.INVAmount AS Amount, RTRIM(v.BatchNo) AS BatchNo, v.BordxDate,
+        RTRIM(v.INVBordxRefNo) AS BordxRefNo, RTRIM(v.CLMBordxRevInd) AS BordxReversal, RTRIM(pl.PLNProCat) AS ProductCategory
+    FROM genisis.WS_SunPostingMbmInv v
+    OUTER APPLY (SELECT TOP 1 c.MBMCName FROM dbo.MBMCoveredPersons c
+                 WHERE c.MBMCNumber = RTRIM(v.MBMNumber) AND c.MBMCCoverID = RTRIM(v.MBMPatientCovID)) cp
+    OUTER APPLY (SELECT TOP 1 p.PLNProCat FROM dbo.PLN p WHERE p.HLTCode = RTRIM(v.HLTCode) AND p.PAYCode = RTRIM(v.PAYCode)) pl
+    WHERE (@healthType IS NULL OR v.HLTCode = @healthType)
+      AND (@payor IS NULL OR v.PAYCode = @payor)
+      AND (@invoiceFrom IS NULL OR v.INVEnteredDate >= @invoiceFrom) AND (@invoiceTo IS NULL OR v.INVEnteredDate <= @invoiceTo)
+      AND (@caseFrom IS NULL OR v.CASNumber >= @caseFrom) AND (@caseTo IS NULL OR v.CASNumber <= @caseTo)
+      AND (@postStatus IS NULL
+           OR (@postStatus = '0' AND (v.InvMStatus IS NULL OR v.InvMStatus = '0') AND (v.PostStatus IS NULL OR v.PostStatus = '0'))
+           OR (@postStatus = '1' AND v.InvMStatus = '1' AND v.PostStatus = '1'))
+      AND (@postFrom IS NULL OR v.PostDate >= @postFrom) AND (@postTo IS NULL OR v.PostDate <= @postTo)
+      AND (@bordxStatus IS NULL
+           OR (@bordxStatus = '0' AND (v.INVBordxRefNo IS NULL OR v.INVBordxRefNo = N''))
+           OR (@bordxStatus = '1' AND v.INVBordxRefNo <> N''))
+      AND (@batchFrom IS NULL OR v.BatchNo >= @batchFrom) AND (@batchTo IS NULL OR v.BatchNo <= @batchTo)
+      AND (@bordxFrom IS NULL OR v.BordxDate >= @bordxFrom) AND (@bordxTo IS NULL OR v.BordxDate <= @bordxTo)
+      AND (@amountSign IS NULL OR (@amountSign = 1 AND v.INVAmount > 0) OR (@amountSign = -1 AND v.INVAmount < 0))
+    ORDER BY v.CASNumber, v.INVWSversion
+    OPTION (RECOMPILE);
+END
+GO
+
+-- CheckTime("POSTING") + SpcAccess: the user's special access flag and the end time of the posting window. The API decides
+-- with its clock (the desktop closed the form while the time of day was not after TimeMain.EndTime, unless SpecialAccess = 'Y').
+CREATE OR ALTER PROCEDURE genisis.SunPosting_Window
+    @userCode nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT (SELECT TOP 1 RTRIM(SpecialAccess) FROM genisis.Maint_USR WHERE USRCode = @userCode) AS SpecialAccess,
+           (SELECT TOP 1 EndTime FROM genisis.Maint_TimeMain WHERE Process = N'POSTING') AS EndTime;
+END
+GO
+
+-- GenSUNPostingBatchNo: the next batch number (the last one + 1, first batch 1001). Locked so two users cannot get the same
+-- number; runs inside the caller's transaction, so a failed post gives the number back.
+CREATE OR ALTER PROCEDURE genisis.SunPosting_NextBatch
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @next int;
+    SELECT @next = MAX(CAST(BatchNo AS int)) + 1 FROM genisis.WS_SunPostBatch WITH (UPDLOCK, HOLDLOCK);
+    IF @next IS NULL
+    BEGIN
+        SET @next = 1001;
+        INSERT INTO genisis.WS_SunPostBatch (BatchNo) VALUES (CAST(@next AS nvarchar(20)));
+    END
+    ELSE
+        UPDATE genisis.WS_SunPostBatch SET BatchNo = CAST(@next AS nvarchar(20));
+    SELECT CAST(@next AS nvarchar(20)) AS BatchNo;
+END
+GO
+
+-- CmdPost_Click: one SUNPosting row per invoice (InvMStatus 1, PostStatus 1, PostType InvMBM, today's date, the user, the
+-- accounting month / year and the batch). The desktop only stopped a posted list in the screen; here an invoice already posted
+-- as InvMBM is refused. Result: 0 done, 1 invoice not found, 2 refused (already posted).
+CREATE OR ALTER PROCEDURE genisis.SunPostingMbm_Insert
+    @cas nvarchar(30), @version nvarchar(4), @accMonth char(2), @accYear char(4), @batchNo nvarchar(5), @userCode nvarchar(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoice WHERE CASNumber = @cas AND INVWSversion = @version)
+    BEGIN
+        SELECT 1 AS Result;
+        RETURN;
+    END
+    IF EXISTS (SELECT 1 FROM genisis.WS_SUNPosting WITH (UPDLOCK, HOLDLOCK)
+               WHERE CASNumber = @cas AND ClmVersion = @version AND PostType = N'InvMBM' AND InvMStatus = '1')
+    BEGIN
+        SELECT 2 AS Result;
+        RETURN;
+    END
+    INSERT INTO genisis.WS_SUNPosting (CASNumber, ClmVersion, InvMStatus, PostStatus, PostType, PostDate, PostBy, AccMonth, AccYear, BatchNo)
+    VALUES (@cas, @version, '1', '1', N'InvMBM', CONVERT(datetime, CONVERT(char(8), GETDATE(), 112)), @userCode, @accMonth, @accYear, @batchNo);
+    SELECT 0 AS Result;
 END
 GO
 
@@ -6898,6 +7476,239 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.PLN WHERE RTRIM(PLNCode) = RTRIM(@plan) AND RTRIM(NewSMPlan) = N'Y') THEN 1 ELSE 0 END AS bit) AS NewSm;
+END
+GO
+
+-- ===== main/400_account_transaction.sql =====
+-- Maintenance > Account Transaction (legacy frmMMASchedule, "MMA Schedule of Fees"): a read-only search of
+-- HISMaintenance.dbo.VIEW_MMA_Schedule through genisis.Maint_MMASchedule. Every criterion is optional; text criteria are
+-- "contains" matches as in the desktop, the part and CPT code exact, the page range compares the page text (page + part).
+-- The surgeon's and anaesthetist's categories are matched against the category as listed (without its first character).
+CREATE OR ALTER PROCEDURE genisis.AccountTransaction_Search
+    @bodyPart nvarchar(4000) = NULL, @opcs nvarchar(4000) = NULL, @procedure nvarchar(4000) = NULL,
+    @surgeonCategory nvarchar(4000) = NULL, @anaesthetistCategory nvarchar(4000) = NULL, @part nvarchar(4000) = NULL,
+    @pageFrom nvarchar(4000) = NULL, @pageTo nvarchar(4000) = NULL, @cptCode nvarchar(4000) = NULL, @cptDescription nvarchar(4000) = NULL,
+    @limit int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@limit) RTRIM(ProcMainBPCode) AS BodyPart, RTRIM(OPCSCode) AS Opcs, RTRIM(OPCSNarrative) AS ProcedureDescription,
+        SUBSTRING(RTRIM(ProcSurgCat), 2, 8) AS SurgeonCategory, SUBSTRING(RTRIM(ProcAnaesCat), 2, 8) AS AnaesthetistCategory,
+        RTRIM(ProcPart) AS Part, RTRIM(ProcPageNo) AS Page, CAST(SurgeonsFees AS money) AS SurgeonFee, AnaesthetistsFees AS AnaesthetistFee,
+        RTRIM(PartACost) AS PartACost, RTRIM(CPTCode) AS CptCode, RTRIM(CPTDesc) AS CptDescription
+    FROM genisis.Maint_MMASchedule
+    WHERE (@bodyPart IS NULL OR ProcMainBPCode LIKE N'%' + @bodyPart + N'%')
+      AND (@opcs IS NULL OR OPCSCode LIKE N'%' + @opcs + N'%')
+      AND (@procedure IS NULL OR OPCSNarrative LIKE N'%' + @procedure + N'%')
+      AND (@surgeonCategory IS NULL OR SUBSTRING(ProcSurgCat, 2, 8) LIKE N'%' + @surgeonCategory + N'%')
+      AND (@anaesthetistCategory IS NULL OR SUBSTRING(ProcAnaesCat, 2, 8) LIKE N'%' + @anaesthetistCategory + N'%')
+      AND (@part IS NULL OR ProcPart = @part)
+      AND (@pageFrom IS NULL OR ProcPageNo >= @pageFrom)
+      AND (@pageTo IS NULL OR ProcPageNo <= @pageTo)
+      AND (@cptCode IS NULL OR CPTCode = @cptCode)
+      AND (@cptDescription IS NULL OR CPTDesc LIKE N'%' + @cptDescription + N'%')
+    ORDER BY ProcMainBPCode, OPCSCode;
+END
+GO
+
+-- ===== main/410_security.sql =====
+-- Maintenance > Security: Department (frmGroupMaintenance, table GRP), Role Management (frmUserMaintenance) and User Permission
+-- (frmUserPermissionMaintenance), both on table USR. GRP and USR live in the maintenance database (genisis.Maint_GRP /
+-- genisis.Maint_USR); the service providers in the main database (dbo.SRV); deleted users are recorded in the archive database
+-- (genisis.Arch_USRArchive) when it exists. Passwords arrive already scrambled by the API (the desktop's Crypt) and are never
+-- returned.
+
+-- GRPListing, with the number of users in each department.
+CREATE OR ALTER PROCEDURE genisis.Security_Departments
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(g.GRPCode) AS Code, RTRIM(g.GRPDescription) AS Description,
+        (SELECT COUNT(*) FROM genisis.Maint_USR u WHERE RTRIM(u.GRPCode) = RTRIM(g.GRPCode)) AS Users
+    FROM genisis.Maint_GRP g
+    ORDER BY g.GRPCode;
+END
+GO
+
+-- cmdSave_Click (Add): 0 when the code exists ("Record Duplicated!").
+CREATE OR ALTER PROCEDURE genisis.Security_DepartmentInsert
+    @code nvarchar(4000), @description nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.Maint_GRP WITH (UPDLOCK, HOLDLOCK) WHERE GRPCode = @code) BEGIN SELECT 0; RETURN; END
+    INSERT INTO genisis.Maint_GRP (GRPCode, GRPDescription) VALUES (@code, @description);
+    SELECT 1;
+END
+GO
+
+-- cmdSave_Click (Edit): the number of rows changed (0 when the department no longer exists).
+CREATE OR ALTER PROCEDURE genisis.Security_DepartmentUpdate
+    @code nvarchar(4000), @description nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_GRP SET GRPDescription = @description WHERE GRPCode = @code;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- cmdDelete_Click: -1 when users still belong to the department (nothing deleted), otherwise the number of rows deleted.
+CREATE OR ALTER PROCEDURE genisis.Security_DepartmentDelete
+    @code nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.Maint_USR WHERE RTRIM(GRPCode) = @code) BEGIN SELECT -1; RETURN; END
+    DELETE FROM genisis.Maint_GRP WHERE GRPCode = @code;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- USRListing / cmdSearch_Click: the users, optionally those whose code contains @search.
+CREATE OR ALTER PROCEDURE genisis.Security_Users
+    @search nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(USRCode) AS Code, RTRIM(USRName) AS Name, RTRIM(USRLGCode) AS LgCode, RTRIM(GRPCode) AS Department,
+        RTRIM(SRVCode) AS ServiceProvider, RTRIM(USRStatus) AS Status, RTRIM(AuthorisedStatus) AS AuthorisedStatus
+    FROM genisis.Maint_USR
+    WHERE @search IS NULL OR USRCode LIKE N'%' + @search + N'%'
+    ORDER BY USRCode;
+END
+GO
+
+-- lstUsersList_Click: one user without the password.
+CREATE OR ALTER PROCEDURE genisis.Security_User
+    @code nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(USRCode) AS Code, RTRIM(USRName) AS Name, RTRIM(USRLGCode) AS LgCode, RTRIM(GRPCode) AS Department,
+        RTRIM(SRVCode) AS ServiceProvider, RTRIM(USRStatus) AS Status, RTRIM(AuthorisedStatus) AS AuthorisedStatus,
+        USRDateCreated AS DateCreated, RTRIM(USRAccess) AS Access
+    FROM genisis.Maint_USR
+    WHERE USRCode = @code;
+END
+GO
+
+-- ComboListing: departments (GRP) and service providers (SRV).
+CREATE OR ALTER PROCEDURE genisis.Security_Lookups
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(GRPCode) AS Code, RTRIM(GRPDescription) AS Name FROM genisis.Maint_GRP ORDER BY GRPCode;
+    SELECT RTRIM(SRVCode) AS Code, RTRIM(SRVName) AS Name FROM dbo.SRV ORDER BY SRVCode;
+END
+GO
+
+-- The access string the caller's account has now (to stop someone removing their own Security right).
+CREATE OR ALTER PROCEDURE genisis.Security_UserAccess
+    @code nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(USRAccess) FROM genisis.Maint_USR WHERE USRCode = @code;
+END
+GO
+
+-- cmdSave_Click (Add) of both screens: 0 when the code exists. A new user must change the password at the first sign-in
+-- (USRLogonCHGStatus = '1', the column's default).
+CREATE OR ALTER PROCEDURE genisis.Security_UserInsert
+    @code nvarchar(4000), @name nvarchar(4000), @password nvarchar(4000), @department nvarchar(4000), @status nvarchar(4000),
+    @dateCreated datetime, @lgCode nvarchar(4000) = NULL, @serviceProvider nvarchar(4000) = NULL,
+    @authorisedStatus nvarchar(4000) = NULL, @access nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.Maint_USR WITH (UPDLOCK, HOLDLOCK) WHERE USRCode = @code) BEGIN SELECT 0; RETURN; END
+    INSERT INTO genisis.Maint_USR (USRCode, USRName, USRPassword, GRPCode, USRStatus, USRDateCreated, USRLGCode, SRVCode,
+        AuthorisedStatus, USRAccess, USRLogonCHGStatus)
+    VALUES (@code, @name, @password, @department, @status, @dateCreated, @lgCode, @serviceProvider, @authorisedStatus, @access, '1');
+    SELECT 1;
+END
+GO
+
+-- Role Management, Edit: name, department, status, date created and, when given, a new password (which must then be changed
+-- at the next sign-in). Returns the number of rows changed.
+CREATE OR ALTER PROCEDURE genisis.Security_UserUpdateRole
+    @code nvarchar(4000), @name nvarchar(4000), @department nvarchar(4000), @status nvarchar(4000), @dateCreated datetime,
+    @password nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_USR
+    SET USRName = @name, GRPCode = @department, USRStatus = @status, USRDateCreated = @dateCreated,
+        USRPassword = COALESCE(@password, USRPassword), USRLogonCHGStatus = CASE WHEN @password IS NULL THEN USRLogonCHGStatus ELSE '1' END
+    WHERE USRCode = @code;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- User Permission, Edit: every field of the screen including the access string and, when given, a new password.
+CREATE OR ALTER PROCEDURE genisis.Security_UserUpdatePermission
+    @code nvarchar(4000), @name nvarchar(4000), @department nvarchar(4000), @status nvarchar(4000), @dateCreated datetime,
+    @lgCode nvarchar(4000), @serviceProvider nvarchar(4000), @authorisedStatus nvarchar(4000), @access nvarchar(4000),
+    @password nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.Maint_USR
+    SET USRName = @name, GRPCode = @department, USRStatus = @status, USRDateCreated = @dateCreated, USRLGCode = @lgCode,
+        SRVCode = @serviceProvider, AuthorisedStatus = @authorisedStatus, USRAccess = @access,
+        USRPassword = COALESCE(@password, USRPassword), USRLogonCHGStatus = CASE WHEN @password IS NULL THEN USRLogonCHGStatus ELSE '1' END
+    WHERE USRCode = @code;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- cmdDelete_Click (User Permission): record the user in USRArchive (code, name, date, by whom) when the archive database
+-- exists, then delete. USRArchive is keyed on the user code, so a code deleted before (and created again since) updates its
+-- archive row instead of failing on the key. Returns the number of users deleted.
+CREATE OR ALTER PROCEDURE genisis.Security_UserDelete
+    @code nvarchar(4000), @by nvarchar(4000)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @name nvarchar(120) = (SELECT RTRIM(USRName) FROM genisis.Maint_USR WHERE USRCode = @code);
+    IF @name IS NULL AND NOT EXISTS (SELECT 1 FROM genisis.Maint_USR WHERE USRCode = @code) BEGIN SELECT 0; RETURN; END
+    IF OBJECT_ID(N'genisis.Arch_USRArchive', N'SN') IS NOT NULL
+    BEGIN
+        UPDATE genisis.Arch_USRArchive SET USRName = @name, USRLastUpdateDate = CAST(GETDATE() AS date), USRLastUpdateUser = @by
+        WHERE USRCode = @code;
+        IF @@ROWCOUNT = 0
+            INSERT INTO genisis.Arch_USRArchive (USRCode, USRName, USRLastUpdateDate, USRLastUpdateUser)
+            VALUES (@code, @name, CAST(GETDATE() AS date), @by);
+    END
+    DELETE FROM genisis.Maint_USR WHERE USRCode = @code;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- ===== main/420_mma_entry.sql =====
+-- Maintenance > MMA (legacy frmMMAEntry, "Procedures/OPCS"): the MMA and 13th Schedule rates of up to six OPCS codes
+-- (SearchMMARate / SearchMMARateCal / SearchMMADesc on VIEW_MMA_Schedule). @codes is a comma-separated list; a code the
+-- schedule does not have is not returned (the desktop showed 0).
+CREATE OR ALTER PROCEDURE genisis.MmaEntry_Rates
+    @c1 nvarchar(4000) = NULL, @c2 nvarchar(4000) = NULL, @c3 nvarchar(4000) = NULL, @c4 nvarchar(4000) = NULL,
+    @c5 nvarchar(4000) = NULL, @c6 nvarchar(4000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    WITH wanted AS (SELECT DISTINCT Code FROM (VALUES (@c1), (@c2), (@c3), (@c4), (@c5), (@c6)) v (Code) WHERE Code IS NOT NULL AND Code <> N''),
+    ranked AS (
+        SELECT RTRIM(s.OPCSCode) AS Code, RTRIM(s.OPCSNarrative) AS MmaDescription, RTRIM(s.ProcedureDescription) AS ScheduleDescription,
+            RTRIM(s.ProcMainBPCode) AS MmaBodyPart, RTRIM(s.BodyParts) AS ScheduleBodyPart, RTRIM(s.ProcPageNo) AS MmaPage, RTRIM(s.Page) AS SchedulePage,
+            CAST(s.SurgeonsFees AS money) AS MmaSurgeonFee, s.AnaesthetistsFees AS MmaAnaesthetistFee,
+            CAST(s.Surgeon13th AS money) AS ScheduleSurgeonMax, CAST(s.Surgeon13thMin AS money) AS ScheduleSurgeonMin,
+            CAST(s.Anesthetist13th AS money) AS ScheduleAnaesthetist,
+            ROW_NUMBER() OVER (PARTITION BY s.OPCSCode ORDER BY s.ProcMainBPCode) AS n
+        FROM genisis.Maint_MMASchedule s
+        JOIN wanted w ON w.Code = s.OPCSCode)
+    SELECT Code, MmaDescription, ScheduleDescription, MmaBodyPart, ScheduleBodyPart, MmaPage, SchedulePage, MmaSurgeonFee, MmaAnaesthetistFee,
+        ScheduleSurgeonMax, ScheduleSurgeonMin, ScheduleAnaesthetist
+    FROM ranked WHERE n = 1;
 END
 GO
 

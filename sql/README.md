@@ -38,6 +38,12 @@ against the same database.
 | `main/330_worksheet_balance_limit.sql` | Worksheet engine step 5b: the patient's available limit (member's or covered person's, by the plan's annual limit type) |
 | `main/340_worksheet_stay_days.sql` | Worksheet engine step 7: the days of the stay, summed from the invoices |
 | `main/350_worksheet_calculation.sql` | Worksheet Registration calculation page: row captions, the figures saved with a version, a case's versions |
+| `main/360_finance_receipt_enquiry.sql` | Finance > Receipt Enquiry (read only: ReceiptSummary, ReceiptfrPAY lines, fee invoice, SUN postings, reversals) |
+| `main/361_finance_invoice_receipt.sql` | Finance > Invoice Receipt, Short Payment Receipt, Notification / Suspension: invoice balances, fee receipts, receipt numbers from `RecSeq` |
+| `main/363_finance_reverse_receipt.sql` | Finance > Reverse Receipt: a negative receipt (and negative claim lines) under a new number |
+| `main/364_finance_suspend_active.sql` | Finance > Suspend / Active: stop (C / E) and re-issue (R, new PV no.) member payment vouchers in `Payment2MBM` |
+| `main/365_finance_electronic_banking.sql` | Finance > Electronic Banking: ONLINE member / hospital payments (read only; the API writes the file) |
+| `main/370_finance_sun_posting.sql` | Finance > SUN Posting (member invoices, `InvMBM`): typed search replacing `SUN_HIS_Posting`, batch number, posting rows |
 | `main/130_mma.sql` | Maintenance > Entity (Procedures, Look Up Table) and Maintenance > Accounts; tables in the maintenance database |
 | `main/140_adjustment.sql` | Membership > Adjustment (all endorsement types) |
 | `main/150_enquiry_tabs.sql` | Membership > Enquiry: HIS Benefits, Acc History, Fees, Non Disclosure, Policy Terms, LT Limit, Policy Wording, T/O Claims, WS |
@@ -52,6 +58,9 @@ against the same database.
 | `main/185_leaflet_card.sql` | Membership > Leaflet & Card |
 | `main/186_temp_registration.sql` | Membership > Temp MBM Reg (previous membership as a renewal) |
 | `main/187_temp_adjustment.sql` | Membership > Temp MBM Adj (temporary payor check) |
+| `main/400_account_transaction.sql` | Maintenance > Account Transaction (MMA Schedule of Fees search) |
+| `main/410_security.sql` | Maintenance > Security: Department (GRP), Role Management and User Permission (USR) |
+| `main/420_mma_entry.sql` | Maintenance > MMA (Procedures/OPCS): schedule rates of up to six OPCS codes |
 | `genisis-main.sql` | All `main/` files in one script (generated): run it on the **main** database |
 | `maintenance/000_setup.sql`, `maintenance/010_auth.sql` | Login and password change |
 | `genisis-maintenance.sql` | All `maintenance/` files in one script (generated): run it on the **maintenance** database |

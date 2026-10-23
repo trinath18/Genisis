@@ -2342,14 +2342,14 @@ GO
 CREATE OR ALTER PROCEDURE genisis.Adjustment_InsertAmendHistory
     @number nvarchar(4000), @policy nvarchar(4000), @ic nvarchar(4000), @name nvarchar(4000), @expiry datetime = NULL,
     @plan nvarchar(4000), @type nvarchar(4000), @endtBordx datetime, @endtEff datetime, @user nvarchar(4000), @today datetime,
-    @batch int = NULL
+    @batch int = NULL, @coverId nvarchar(4000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     INSERT INTO dbo.MBMAmendHistory (MBMNumber, MBMPolicyNo, MBMIcBcPp, MBMName, MBMExpiryDate, MBMPlanCode, MBMAmendEdtType,
-        MBMAEndtBordxDate, MBMAEndtEffDate, MBMAmendUser, MBMAmendDate, MBMAEndtBatchNo)
+        MBMAEndtBordxDate, MBMAEndtEffDate, MBMAmendUser, MBMAmendDate, MBMAEndtBatchNo, MBMCoverID)
     VALUES (@number, @policy, @ic, @name, @expiry, CASE WHEN @expiry IS NULL THEN NULL ELSE @plan END, @type,
-        @endtBordx, @endtEff, @user, @today, @batch);
+        @endtBordx, @endtEff, @user, @today, @batch, @coverId);
 END
 GO
 

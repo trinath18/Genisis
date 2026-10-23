@@ -73,6 +73,19 @@ public static class AccessRight
     public const int WorksheetSendToAccounts = 24;
     public const int WorksheetSendToAr = 24;
 
+    // Finance menu (mdiMain.frm): Invoice Receipt, Short Payment Receipt and Reverse Receipt check 9 (Invoice_Click, mnuInvRecAdj_Click,
+    // ReceiptReverse_Click); Notification / Suspension and Suspend / Active 12 (mnuRecMCOOthMan_Click, Suspend_Click); Electronic Banking 10
+    // (mnuElectronicBank_Click); SUN Posting 13 (mnuInvoicePositve_Click).
+    // Receipt Enquiry has no check in the desktop: gated like Invoice Receipt, the closest sibling. Keep in step with GenisisUI/src/auth/access.ts.
+    public const int FinanceReceiptEnquiry = 9;
+    public const int FinanceInvoiceReceipt = 9;
+    public const int FinanceShortPayment = 9;
+    public const int FinanceReverseReceipt = 9;
+    public const int FinanceReceiptManual = 12;
+    public const int FinanceSuspendActive = 12;
+    public const int FinanceElectronicBanking = 10;
+    public const int FinanceSunPosting = 13;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

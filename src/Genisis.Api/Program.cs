@@ -5,6 +5,7 @@ using Genisis.Api.Case;
 using Genisis.Api.Common;
 using Genisis.Api.Common.Errors;
 using Genisis.Api.Data;
+using Genisis.Api.Finance;
 using Genisis.Api.Worksheet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -55,6 +56,7 @@ builder.Services.AddSingleton<Genisis.Api.Case.CaseFilesService>();
 builder.Services.AddCaseScreens();
 builder.Services.AddWorksheetScreens();
 builder.Services.AddMaintenanceScreens();
+builder.Services.AddFinanceScreens();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 

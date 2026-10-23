@@ -23,7 +23,7 @@ How to read the status column
 | Worksheet | 9 | 6 | 5 | 1 | 5 |
 | Authorize Claims | 18 | 2 | 0 | 2 | 14 |
 | Claim Bordx | 34 | 23 | 0 | 23 | 21 |
-| Finance | 11 | 5 | 0 | 5 | 2 |
+| Finance | 11 | 5 | 8 | 0 | 2 |
 | Reports | 4 | 0 | 0 | 0 | 0 |
 | Statistic | 2 | 0 | 0 | 0 | 1 |
 | Payment | 27 | 15 | 0 | 15 | 4 |
@@ -32,7 +32,7 @@ How to read the status column
 | Maintenance | 24 | 16 | 2 | 14 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **23** | **91** | **134** |
+| **Total** | **236** | **113** | **31** | **86** | **134** |
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -61,8 +61,18 @@ How to read the status column
 | Worksheet > Worksheet Send to A/C | `mnuWSToAC` | FrmWksSendToAC | `/worksheet/send-to-accounts` | 24 * | `/api/worksheet/send-to-accounts` |
 | Worksheet > Worksheet Send to A/R | `mnuWSReturnCLM` | FrmARRecFrCLM (reduced: only the CASDRC / CASRecBy / CASRecStatus columns exist) | `/worksheet/send-to-ar` | 24 * | `/api/worksheet/send-to-ar` |
 | Worksheet > Worksheet Tracking | `mnuWksTracking` | FrmWorksheetTracking | `/worksheet/tracking` | 24 * | `/api/worksheet/tracking` |
+| Finance > Receipt Enquiry | `mnuRcpEnq` | frmReceiptEnquiry (source missing; rebuilt from the receipt tables) | `/finance/receipt-enquiry` | 9 † | `/api/finance/receipt-enquiry` |
+| Finance > Invoice Receipt (Outstanding) | `Invoice` | FrmRecMCO (source stale: rebuilt on ReceiptSummary) | `/finance/invoice-receipt` | 9 | `/api/finance/invoice-receipt` |
+| Finance > Short Payment Receipt | `mnuInvRecAdj` | frmReceiptAdjustment (source missing; rebuilt) | `/finance/short-payment` | 9 | `/api/finance/invoice-receipt` |
+| Finance > Reverse Receipt | `ReceiptReverse` | frmReverseReceipt (source missing; rebuilt) | `/finance/reverse-receipt` | 9 | `/api/finance/reverse-receipt` |
+| Finance > Notification / Suspension | `mnuRecMCOOthMan` | frmRecMCOManual (manual receipt number; rebuilt on ReceiptSummary) | `/finance/receipt-manual` | 12 | `/api/finance/invoice-receipt` |
+| Finance > Suspend / Active | `Suspend` | frmPaymentMBMReissue (source missing; rebuilt on Payment2MBM) | `/finance/suspend-active` | 12 | `/api/finance/suspend-active` |
+| Finance > Electronic Banking | `mnuElectronicBank` | frmFileExportBankESP (source missing; configurable file layout) | `/finance/electronic-banking` | 10 | `/api/finance/electronic-banking` |
+| Finance > SUN Posting | `mnuInvoicePositve` | frmPostingInvoiceMBM | `/finance/sun-posting` | 13 | `/api/finance/sun-posting` |
 | Maintenance > Plan | `MaintenancePlan` | Plan maintenance forms | `/maintenance/plan` (tabs: Plan, Annual Limit, Premium, code lists, MCO fee, special note) | 1 | `/api/maintenance/{plans, annual-limits, premiums, code-lists, mco-fees, mgmt-fees, special-notes, benefit-limits}` |
 | Maintenance > Benefits | `mnuBenefits` | Benefits maintenance forms | `/maintenance/benefits` | 1 | `/api/maintenance/benefits` |
+
+† `mnuRcpEnq_Click` opens the form without an access check; the web screen is gated by position 9 like the other receipt screens.
 
 \* The menu control has no `_Click` handler in `mdiMain.frm` (most are also `Visible = 0`), so the desktop menu can never open the form. Its access position is a decision recorded in `GenisisUI/src/auth/access.ts` and `Genisis.Api/Auth/AccessRight.cs`, not a value read from the VB6 menu code.
 
@@ -137,8 +147,6 @@ How to read the status column
 
 **Claim Bordx** (22): Worksheet; Worksheet > Insert Worksheet; Worksheet > Remove Worksheet; Print Bordx; Print Recovery; Payment Advice; Payment Advice > Generate Bordx No; Payment Advice > Hospital Report; Update Bordx; Bor Delivery; Bor Delivery > Bordx Send Date; Bor Delivery > Send to Payor; Bor Delivery > Returned From Payor; Bor Delivery > Returned Fr Payor(Not App); Bor Delivery > Send to A/C; Monitoring; Monitoring > Bordx Control; Monitoring > Outstanding Bordx; Bordx Approval; Storage > Claim files; Storage > Enquiry; Storage > Document
 
-**Finance** (4): Receipt Enquiry; Invoice Receipt (Outstanding); Short Payment Receipt; Reverse Receipt
-
 **Payment** (14): To Hospital; To Member; To Member > Pay2MBM(Auto); To Member > Pay2MBM; To Member > Chq. Cancellation; To Member > Chq. Reissue; Payor; Others; Contra Allocation; Update Invoice; Payment Tracking; Enquiry > Payment To Hospital; Enquiry > Payment To Member; PV Update (Manual)
 
 **Receipt** (4): From Member; Others; Payor; Receipt Tracking
@@ -152,4 +160,6 @@ How to read the status column
 - Forms reached from a screen rather than from the menu (letters, GL menu, document dialogs, member lists, the case list pop-up, code search dialogs) are migrated with that screen as dialogs/tabs; they have no menu item of their own. See the per-module migration documents.
 - 17 of the 80 `*_Click` handlers in `mdiMain.frm` have no matching menu control (renamed/removed in the designer): they are dead code and are not migrated (names in the [redundancy report](redundancy-removal-report.md)).
 - Worksheet screens: the form chosen for each item, the access positions and every difference from the desktop are in [worksheet-screens.md](worksheet-screens.md).
+- Finance screens: five of the eight have no VB6 source and one has stale source; how each was rebuilt from the production data, the
+  assumptions and the open questions for the Finance users are in [finance-screens.md](finance-screens.md).
 - Regenerate the spreadsheet with `node extract-menus.js` in the VB Code folder; this document is generated from it plus the Required column.

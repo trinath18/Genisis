@@ -101,6 +101,24 @@ public class WorksheetRowsRulesTests
     }
 
     [Fact]
+    public void The_six_day_counts_are_each_held_to_the_days_the_plan_allows_for_its_benefit()
+    {
+        PlanBenefit Plan(string code, string days) => new() { Code = code, Days = days };
+        var days = PlanLimitRules.LimitDays([Plan("101", "120"), Plan("102", "2"), Plan("302", "1"), Plan("601", "30")], new StayDays(7.5m, 5m, 4m, 3m, 10m, 2m));
+        Assert.Equal(new WorksheetRows.LimitDays(Board: 7.5m, Icu: 2m, PhysicianVisits: 1m, KidneyMonths: 3m, Cash: 10m, Guardian: 2m), days);
+    }
+
+    [Fact]
+    public void The_claim_totals_come_from_the_grid_and_the_summary_rows()
+    {
+        var grid = new WorksheetEvaluation([new WorksheetLine(1, 214.4m, "120.00", 120m, 214.4m, -94.4m), new WorksheetLine(3, 1036.51m, "FULL", 1036.51m, 1036.51m, 0m)], new WorksheetTotals(1250.91m, 1156.51m, 1250.91m, -94.4m));
+        var final = WorksheetRules.Final(grid, 100m, 50000m);
+        var totals = WorksheetRows.ClaimTotals(grid, final);
+        Assert.Equal((1250.91m, 1056.51m, 1056.51m, 100m, 0m, -94.4m, 0m), (totals["CLMTotalActual"], totals["CLMTotalApproved"], totals["CLMFinalApprove"], totals["CLMCoPayRB"], totals["CLMLimitExceeded"], totals["CLMExcess"], totals["CLMReimburse"]));
+        Assert.Equal(7, totals.Count);
+    }
+
+    [Fact]
     public void A_table_is_the_grid_column_it_holds_in_the_columns_of_the_tables_rows()
     {
         var grid = new WorksheetEvaluation(
@@ -219,6 +237,7 @@ public class WorksheetRowsReferenceTests(ITestOutputHelper output)
 
         var classes = new Dictionary<string, int>();
         int cellsN = 0, cellsSame = 0, rowsSame = 0, done = 0, boardN = 0, boardSame = 0, icuN = 0, icuSame = 0;
+        var others = new[] { "physician visits", "kidney months", "cash", "guardian" }.ToDictionary((n) => n, (_) => (N: 0, Same: 0, WithDays: 0, WithDaysSame: 0));
         var stay = new StayDaysRepository();
         var plan = new PlanBenefitRepository();
         string? Text(IDictionary<string, object?> row, string column) => Convert.ToString(row[column])?.Trim();
@@ -252,14 +271,73 @@ public class WorksheetRowsReferenceTests(ITestOutputHelper output)
                 boardSame += Math.Abs(PlanLimitRules.LimitedDays(benefits, "101", days.RoomDays) - D("CLMBoardDays")) < 0.005m ? 1 : 0;
                 icuN++;
                 icuSame += Math.Abs(PlanLimitRules.LimitedDays(benefits, "102", days.IcuDays) - D("CLMICUDays")) < 0.005m ? 1 : 0;
+                foreach (var (name, code, stayDays, column) in new[] { ("physician visits", "302", days.PhysicianVisitDays, "CLMINHOSPhyDays"), ("kidney months", "404", days.KidneyMonths, "CLMKIDDCDays"), ("cash", "601", days.CashDays, "CLMCashDays"), ("guardian", "701", days.GuardianDays, "CLMGurdianDays") })
+                {
+                    if (name == "physician visits" && flat) continue;
+                    var ok = Math.Abs(PlanLimitRules.LimitedDays(benefits, code, stayDays) - D(column)) < 0.005m;
+                    var o = others[name];
+                    others[name] = (o.N + 1, o.Same + (ok ? 1 : 0), o.WithDays + (D(column) > 0 ? 1 : 0), o.WithDaysSame + (D(column) > 0 && ok ? 1 : 0));
+                }
             }
         }
         output.WriteLine($"ClaimLimit: {cellsSame} of {cellsN} cells equal ({100.0 * cellsSame / cellsN:F2}%), {rowsSame} of {done} rows entirely equal");
         foreach (var (shape, n) in classes.OrderByDescending((c) => c.Value).Take(14)) output.WriteLine($"  {n,6}x {shape}");
         output.WriteLine($"days worked out by the engine: Room & Board {boardSame} of {boardN}, ICU {icuSame} of {icuN}");
+        foreach (var (name, o) in others) output.WriteLine($"  {name}: {o.Same} of {o.N} equal; of the {o.WithDays} saved with days, {o.WithDaysSame} equal");
         Assert.True(done >= 300);
         Assert.True(cellsSame >= cellsN * 0.90, $"{cellsSame} of {cellsN} cells equal");
         Assert.True(boardN >= 200 && boardSame >= boardN * 0.80, $"Room & Board days: {boardSame} of {boardN}");
+    }
+
+    /// <summary>
+    /// The totals of the Claim row against the saved ones: each saved version of the sample is read back into a grid (the four tables' numbers per worksheet row), the engine's own summary rules are applied with the
+    /// version's saved co-payment and available limit, and the columns <see cref="WorksheetRows.ClaimTotals"/> gives are compared with the saved Claim row to the cent.
+    /// </summary>
+    [Fact]
+    public async Task The_claim_totals_worked_from_a_saved_grid_equal_the_saved_claim_row()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        await using var session = await TestDb.Sessions().OpenAsync();
+        var sample = (await session.Connection.QueryAsync<(string Cas, int Version, string? Family, string? Payor)>(
+            """
+            SELECT RTRIM(a.CASNumber), a.CLMVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2)
+            FROM genisis.WS_ClaimActual a
+            JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = a.CASNumber AND v.ClaimVersion = a.CLMVersion
+            JOIN genisis.WS_Claim w ON w.CASNumber = a.CASNumber AND w.ClaimVersion = a.CLMVersion
+            WHERE a.CASNumber NOT LIKE 'ZZ%' AND v.MBMNumber IS NOT NULL AND w.ClaimOpenDate >= '2020-07-01' AND w.CLMPreviousBalance IS NOT NULL AND ABS(CHECKSUM(a.CASNumber, a.CLMVersion)) % 20 = 0
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimApprove p WHERE p.CASNumber = a.CASNumber AND p.CLMVersion = a.CLMVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimHos h WHERE h.CASNumber = a.CASNumber AND h.CLMVersion = a.CLMVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimMember m WHERE m.CASNumber = a.CASNumber AND m.CLMVersion = a.CLMVersion)
+            """, transaction: session.Transaction, commandTimeout: 300)).ToList();
+        Assert.True(sample.Count >= 300, $"only {sample.Count} versions in the sample");
+
+        var columns = new[] { "CLMTotalActual", "CLMTotalApproved", "CLMFinalApprove", "CLMCoPayRB", "CLMLimitExceeded", "CLMExcess", "CLMReimburse" };
+        var same = columns.ToDictionary((c) => c, (_) => 0);
+        var miss = new Dictionary<string, List<string>>();
+        int done = 0;
+        foreach (var (cas, version, family, payor) in sample)
+        {
+            var flat = WorksheetRows.Flat(family, payor);
+            var saved = new Dictionary<string, IDictionary<string, object?>>();
+            foreach (var table in new[] { "ClaimActual", "ClaimApprove", "ClaimHos", "ClaimMember" })
+                if (await session.Connection.QueryFirstOrDefaultAsync($"SELECT * FROM genisis.WS_{table} WHERE CASNumber = @cas AND CLMVersion = @version", new { cas, version }, session.Transaction) is IDictionary<string, object?> r) saved[table] = r;
+            if (saved.Count < 4 || await session.Connection.QueryFirstOrDefaultAsync("SELECT * FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version", new { cas, version }, session.Transaction) is not IDictionary<string, object?> claim) continue;
+            done++;
+            var lines = WorksheetRows.Columns(flat).Select((c) => new WorksheetLine(c.Slot, Parse(saved["ClaimActual"][c.Column]), null, Parse(saved["ClaimApprove"][c.Column]), Parse(saved["ClaimHos"][c.Column]), Parse(saved["ClaimMember"][c.Column]))).ToList();
+            var grid = new WorksheetEvaluation(lines, new WorksheetTotals(lines.Sum((l) => l.Actual), lines.Sum((l) => l.Approved), lines.Sum((l) => l.ToHospital), lines.Sum((l) => l.ToMember)));
+            var totals = WorksheetRows.ClaimTotals(grid, WorksheetRules.Final(grid, Parse(claim["CLMCoPayRB"]), Parse(claim["CLMPreviousBalance"])));
+            foreach (var column in columns)
+            {
+                if (Math.Abs(totals[column] - Parse(claim[column])) < 0.011m) same[column]++;
+                else if ((miss.TryGetValue(column, out var list) ? list : miss[column] = []).Count < 3) miss[column].Add($"{cas} v{version}: saved {Parse(claim[column])} built {totals[column]}");
+            }
+        }
+        foreach (var column in columns) output.WriteLine($"{column}: {same[column]} of {done} equal ({100.0 * same[column] / done:F2}%)");
+        foreach (var (column, list) in miss) foreach (var line in list) output.WriteLine($"  {column} {line}");
+        Assert.True(done >= 300);
+        foreach (var column in columns) Assert.True(same[column] >= done * 0.90, $"{column}: {same[column]} of {done}");
     }
 
     private static string Shape(string? text) => text switch

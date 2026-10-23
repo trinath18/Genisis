@@ -205,6 +205,17 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   **The days the engine can find alone:** `PlanLimitRules.LimitedDays` (the stay's days held to the days the plan allows) gives the saved Room & Board days in **1,786 of 1,805** versions (98.9 per cent) and the saved ICU days
   in 1,804 of 1,805. The physician visit, kidney, cash and guardian days are not worked out: they are held to what the case has left after earlier worksheets (`ClaimSameLimit`), which is the next piece of the limit work.
 
+* `PlanLimitRules.LimitDays`: the six day counts together, each of the stay's days (`WorksheetEngine_StayDays` now also sums the physician visit, kidney, cash and guardian days of the invoices) held to the days the plan allows
+  for its benefit (101, 102, 302, 404, 601, 701). Against the saved days: Room & Board 98.9 per cent of 1,805 versions, ICU 99.9; of the versions saved with physician visit days 46 of 55 equal, with cash days 14 of 19, with
+  guardian days 1 of 1, kidney 0 of 0 (they are rare).
+  **`ClaimSameLimit`** (the limits and days that are left after each worksheet of a case; the desktop reads it for a case's later worksheets and writes it with `saveSameLimit`) has a row for 35,007 cases and is not ported: in
+  the sample the plan's limits equal the saved ones for later versions about as often as for first versions (83 per cent of 344, 81 per cent of 475), so it is not where the remaining limit gap is.
+* `WorksheetRows.ClaimTotals`: the seven totals of the `Claim` row that follow from the grid and the summary rows (the engine's `WorksheetFinal`): `CLMTotalActual`, `CLMTotalApproved`, `CLMFinalApprove`, `CLMCoPayRB`,
+  `CLMLimitExceeded`, `CLMExcess` (what the member owes) and `CLMReimburse` (payable to the member). Rebuilt from 1,786 saved grids (the four tables' numbers, the saved co-payment and available limit) and compared with the
+  saved row to the cent: **99.83, 99.55, 99.55, 100.00, 99.72, 100.00 and 100.00 per cent**. The misses are versions where the limit logic differs (an annual limit of another kind, duplicate claims).
+  **Not in it, measured:** `CLMPayableByMedix2H` / `2M` (the Final Total row) are the sums of the hospital / member rows in only 69 / 66 per cent of versions, and `CLMBalanceLimit` is the previous balance less the final approve in
+  only 6 per cent of the 1,704 that have one, so they depend on the annual-limit kind of the plan (the balance routines of section 4b) and are not guessed.
+
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
 the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `SaveClaim` (about 55 of the 141 `Claim` columns, several from state not in
 the saved rows), `SaveClaimRemarks`, `saveLimit` (the limits and the days they were worked out with), the GST copies of actual and approved, `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit`,

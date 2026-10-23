@@ -5,7 +5,8 @@ CREATE OR ALTER PROCEDURE genisis.WorksheetEngine_StayDays
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT ISNULL(SUM(i.CLMBoardDay), 0) AS RoomDays, ISNULL(SUM(i.CLMICUDay), 0) AS IcuDays
+    SELECT ISNULL(SUM(i.CLMBoardDay), 0) AS RoomDays, ISNULL(SUM(i.CLMICUDay), 0) AS IcuDays, ISNULL(SUM(i.CLMInHosPhyVisitDay), 0) AS PhysicianVisitDays, ISNULL(SUM(i.CLMKidneyMnth), 0) AS KidneyMonths,
+           ISNULL(SUM(i.CLMCashDay), 0) AS CashDays, ISNULL(SUM(i.CLMLodgerDay), 0) AS GuardianDays
     FROM genisis.WS_CASInvoice i
     WHERE i.CASNumber = @cas AND i.INVWSversion = CAST(@version AS nvarchar(10));
 END

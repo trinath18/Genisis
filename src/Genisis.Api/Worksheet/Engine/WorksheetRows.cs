@@ -101,6 +101,22 @@ public static class WorksheetRows
         return rows;
     }
 
+    /// <summary>
+    /// The totals of the version row of <c>Claim</c> that follow from the grid and the summary rows (<c>SaveClaim</c>): the total actual and approved, the final approve (the same as the total approved), the co-payment,
+    /// the limit exceeded, the excess (what the member owes, negative) and the reimbursement (what is payable to the member). The payable to the hospital and to the member (the Final Total row), the balance
+    /// limit and the other columns of the row depend on more than the grid and are not here.
+    /// </summary>
+    public static Dictionary<string, decimal> ClaimTotals(WorksheetEvaluation grid, WorksheetFinal final) => new()
+    {
+        ["CLMTotalActual"] = grid.Totals.Actual,
+        ["CLMTotalApproved"] = final.TotalApproved,
+        ["CLMFinalApprove"] = final.FinalApprove,
+        ["CLMCoPayRB"] = final.CoPayment,
+        ["CLMLimitExceeded"] = final.LimitExceeded,
+        ["CLMExcess"] = final.Excess,
+        ["CLMReimburse"] = final.PayableToMember,
+    };
+
     /// <summary>The columns and texts of one table for an evaluated worksheet. Rows the plan family does not write are left out.</summary>
     public static Dictionary<string, string> Build(WorksheetEvaluation grid, bool flat, Kind kind)
     {

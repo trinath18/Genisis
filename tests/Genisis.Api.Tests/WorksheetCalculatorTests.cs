@@ -41,6 +41,7 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
 
         var calculator = Calculator();
         var perSlot = new SortedDictionary<int, int>();
+        var byVersion = new Dictionary<string, (int N, int Same)>();
         var examples = new Dictionary<string, int>();
         var engineService = new WorksheetEngineService(TestDb.Sessions(), new WorksheetEngineRepository());
         int done = 0, beforeLimitSame = 0, totalSame = 0, workedHard = 0, limitsOk = 0, limitsOkCoPayOk = 0, limitsOkCoPayOkTotalOk = 0, coPayOk = 0;
@@ -68,6 +69,8 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
                     examples[key] = examples.GetValueOrDefault(key) + 1;
                 }
             limitsOk += sameLimits ? 1 : 0;
+            var bucket = v.Version == 1 ? "first version" : "later versions";
+            byVersion[bucket] = (byVersion.GetValueOrDefault(bucket).N + 1, byVersion.GetValueOrDefault(bucket).Same + (sameLimits ? 1 : 0));
             coPayOk += sameCoPay ? 1 : 0;
             limitsOkCoPayOk += sameLimits && sameCoPay ? 1 : 0;
             limitsOkCoPayOkTotalOk += sameLimits && sameCoPay && Math.Abs(derivedBeforeLimit - savedBeforeLimit) < 0.015m ? 1 : 0;
@@ -75,6 +78,7 @@ public class WorksheetCalculatorOracleTests(ITestOutputHelper output)
         output.WriteLine($"{sample.Count} versions, {done} calculated: approved total before the limit reproduced {beforeLimitSame} ({100.0 * beforeLimitSame / Math.Max(done, 1):0.0}%), total approved {totalSame} ({100.0 * totalSame / Math.Max(done, 1):0.0}%); {workedHard} with a non-zero saved total");
         output.WriteLine($"of {done}: the plan limits give the same approved sum as the saved limits for {limitsOk}; the co-payment equals the saved one for {coPayOk}; both for {limitsOkCoPayOk}, and of those the approved total before the limit equals the saved one for {limitsOkCoPayOkTotalOk}");
         output.WriteLine("rows that differ, by slot: " + string.Join(", ", perSlot.OrderByDescending(p => p.Value).Take(10).Select(p => $"{p.Key}={p.Value}")));
+        foreach (var (bucket, (n, same)) in byVersion) output.WriteLine($"  plan limits equal the saved ones, {bucket}: {same} of {n}");
         foreach (var e in examples.OrderByDescending(e => e.Value).Take(40)) output.WriteLine($"  {e.Value,4}x {e.Key}");
         Assert.True(done >= sample.Count * 0.9, $"calculated {done} of {sample.Count}");
         Assert.True(beforeLimitSame >= done * 0.62, $"approved total before the limit: {beforeLimitSame} of {done}");

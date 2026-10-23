@@ -130,6 +130,15 @@ public static class PlanLimitRules
         Number(benefits.FirstOrDefault((b) => b.Code.Trim() == code)?.Days) is { } allowed and > 0 ? Math.Min(stayDays, allowed) : stayDays;
 
     /// <summary>
+    /// The six day counts <c>saveLimit</c> keeps: each of the stay's days (Room &amp; Board, ICU, physician visits, kidney months, cash allowance, guardian) held to the days the plan allows for its benefit (101, 102, 302, 404, 601, 701).
+    /// They equal the saved ones for Room &amp; Board and ICU in 98.9 and 99.9 per cent of the versions checked and for the physician visit, cash and guardian days in 84, 74 and 1 of 1 of those saved with days; the days held back
+    /// by earlier worksheets of the same case (<c>ClaimSameLimit</c>) are not taken into account, which did not matter in the sample.
+    /// </summary>
+    public static WorksheetRows.LimitDays LimitDays(IReadOnlyCollection<PlanBenefit> benefits, StayDays stay) => new(
+        LimitedDays(benefits, "101", stay.RoomDays), LimitedDays(benefits, "102", stay.IcuDays), LimitedDays(benefits, "302", stay.PhysicianVisitDays),
+        LimitedDays(benefits, "404", stay.KidneyMonths), LimitedDays(benefits, "601", stay.CashDays), LimitedDays(benefits, "701", stay.GuardianDays));
+
+    /// <summary>
     /// The worksheet rows whose limit <see cref="Derive"/> took from a payor's convention and not from the plan (<see cref="PayorDefaults"/> and the non-panel Room &amp; Board of payor TK), so the calculation can say so.
     /// </summary>
     public static List<int> ConventionSlots(IEnumerable<PlanBenefit> benefits, IReadOnlySet<int>? rowsWithAmount, string? payor, string? hospital)

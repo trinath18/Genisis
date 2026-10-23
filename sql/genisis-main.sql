@@ -96,6 +96,9 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
     (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
     (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- Invoice HOS / MBM Accounting and Invoice Tracking: their views and the daily batch counters
+    (N'WS_HOSInvoice', @WorksheetDb, N'VIEW_HOSInvoice'), (N'WS_MBMInvoice1', @WorksheetDb, N'VIEW_MBMInvoice1'), (N'WS_InvoiceTracking', @WorksheetDb, N'VIEW_Invoice_Tracking'),
+    (N'WS_INVACHSEQ', @WorksheetDb, N'INVACHSEQ'), (N'WS_INVACMSEQ', @WorksheetDb, N'INVACMSEQ'),
     -- Invoice Processing writes through the legacy parameterized procedures of the worksheet database
     (N'WS_Insert_ClaimInvoice_2013', @WorksheetDb, N'Insert_ClaimInvoice_2013'), (N'WS_Insert_ClaimInvoice_WODIR', @WorksheetDb, N'Insert_ClaimInvoice_WODIR'),
     (N'WS_Insert_ClaimInvoice_WOFolDate', @WorksheetDb, N'Insert_ClaimInvoice_WOFolDate'), (N'WS_Insert_ClaimInvoice_WO2013', @WorksheetDb, N'Insert_ClaimInvoice_WO2013'),
@@ -7476,6 +7479,340 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.PLN WHERE RTRIM(PLNCode) = RTRIM(@plan) AND RTRIM(NewSMPlan) = N'Y') THEN 1 ELSE 0 END AS bit) AS NewSm;
+END
+GO
+
+-- ===== main/380_invoice_original_update.sql =====
+-- Invoice > Original Invoice Update (legacy frmUpdateInvoice, "Update Invoice"). The desktop opened a recordset on the first ClaimInvoice row of a
+-- case and worksheet version and edited it in place; here a version's invoices are listed (most versions have one, 4,899 of 75,859 have more, and the
+-- desktop could only ever reach the first of those) and one is updated by its key, with typed parameters.
+
+-- cmdShow_Click / ShowInvoice: the invoices of a case and worksheet version, with the hospital the invoice is paid to. The hospital is found by its code;
+-- the desktop found it by name, which is not unique.
+CREATE OR ALTER PROCEDURE genisis.InvoiceOriginal_Find
+    @cas nvarchar(30), @version nvarchar(4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT CAST(i.INVIndex AS int) AS Id, RTRIM(i.CASNumber) AS CaseNo, RTRIM(i.INVWSversion) AS Version, RTRIM(i.InvNo) AS InvoiceNo,
+           NULLIF(i.InvDate, '19000101') AS InvoiceDate, NULLIF(i.INVOrigRecDate, '19000101') AS OriginalReceivedDate, RTRIM(i.INVOrigRecStatus) AS OriginalStatus,
+           RTRIM(i.INVPayTo) AS PayTo, RTRIM(i.INVPayee) AS HospitalCode, RTRIM(h.HOSAccCode) AS HospitalAccCode, RTRIM(h.HOSName) AS HospitalName
+    FROM genisis.WS_ClaimInvoice i
+    LEFT JOIN dbo.HOS h ON h.HOSCode = i.INVPayee
+    WHERE i.CASNumber = @cas AND i.INVWSversion = @version
+    ORDER BY i.INVIndex;
+END
+GO
+
+-- cmdUpdate_Click: the invoice number, the date the original invoice was received, the invoice date and the hospital, and the original-receipt mark ('Y').
+-- The hospital changes only when the code is a hospital (the desktop changed it only when the name it looked up was found); a blank invoice date leaves the
+-- date as it was (the desktop assigned the mask text to the date column and failed). Returns the number of invoices changed.
+CREATE OR ALTER PROCEDURE genisis.InvoiceOriginal_Update
+    @id int, @invoiceNo nvarchar(100), @invoiceDate datetime = NULL, @originalDate datetime, @hospital nvarchar(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE i
+    SET InvNo = @invoiceNo, INVOrigRecDate = @originalDate, InvDate = ISNULL(@invoiceDate, i.InvDate), INVOrigRecStatus = 'Y',
+        INVPayee = CASE WHEN @hospital IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.HOS WHERE HOSCode = @hospital) THEN @hospital ELSE i.INVPayee END
+    FROM genisis.WS_ClaimInvoice i
+    WHERE i.INVIndex = @id;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- ===== main/381_invoice_accounting.sql =====
+-- Invoice > Invoice HOS Accounting (legacy FrmInvoiceHOSAC) and Invoice MBM Accounting (legacy FrmInvoiceMBMAC). Both list invoices that were not yet handed to
+-- accounts (print status 0) or were (1, "reprint"), and "Print to File" gives the ones listed a batch (H or M, the day, a number of the day) and marks them printed.
+-- The desktop built the WHERE clause as text; here every criterion is a typed parameter. Differences, all of which were read out of the desktop's code:
+--  * The batch date criteria compared the text column INVBatchDate ("H23102026": H, ddmmyyyy) with a typed date as text, which cannot work; the date part of the
+--    batch is compared as a date here.
+--  * The hospital criterion compared the hospital's name with its hyphens turned into blanks, so a hospital with a hyphen was never found; the hospital's code is used.
+--  * The hospital print marked every invoice of the worksheet version, whoever it was paid to (the member print only the member's); only the hospital's here.
+--  * The hospital print kept the first digit of the batch number (Mid(batch, 11, 1)); the whole number is kept (the member print kept three digits).
+
+-- The day a batch label stands for: "H23102026" or "M23102026" is 23 October 2026 (the desktop's batches have always been named this way); NULL for anything else.
+-- HISDB runs at compatibility level 100, so no TRY_CONVERT: the date is built as yyyymmdd and tested with ISDATE.
+CREATE OR ALTER FUNCTION genisis.InvoiceBatchDay (@batchDate nvarchar(100))
+RETURNS date
+AS
+BEGIN
+    DECLARE @iso varchar(8) = SUBSTRING(@batchDate, 6, 4) + SUBSTRING(@batchDate, 4, 2) + SUBSTRING(@batchDate, 2, 2);
+    RETURN CASE WHEN LEN(@batchDate) = 9 AND @iso NOT LIKE '%[^0-9]%' AND ISDATE(@iso) = 1 THEN CONVERT(date, @iso, 112) END;
+END
+GO
+
+-- GenerateINVHSeqNo / GenerateINVMSeqNo: the next batch of a kind for a day, "H" or "M" then ddmmyyyy, a hyphen and the number of the day (the first batch of a day is 1).
+CREATE OR ALTER PROCEDURE genisis.InvoiceAccounting_NextBatch
+    @kind char(1), @day date
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @n int;
+    IF @kind = 'H'
+    BEGIN
+        UPDATE genisis.WS_INVACHSEQ WITH (UPDLOCK, HOLDLOCK) SET @n = InvACBatch = InvACBatch + 1 WHERE CAST(InvACDate AS date) = @day;
+        IF @@ROWCOUNT = 0
+        BEGIN
+            INSERT genisis.WS_INVACHSEQ (InvACDate, InvACBatch) VALUES (@day, 1);
+            SET @n = 1;
+        END
+    END
+    ELSE
+    BEGIN
+        UPDATE genisis.WS_INVACMSEQ WITH (UPDLOCK, HOLDLOCK) SET @n = InvACBatch = InvACBatch + 1 WHERE CAST(InvACDate AS date) = @day;
+        IF @@ROWCOUNT = 0
+        BEGIN
+            INSERT genisis.WS_INVACMSEQ (InvACDate, InvACBatch) VALUES (@day, 1);
+            SET @n = 1;
+        END
+    END
+    SELECT CAST(@kind AS varchar(1)) + REPLACE(CONVERT(varchar(10), @day, 103), '/', '') + '-' + CAST(@n AS varchar(10));
+END
+GO
+
+-- SearchRecord + InvoiceAccountListing of FrmInvoiceHOSAC: the invoices paid to a hospital. @reprint = 0: not printed yet; 1: printed. Every "from"/"to" pair
+-- is inclusive and ignored when NULL.
+CREATE OR ALTER PROCEDURE genisis.InvoiceHospitalAccounting_Search
+    @reprint bit, @invFrom datetime = NULL, @invTo datetime = NULL, @regFrom datetime = NULL, @regTo datetime = NULL, @hospital nvarchar(100) = NULL,
+    @batchDateFrom date = NULL, @batchDateTo date = NULL, @batchNoFrom int = NULL, @batchNoTo int = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(INVPayee) AS HospitalCode, RTRIM(HOSName) AS Hospital, RTRIM(InvNo) AS InvoiceNo, NULLIF(InvDate, '19000101') AS InvoiceDate,
+           NULLIF(INVEnteredDate, '19000101') AS RegisteredDate, RTRIM(CASNumber) AS CaseNo, RTRIM(INVWSversion) AS Version, RTRIM(BordxRefNo) AS BordxNo,
+           RTRIM(MBMNumber) AS MemberNo, RTRIM(MBMName) AS MemberName, RTRIM(PatientName) AS PatientName, CLMPayableByMedix2H AS Payable, InvPreviousAmt AS PreviousAmount,
+           RTRIM(DebitCreditRefNo) AS DebitCreditRefNo, RTRIM(INVBatchDate) AS BatchDate, INVBatchNo AS BatchNo
+    FROM genisis.WS_HOSInvoice
+    WHERE INVPayTo = 'H'
+      AND InvPrintStatus = CASE WHEN @reprint = 1 THEN '1' ELSE '0' END
+      AND (@invFrom IS NULL OR InvDate >= @invFrom) AND (@invTo IS NULL OR InvDate < DATEADD(DAY, 1, @invTo))
+      AND (@regFrom IS NULL OR INVEnteredDate >= @regFrom) AND (@regTo IS NULL OR INVEnteredDate < DATEADD(DAY, 1, @regTo))
+      AND (@hospital IS NULL OR INVPayee = @hospital)
+      AND (@batchDateFrom IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) >= @batchDateFrom)
+      AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
+      AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)
+    ORDER BY INVPayee, InvDate, InvNo, CASNumber, INVWSversion;
+END
+GO
+
+-- UpdatePrintRecord of FrmInvoiceHOSAC: the batch, the user, the printed mark and the amount payable (as the previous amount) on the hospital's invoices of every
+-- worksheet version the criteria list. Returns how many invoices were marked.
+CREATE OR ALTER PROCEDURE genisis.InvoiceHospitalAccounting_Print
+    @batch nvarchar(20), @user nvarchar(20), @invFrom datetime = NULL, @invTo datetime = NULL, @regFrom datetime = NULL, @regTo datetime = NULL, @hospital nvarchar(100) = NULL,
+    @batchDateFrom date = NULL, @batchDateTo date = NULL, @batchNoFrom int = NULL, @batchNoTo int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE i
+    SET INVBatchDate = LEFT(@batch, 9), INVBatchNo = CASE WHEN SUBSTRING(@batch, 11, 10) NOT LIKE '%[^0-9]%' AND LEN(SUBSTRING(@batch, 11, 10)) > 0 THEN CAST(SUBSTRING(@batch, 11, 10) AS int) END, InvPrintLogon = @user, InvPrintStatus = '1', InvPreviousAmt = ISNULL(v.CLMPayableByMedix2H, 0)
+    FROM genisis.WS_ClaimInvoice i
+    JOIN (SELECT DISTINCT CASNumber, INVWSversion, CLMPayableByMedix2H FROM genisis.WS_HOSInvoice
+          WHERE INVPayTo = 'H' AND InvPrintStatus = '0'
+            AND (@invFrom IS NULL OR InvDate >= @invFrom) AND (@invTo IS NULL OR InvDate < DATEADD(DAY, 1, @invTo))
+            AND (@regFrom IS NULL OR INVEnteredDate >= @regFrom) AND (@regTo IS NULL OR INVEnteredDate < DATEADD(DAY, 1, @regTo))
+            AND (@hospital IS NULL OR INVPayee = @hospital)
+            AND (@batchDateFrom IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) >= @batchDateFrom)
+            AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
+            AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)) v
+      ON v.CASNumber = i.CASNumber AND v.INVWSversion = i.INVWSversion
+    WHERE i.INVPayTo = 'H';
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- SearchRecord + InvoiceAccountListing of FrmInvoiceMBMAC: the worksheets with an amount payable to the member, by invoice, by the worksheet's close date, the payor (the first
+-- two letters of the case number), the print status, the batch and the bordx date. Like the desktop it also lists the hospital-paid invoices of such worksheets (94 of
+-- 14,681 rows; its first column says who each invoice was paid to), although its print marks only the member-paid ones.
+CREATE OR ALTER PROCEDURE genisis.InvoiceMemberAccounting_Search
+    @reprint bit, @closeFrom datetime = NULL, @closeTo datetime = NULL, @payor nvarchar(2) = NULL, @batchDateFrom date = NULL, @batchDateTo date = NULL,
+    @batchNoFrom int = NULL, @batchNoTo int = NULL, @bordxFrom datetime = NULL, @bordxTo datetime = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(INVPayee) AS PayTo, RTRIM(INVPayTo) AS PayToCode, RTRIM(CASNumber) AS CaseNo, RTRIM(INVWSversion) AS Version, NULLIF(ClaimCloseDate, '19000101') AS ClaimCloseDate,
+           RTRIM(DebitCreditRefNo) AS DebitCreditRefNo, RTRIM(BordxRefNo) AS BordxNo, RTRIM(MBMNumber) AS MemberNo, RTRIM(MBMName) AS MemberName,
+           RTRIM(PatientName) AS PatientName, CLMPayableByMedix2M AS Payable, InvPreviousAmt AS PreviousAmount, NULLIF(BordxDate, '19000101') AS BordxDate,
+           RTRIM(INVBatchDate) AS BatchDate, INVBatchNo AS BatchNo, RTRIM(PLNCode) AS PlanCode, CLMTotalActual AS TotalActual
+    FROM genisis.WS_MBMInvoice1
+    WHERE InvPrintStatus = CASE WHEN @reprint = 1 THEN '1' ELSE '0' END
+      AND (@closeFrom IS NULL OR ClaimCloseDate >= @closeFrom) AND (@closeTo IS NULL OR ClaimCloseDate < DATEADD(DAY, 1, @closeTo))
+      AND (@payor IS NULL OR LEFT(CASNumber, 2) = @payor)
+      AND (@batchDateFrom IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) >= @batchDateFrom)
+      AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
+      AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)
+      AND (@bordxFrom IS NULL OR BordxDate >= @bordxFrom) AND (@bordxTo IS NULL OR BordxDate < DATEADD(DAY, 1, @bordxTo))
+    ORDER BY CASNumber, INVWSversion;
+END
+GO
+
+-- UpdatePrintRecord of FrmInvoiceMBMAC: the batch, the user, the printed mark and the amount payable to the member on the member's invoices of every worksheet
+-- version the criteria list. Returns how many invoices were marked.
+CREATE OR ALTER PROCEDURE genisis.InvoiceMemberAccounting_Print
+    @batch nvarchar(20), @user nvarchar(20), @closeFrom datetime = NULL, @closeTo datetime = NULL, @payor nvarchar(2) = NULL, @batchDateFrom date = NULL, @batchDateTo date = NULL,
+    @batchNoFrom int = NULL, @batchNoTo int = NULL, @bordxFrom datetime = NULL, @bordxTo datetime = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE i
+    SET INVBatchDate = LEFT(@batch, 9), INVBatchNo = CASE WHEN SUBSTRING(@batch, 11, 3) NOT LIKE '%[^0-9]%' AND LEN(SUBSTRING(@batch, 11, 3)) > 0 THEN CAST(SUBSTRING(@batch, 11, 3) AS int) END, InvPrintLogon = @user, InvPrintStatus = '1', InvPreviousAmt = ISNULL(v.CLMPayableByMedix2M, 0)
+    FROM genisis.WS_ClaimInvoice i
+    JOIN (SELECT DISTINCT CASNumber, INVWSversion, CLMPayableByMedix2M FROM genisis.WS_MBMInvoice1
+          WHERE InvPrintStatus = '0'
+            AND (@closeFrom IS NULL OR ClaimCloseDate >= @closeFrom) AND (@closeTo IS NULL OR ClaimCloseDate < DATEADD(DAY, 1, @closeTo))
+            AND (@payor IS NULL OR LEFT(CASNumber, 2) = @payor)
+            AND (@batchDateFrom IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) >= @batchDateFrom)
+            AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
+            AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)
+            AND (@bordxFrom IS NULL OR BordxDate >= @bordxFrom) AND (@bordxTo IS NULL OR BordxDate < DATEADD(DAY, 1, @bordxTo))) v
+      ON v.CASNumber = i.CASNumber AND v.INVWSversion = i.INVWSversion
+    WHERE i.INVPayTo = 'M';
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- UpdateRecord of FrmInvoiceMBMAC (cmdUpdate_Click, "For Update A/C Period"): the accounting month and year of the member-paid invoices of a worksheet version, and who
+-- set them and when. The list the ticks come from has no invoice number (its view has none), and the desktop built the ticked rows' keys from the wrong list columns, so its
+-- update could not find them; like the print, the update works on the worksheet version. Returns how many invoices were changed.
+CREATE OR ALTER PROCEDURE genisis.InvoiceMemberAccounting_SetPeriod
+    @cas nvarchar(30), @version nvarchar(4), @month int, @year int, @user nvarchar(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_ClaimInvoice
+    SET AccPeriodMonth = @month, AccPeriodYear = @year, LastAccPeriodUser = @user, LastAccPeriodDate = CAST(GETDATE() AS date)
+    WHERE CASNumber = @cas AND INVWSversion = @version AND INVPayTo = 'M';
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- ===== main/382_invoice_tracking.sql =====
+-- Invoice > Invoice Tracking (legacy FrmInvoiceTracking2). The desktop built the WHERE clause as text (StrAppend) and sent it either to the view VIEW_Invoice_Tracking (the
+-- detail listing) or to dbo.InvoiceTracking in HISWorkSheet, which ran it as dynamic SQL (the four summaries); here every criterion is a typed parameter. Read out of the desktop:
+--  * The detail listing reads VIEW_Invoice_Tracking as it is, FULL OUTER JOIN and all: it also lists the cases that have no invoice (5,945 of 97,711 rows), which is what the
+--    "... is empty" ticks of the form are for.
+--  * The four summaries joined worksheets to invoices by case number only, so every invoice was counted with every worksheet version of its case: January 2021 gave an invoice
+--    amount of 27,309,937 where the invoices add up to 2,028,764 (and 15,177 "cases" for 2,337 worksheets). They are worked out per worksheet version here: an invoice is counted once,
+--    and a worksheet's payable amounts once however many invoices it has. Their criteria also named columns more than one table has (CASNumber, PAYCode), which failed in the desktop.
+--  * "Summary (By Hospitals)" asked the procedure for its case 4 and read month columns that case does not return; it gives the layout the form declares for it (hospital, payable
+--    to the hospital, payable to the member, invoice amount; the number of worksheets is added).
+--  * Stay type "4 - Follow-up & Pre-Hospitalisation" built "AND (INVStayType = 'P' OR INVStayType = 'F'" without its closing bracket and failed; it works here (@stayType = 'PF').
+--  * The criteria of the combo boxes the form shows but never read (claimability, insured type, A/C period) are not offered.
+
+-- The invoices and the worksheet each belongs to, with the criteria applied. "From"/"to" pairs are inclusive; an "empty" flag keeps only rows where the column is NULL or blank
+-- (a date column is blank at 1900-01-01, as the desktop's  = ''  test saw it).
+CREATE OR ALTER FUNCTION genisis.InvoiceTracking_Filtered (
+    @invNoFrom nvarchar(100), @invNoTo nvarchar(100), @invNoEmpty bit, @stayType nvarchar(2), @payType char(1),
+    @versionFrom int, @versionTo int, @versionEmpty bit, @payTo char(1), @payToEmpty bit,
+    @bordxFrom nvarchar(40), @bordxTo nvarchar(40), @bordxEmpty bit,
+    @invDateFrom datetime, @invDateTo datetime, @invDateEmpty bit, @regFrom datetime, @regTo datetime, @regEmpty bit,
+    @hospital nvarchar(20), @groupCompany nvarchar(300), @groupCompanyEmpty bit,
+    @amountFrom money, @amountTo money, @amountEmpty bit, @payor nvarchar(4), @payorEmpty bit,
+    @wksFrom nvarchar(30), @wksTo nvarchar(30), @wksEmpty bit,
+    @doaFrom datetime, @doaTo datetime, @doaEmpty bit, @dodFrom datetime, @dodTo datetime, @dodEmpty bit,
+    @bordxDateFrom datetime, @bordxDateTo datetime, @bordxDateEmpty bit)
+RETURNS TABLE
+AS RETURN
+(
+    SELECT v.CASNumber, v.INVWSversion, v.InvNo, v.InvDate, v.INVAmount, v.INVPayTo, v.INVPayee, v.INVStayType, v.INVPAYType, v.INVEnteredDate, v.INVEnteredBy,
+           v.INVBordxRefNo, v.BordxDate, v.MBMGroupCompany, v.PAYCode, v.HOSName, v.CASDateAdmitted, v.CASDischargeDate, v.CaseRegDate,
+           cl.CLMPayableByMedix2H, cl.CLMPayableByMedix2M, cs.CASHOSCode
+    FROM genisis.WS_InvoiceTracking v
+    LEFT JOIN genisis.WS_Claim cl ON cl.CASNumber = v.CASNumber AND CAST(cl.ClaimVersion AS nvarchar(10)) = v.INVWSversion
+    LEFT JOIN dbo.CAS cs ON cs.CASNumber = v.CASNumber
+    WHERE (@invNoFrom IS NULL OR v.InvNo >= @invNoFrom) AND (@invNoTo IS NULL OR v.InvNo <= @invNoTo)
+      AND (@invNoEmpty = 0 OR v.InvNo IS NULL OR v.InvNo = '')
+      AND (@stayType IS NULL OR (@stayType = 'PF' AND v.INVStayType IN ('P', 'F')) OR v.INVStayType = @stayType)
+      AND (@payType IS NULL OR v.INVPAYType = @payType)
+      AND (@versionFrom IS NULL OR (v.INVWSversion NOT LIKE '%[^0-9]%' AND v.INVWSversion <> '' AND CAST(v.INVWSversion AS int) >= @versionFrom))
+      AND (@versionTo IS NULL OR (v.INVWSversion NOT LIKE '%[^0-9]%' AND v.INVWSversion <> '' AND CAST(v.INVWSversion AS int) <= @versionTo))
+      AND (@versionEmpty = 0 OR v.INVWSversion IS NULL OR v.INVWSversion = '')
+      AND (@payTo IS NULL OR v.INVPayTo = @payTo) AND (@payToEmpty = 0 OR v.INVPayTo IS NULL OR v.INVPayTo = '')
+      AND (@bordxFrom IS NULL OR v.INVBordxRefNo >= @bordxFrom) AND (@bordxTo IS NULL OR v.INVBordxRefNo <= @bordxTo)
+      AND (@bordxEmpty = 0 OR v.INVBordxRefNo IS NULL OR v.INVBordxRefNo = '')
+      AND (@invDateFrom IS NULL OR v.InvDate >= @invDateFrom) AND (@invDateTo IS NULL OR v.InvDate < DATEADD(DAY, 1, @invDateTo))
+      AND (@invDateEmpty = 0 OR v.InvDate IS NULL OR v.InvDate = '19000101')
+      AND (@regFrom IS NULL OR v.INVEnteredDate >= @regFrom) AND (@regTo IS NULL OR v.INVEnteredDate < DATEADD(DAY, 1, @regTo))
+      AND (@regEmpty = 0 OR v.INVEnteredDate IS NULL OR v.INVEnteredDate = '19000101')
+      AND (@hospital IS NULL OR cs.CASHOSCode = @hospital)
+      AND (@groupCompany IS NULL OR v.MBMGroupCompany = @groupCompany) AND (@groupCompanyEmpty = 0 OR v.MBMGroupCompany IS NULL OR v.MBMGroupCompany = '')
+      AND (@amountFrom IS NULL OR v.INVAmount >= @amountFrom) AND (@amountTo IS NULL OR v.INVAmount <= @amountTo) AND (@amountEmpty = 0 OR v.INVAmount IS NULL)
+      AND (@payor IS NULL OR v.PAYCode = @payor) AND (@payorEmpty = 0 OR v.PAYCode IS NULL OR v.PAYCode = '')
+      AND (@wksFrom IS NULL OR v.CASNumber >= @wksFrom) AND (@wksTo IS NULL OR v.CASNumber <= @wksTo) AND (@wksEmpty = 0 OR v.CASNumber IS NULL OR v.CASNumber = '')
+      AND (@doaFrom IS NULL OR v.CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR v.CASDateAdmitted < DATEADD(DAY, 1, @doaTo))
+      AND (@doaEmpty = 0 OR v.CASDateAdmitted IS NULL OR v.CASDateAdmitted = '19000101')
+      AND (@dodFrom IS NULL OR v.CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR v.CASDischargeDate < DATEADD(DAY, 1, @dodTo))
+      AND (@dodEmpty = 0 OR v.CASDischargeDate IS NULL OR v.CASDischargeDate = '19000101')
+      AND (@bordxDateFrom IS NULL OR v.BordxDate >= @bordxDateFrom) AND (@bordxDateTo IS NULL OR v.BordxDate < DATEADD(DAY, 1, @bordxDateTo))
+      AND (@bordxDateEmpty = 0 OR v.BordxDate IS NULL OR v.BordxDate = '19000101')
+)
+GO
+
+-- InvTrackListingCLM, report "3 - General Listing(Detail)": one row per invoice (and per case without one).
+CREATE OR ALTER PROCEDURE genisis.InvoiceTracking_Detail
+    @invNoFrom nvarchar(100) = NULL, @invNoTo nvarchar(100) = NULL, @invNoEmpty bit = 0, @stayType nvarchar(2) = NULL, @payType char(1) = NULL,
+    @versionFrom int = NULL, @versionTo int = NULL, @versionEmpty bit = 0, @payTo char(1) = NULL, @payToEmpty bit = 0,
+    @bordxFrom nvarchar(40) = NULL, @bordxTo nvarchar(40) = NULL, @bordxEmpty bit = 0,
+    @invDateFrom datetime = NULL, @invDateTo datetime = NULL, @invDateEmpty bit = 0, @regFrom datetime = NULL, @regTo datetime = NULL, @regEmpty bit = 0,
+    @hospital nvarchar(20) = NULL, @groupCompany nvarchar(300) = NULL, @groupCompanyEmpty bit = 0,
+    @amountFrom money = NULL, @amountTo money = NULL, @amountEmpty bit = 0, @payor nvarchar(4) = NULL, @payorEmpty bit = 0,
+    @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @wksEmpty bit = 0,
+    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0, @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0,
+    @bordxDateFrom datetime = NULL, @bordxDateTo datetime = NULL, @bordxDateEmpty bit = 0, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(f.CASNumber) AS CaseNo, RTRIM(f.INVWSversion) AS Version, RTRIM(f.INVBordxRefNo) AS BordxNo, NULLIF(f.BordxDate, '19000101') AS BordxDate,
+           RTRIM(f.InvNo) AS InvoiceNo, NULLIF(f.InvDate, '19000101') AS InvoiceDate, f.INVAmount AS InvoiceAmount, NULLIF(f.CaseRegDate, '19000101') AS RegDate,
+           NULLIF(f.CASDateAdmitted, '19000101') AS Doa, NULLIF(f.CASDischargeDate, '19000101') AS Dod, RTRIM(f.INVPayee) AS Payee, RTRIM(f.MBMGroupCompany) AS GroupCompany,
+           NULLIF(f.INVEnteredDate, '19000101') AS InvoiceRegistered, RTRIM(f.INVEnteredBy) AS EnteredBy, RTRIM(f.INVStayType) AS StayType, RTRIM(f.INVPAYType) AS PayType
+    FROM genisis.InvoiceTracking_Filtered(@invNoFrom, @invNoTo, @invNoEmpty, @stayType, @payType, @versionFrom, @versionTo, @versionEmpty, @payTo, @payToEmpty, @bordxFrom, @bordxTo, @bordxEmpty,
+        @invDateFrom, @invDateTo, @invDateEmpty, @regFrom, @regTo, @regEmpty, @hospital, @groupCompany, @groupCompanyEmpty, @amountFrom, @amountTo, @amountEmpty, @payor, @payorEmpty,
+        @wksFrom, @wksTo, @wksEmpty, @doaFrom, @doaTo, @doaEmpty, @dodFrom, @dodTo, @dodEmpty, @bordxDateFrom, @bordxDateTo, @bordxDateEmpty) f
+    ORDER BY f.CASNumber, f.INVWSversion, f.InvNo;
+END
+GO
+
+-- InvByMthCLM (@report 0), InvByMthHospCLM (1), InvGenListingCLM (2) and InvByHosp (4): the invoices, counted once each and per worksheet version. The columns a report does not
+-- have are NULL. 0: by invoice month; 1: by hospital and invoice month; 2: by hospital and invoice; 4: by hospital. Only invoices are counted (not the cases without one).
+CREATE OR ALTER PROCEDURE genisis.InvoiceTracking_Summary
+    @report int,
+    @invNoFrom nvarchar(100) = NULL, @invNoTo nvarchar(100) = NULL, @invNoEmpty bit = 0, @stayType nvarchar(2) = NULL, @payType char(1) = NULL,
+    @versionFrom int = NULL, @versionTo int = NULL, @versionEmpty bit = 0, @payTo char(1) = NULL, @payToEmpty bit = 0,
+    @bordxFrom nvarchar(40) = NULL, @bordxTo nvarchar(40) = NULL, @bordxEmpty bit = 0,
+    @invDateFrom datetime = NULL, @invDateTo datetime = NULL, @invDateEmpty bit = 0, @regFrom datetime = NULL, @regTo datetime = NULL, @regEmpty bit = 0,
+    @hospital nvarchar(20) = NULL, @groupCompany nvarchar(300) = NULL, @groupCompanyEmpty bit = 0,
+    @amountFrom money = NULL, @amountTo money = NULL, @amountEmpty bit = 0, @payor nvarchar(4) = NULL, @payorEmpty bit = 0,
+    @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @wksEmpty bit = 0,
+    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0, @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0,
+    @bordxDateFrom datetime = NULL, @bordxDateTo datetime = NULL, @bordxDateEmpty bit = 0, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    WITH invoices AS (
+        SELECT f.CASNumber, f.INVWSversion, f.InvNo, f.InvDate, f.INVAmount, f.CLMPayableByMedix2H, f.CLMPayableByMedix2M, RTRIM(f.CASHOSCode) AS HospitalCode, RTRIM(f.HOSName) AS Hospital,
+               YEAR(f.InvDate) AS InvYear, MONTH(f.InvDate) AS InvMonth,
+               CASE WHEN @report = 0 THEN 0 ELSE 1 END AS WithHospital,
+               ROW_NUMBER() OVER (PARTITION BY
+                   CASE WHEN @report IN (0, 1) THEN YEAR(f.InvDate) END, CASE WHEN @report IN (0, 1) THEN MONTH(f.InvDate) END,
+                   CASE WHEN @report <> 0 THEN f.CASHOSCode END, CASE WHEN @report <> 0 THEN f.HOSName END, CASE WHEN @report = 2 THEN f.InvNo END, CASE WHEN @report = 2 THEN f.InvDate END,
+                   f.CASNumber, f.INVWSversion ORDER BY f.InvNo) AS FirstOfWorksheet
+        FROM genisis.InvoiceTracking_Filtered(@invNoFrom, @invNoTo, @invNoEmpty, @stayType, @payType, @versionFrom, @versionTo, @versionEmpty, @payTo, @payToEmpty, @bordxFrom, @bordxTo, @bordxEmpty,
+            @invDateFrom, @invDateTo, @invDateEmpty, @regFrom, @regTo, @regEmpty, @hospital, @groupCompany, @groupCompanyEmpty, @amountFrom, @amountTo, @amountEmpty, @payor, @payorEmpty,
+            @wksFrom, @wksTo, @wksEmpty, @doaFrom, @doaTo, @doaEmpty, @dodFrom, @dodTo, @dodEmpty, @bordxDateFrom, @bordxDateTo, @bordxDateEmpty) f
+        WHERE f.InvNo IS NOT NULL AND f.CASNumber IS NOT NULL
+    )
+    SELECT TOP (@max)
+           CASE WHEN @report <> 0 THEN HospitalCode END AS HospitalCode, CASE WHEN @report <> 0 THEN Hospital END AS Hospital,
+           CASE WHEN @report = 2 THEN RTRIM(InvNo) END AS InvoiceNo, CASE WHEN @report = 2 THEN InvDate END AS InvoiceDate,
+           CASE WHEN @report IN (0, 1) THEN InvYear END AS InvYear, CASE WHEN @report IN (0, 1) THEN InvMonth END AS InvMonth,
+           COUNT(DISTINCT CASNumber + '-' + INVWSversion) AS TotalCases,
+           SUM(CASE WHEN FirstOfWorksheet = 1 THEN CLMPayableByMedix2H END) AS PayableToHospital, SUM(CASE WHEN FirstOfWorksheet = 1 THEN CLMPayableByMedix2M END) AS PayableToMember,
+           SUM(INVAmount) AS InvoiceAmount
+    FROM invoices
+    GROUP BY CASE WHEN @report <> 0 THEN HospitalCode END, CASE WHEN @report <> 0 THEN Hospital END, CASE WHEN @report = 2 THEN RTRIM(InvNo) END, CASE WHEN @report = 2 THEN InvDate END,
+             CASE WHEN @report IN (0, 1) THEN InvYear END, CASE WHEN @report IN (0, 1) THEN InvMonth END
+    ORDER BY CASE WHEN @report IN (0, 1) THEN InvYear END, CASE WHEN @report IN (0, 1) THEN InvMonth END, CASE WHEN @report <> 0 THEN HospitalCode END, CASE WHEN @report = 2 THEN InvDate END;
 END
 GO
 

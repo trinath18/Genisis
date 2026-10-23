@@ -89,6 +89,9 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
     (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
     (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- Invoice HOS / MBM Accounting and Invoice Tracking: their views and the daily batch counters
+    (N'WS_HOSInvoice', @WorksheetDb, N'VIEW_HOSInvoice'), (N'WS_MBMInvoice1', @WorksheetDb, N'VIEW_MBMInvoice1'), (N'WS_InvoiceTracking', @WorksheetDb, N'VIEW_Invoice_Tracking'),
+    (N'WS_INVACHSEQ', @WorksheetDb, N'INVACHSEQ'), (N'WS_INVACMSEQ', @WorksheetDb, N'INVACMSEQ'),
     -- Invoice Processing writes through the legacy parameterized procedures of the worksheet database
     (N'WS_Insert_ClaimInvoice_2013', @WorksheetDb, N'Insert_ClaimInvoice_2013'), (N'WS_Insert_ClaimInvoice_WODIR', @WorksheetDb, N'Insert_ClaimInvoice_WODIR'),
     (N'WS_Insert_ClaimInvoice_WOFolDate', @WorksheetDb, N'Insert_ClaimInvoice_WOFolDate'), (N'WS_Insert_ClaimInvoice_WO2013', @WorksheetDb, N'Insert_ClaimInvoice_WO2013'),

@@ -12,6 +12,14 @@ public static class InvoiceServiceCollectionExtensions
         services.AddScoped<InvoiceService>();
         services.AddSingleton<IInvoiceEntryRepository, InvoiceEntryRepository>();
         services.AddScoped<InvoiceEntryService>();
+        services.AddSingleton<IInvoiceOriginalRepository, InvoiceOriginalRepository>();
+        services.AddScoped<InvoiceOriginalService>();
+        services.AddSingleton<IHospitalAccountingRepository, HospitalAccountingRepository>();
+        services.AddScoped<HospitalAccountingService>();
+        services.AddSingleton<IMemberAccountingRepository, MemberAccountingRepository>();
+        services.AddScoped<MemberAccountingService>();
+        services.AddSingleton<IInvoiceTrackingRepository, InvoiceTrackingRepository>();
+        services.AddScoped<InvoiceTrackingService>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

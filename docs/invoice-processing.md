@@ -1,5 +1,7 @@
 # Invoice Processing (`frmInvoice`) and Worksheet Registration: analysis and plan
 
+> The other four required Invoice menu items (Original Invoice Update, Invoice MBM Accounting, Invoice HOS Accounting, Invoice Tracking) are in [invoice-screens.md](invoice-screens.md).
+
 Why this page exists: Worksheet Registration cannot be completed on its own. It works on the invoices of a case, and the screen that creates them is a separate, large form. This is what the
 VB6 code does (read from `frmInvoice.frm`, `frmInvoiceGST.frm`, `frmWorksheetRegGST2015.frm`, `frmWorksheetAdj2013.frm` and `mdiMain.frm`), what the databases show, what is reusable as it
 stands, and the order of work. Everything under "Measured" was run against the development databases on `MYDELL`.

@@ -58,6 +58,9 @@ against the same database.
 | `main/185_leaflet_card.sql` | Membership > Leaflet & Card |
 | `main/186_temp_registration.sql` | Membership > Temp MBM Reg (previous membership as a renewal) |
 | `main/187_temp_adjustment.sql` | Membership > Temp MBM Adj (temporary payor check) |
+| `main/380_invoice_original_update.sql` | Invoice > Original Invoice Update: the invoices of a worksheet version, and the update of one |
+| `main/381_invoice_accounting.sql` | Invoice > Invoice HOS Accounting and Invoice MBM Accounting: typed searches, the daily batch counters, the print marks and the A/C period |
+| `main/382_invoice_tracking.sql` | Invoice > Invoice Tracking: the criteria as one inline function, the detail listing and the four summaries (per worksheet version) |
 | `main/400_account_transaction.sql` | Maintenance > Account Transaction (MMA Schedule of Fees search) |
 | `main/410_security.sql` | Maintenance > Security: Department (GRP), Role Management and User Permission (USR) |
 | `main/420_mma_entry.sql` | Maintenance > MMA (Procedures/OPCS): schedule rates of up to six OPCS codes |

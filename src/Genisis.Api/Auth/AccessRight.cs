@@ -70,6 +70,18 @@ public static class AccessRight
 
     /// <summary>Invoice > Invoice Processing (<c>mniInvoiceProcess_Click</c>: <c>CheckAccess(22)</c>, "Invoice Entry"); the desktop uses the same position as the Worksheet Registration scan code.</summary>
     public const int InvoiceProcessing = 22;
+
+    /// <summary>Invoice > Original Invoice Update (<c>mniOriginalInvUpd</c>) has no click handler in the desktop and is hidden: it edits invoices, so it is gated like Invoice Processing.</summary>
+    public const int InvoiceOriginalUpdate = 22;
+
+    /// <summary>Invoice > Invoice Tracking (<c>mnuInvTrack_Click</c>: <c>CheckAccess(27)</c>).</summary>
+    public const int InvoiceTracking = 27;
+
+    /// <summary>Invoice > Invoice HOS Accounting (<c>mnuInvHOSAcc</c>) has no click handler in the desktop and is hidden: gated like Invoice Tracking, the other reporting item of the menu.</summary>
+    public const int InvoiceHospitalAccounting = 27;
+
+    /// <summary>Invoice > Invoice MBM Accounting (<c>mnuInvMBMAcc</c>) has no click handler in the desktop and is hidden: gated like Invoice Tracking.</summary>
+    public const int InvoiceMemberAccounting = 27;
     public const int WorksheetAdjustment = 23;
     public const int WorksheetTracking = 24;
     public const int WorksheetEnquiry = 13;

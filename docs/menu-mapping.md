@@ -19,7 +19,7 @@ How to read the status column
 | Membership | 28 | 13 | 3 | 10 | 23 |
 | Contribution Billing | 12 | 5 | 0 | 5 | 9 |
 | Case | 36 | 12 | 13 | 0 | 29 |
-| Invoice | 9 | 5 | 0 | 5 | 8 |
+| Invoice | 9 | 5 | 5 | 0 | 8 |
 | Worksheet | 9 | 6 | 5 | 1 | 5 |
 | Authorize Claims | 18 | 2 | 0 | 2 | 14 |
 | Claim Bordx | 34 | 23 | 0 | 23 | 21 |
@@ -58,6 +58,11 @@ How to read the status column
 | Case > Case ASCII | `CaseASCII` | frmCaseASCII | `/case/case-ascii` | 18 * | `/api/case/case-ascii` |
 | Worksheet > WorkSheet Adjustment | `mnuWSAdjust` | frmWorksheetAdj2013 (partly: viewing as the Enquiry and the Update button for payment details and remarks; Approve, credit/debit notes and letters not migrated) | `/worksheet/adjustment` | 23 | `/api/worksheet/adjustment` |
 | Worksheet > Worksheet Enquiry | `mnuWSEnq` | frmWorksheetEnq (read-only: the editing half of the desktop form is Worksheet Adjustment) | `/worksheet/enquiry` | 13 | `/api/worksheet/enquiry` |
+| Invoice > Invoice Processing | `mniInvoiceProcess` | frmInvoice | `/invoice/processing` | 22 | `/api/invoice` |
+| Invoice > Original Invoice Update | `mniOriginalInvUpd` | frmUpdateInvoice (no click handler; never opened by the desktop code) | `/invoice/original-update` | 22 * | `/api/invoice/original` |
+| Invoice > Invoice MBM Accounting | `mnuInvMBMAcc` | FrmInvoiceMBMAC (no click handler; never opened) | `/invoice/member-accounting` | 27 * | `/api/invoice/member-accounting` |
+| Invoice > Invoice HOS Accounting | `mnuInvHOSAcc` | FrmInvoiceHOSAC (no click handler; never opened) | `/invoice/hospital-accounting` | 27 * | `/api/invoice/hospital-accounting` |
+| Invoice > Invoice Tracking | `mnuInvTrack` | FrmInvoiceTracking2 | `/invoice/tracking` | 27 | `/api/invoice/tracking` |
 | Worksheet > Worksheet Send to A/C | `mnuWSToAC` | FrmWksSendToAC | `/worksheet/send-to-accounts` | 24 * | `/api/worksheet/send-to-accounts` |
 | Worksheet > Worksheet Send to A/R | `mnuWSReturnCLM` | FrmARRecFrCLM (reduced: only the CASDRC / CASRecBy / CASRecStatus columns exist) | `/worksheet/send-to-ar` | 24 * | `/api/worksheet/send-to-ar` |
 | Worksheet > Worksheet Tracking | `mnuWksTracking` | FrmWorksheetTracking | `/worksheet/tracking` | 24 * | `/api/worksheet/tracking` |
@@ -117,6 +122,22 @@ How to read the status column
 | 35 | Case > Case ASCII (Zurich) | `CaseASCIIZur` |  |  | Not required (hidden in the desktop) |  |
 | 36 | Case > Claims ASCII (Zurich) | `mnuClaimsASCIIZurichGen` |  |  | Not required (hidden in the desktop) |  |
 
+## Invoice module — every menu item
+
+| # | Menu path | Control | Access pos | Opens (VB6) | Status | Web route |
+|---:|---|---|---:|---|---|---|
+| 1 | Invoice | `MnuInvoices` |  |  | Not required (hidden in the desktop) |  |
+| 2 | Invoice > Invoice Processing | `mniInvoiceProcess` | 22 | frmInvoice | Migrated | `/invoice/processing` |
+| 3 | Invoice > Original Invoice Update | `mniOriginalInvUpd` | 22 * | frmUpdateInvoice (no click handler; never opened) | Migrated (hidden in the desktop) | `/invoice/original-update` |
+| 4 | Invoice > Invoice MBM Accounting | `mnuInvMBMAcc` | 27 * | FrmInvoiceMBMAC (no click handler; never opened) | Migrated (hidden in the desktop) | `/invoice/member-accounting` |
+| 5 | Invoice > Invoice HOS Accounting | `mnuInvHOSAcc` | 27 * | FrmInvoiceHOSAC (no click handler; never opened) | Migrated (hidden in the desktop) | `/invoice/hospital-accounting` |
+| 6 | Invoice > Invoice HOS (DR to MBM) | `InvoiceHOSDebittoMBM` |  | frmHOSInvD2MBM (never opened) | Not required (hidden in the desktop) |  |
+| 7 | Invoice > Invoice HOS (CR to MBM) | `InvoiceHOSCRtoMBM` |  | frmHOSInvC2MBM (never opened) | Not required (hidden in the desktop) |  |
+| 8 | Invoice > Invoice Tracking | `mnuInvTrack` | 27 | FrmInvoiceTracking2 | Migrated (hidden in the desktop) | `/invoice/tracking` |
+| 9 | Invoice > Invoice Tracking (Jupiter) | `mnuInvTrackNep` |  | FrmInvoiceTrackNep | Not required (hidden in the desktop) |  |
+
+\* No click handler in the desktop: gated like the closest sibling (see [invoice-screens.md](invoice-screens.md)).
+
 ## Worksheet module — every menu item
 
 | # | Menu path | Control | Access pos | Opens (VB6) | Status | Web route |
@@ -138,8 +159,6 @@ How to read the status column
 **Membership** (10): Leaflet & Card; Card Sending Mode; Member Reinstatement; MCO Pending; Deletion; Tracking; Generate Membership ASCII(Pluto); Upload Bordx; Temp MBM Reg; Temp MBM Adj
 
 **Contribution Billing** (5): Generate Invoice; Generate Invoice (Endorsement); MCO Reinstatement; Refund Listing; Receipt MCO/Others
-
-**Invoice** (5): Invoice Processing (migrated at `/invoice/processing`: a case's invoices, add, change and remove, with the limits in `invoice-processing.md`: an invoice a worksheet has used cannot be changed); Original Invoice Update; Invoice MBM Accounting; Invoice HOS Accounting; Invoice Tracking
 
 **Worksheet** (1): Worksheet Registration
 

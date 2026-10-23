@@ -101,12 +101,34 @@ public static class WorksheetRows
         return rows;
     }
 
+    /// <summary>The cash type of the worksheet (<c>SaveClaim</c>): <c>C</c> cashless when the hospital is paid, <c>R</c> reimbursement when the member is; <c>null</c> when nobody is named.</summary>
+    public static string? CashType(string? payTo) => string.IsNullOrWhiteSpace(payTo) ? null : string.Equals(payTo.Trim(), "H", StringComparison.OrdinalIgnoreCase) ? "C" : "R";
+
     /// <summary>
     /// The totals of the version row of <c>Claim</c> that follow from the grid and the summary rows (<c>SaveClaim</c>): the total actual and approved, the final approve (the same as the total approved), the co-payment,
-    /// the limit exceeded, the excess (what the member owes, negative) and the reimbursement (what is payable to the member). The payable to the hospital and to the member (the Final Total row), the balance
-    /// limit and the other columns of the row depend on more than the grid and are not here.
+    /// the limit exceeded, the excess (what the member owes, negative) and the reimbursement (what is payable to the member); and the Final Total row: payable to the hospital (the hospital row plus what the member owes,
+    /// 0 for a reimbursement) and to the member (the positive member cells). With the member's available limit given, the balance limit, which the desktop in use saves as the previous balance (the source of the desktop
+    /// we have subtracts the final approve; the saved rows do in 10 of 3,369 since July 2020 and equal the previous balance in 3,158).
     /// </summary>
-    public static Dictionary<string, decimal> ClaimTotals(WorksheetEvaluation grid, WorksheetFinal final) => new()
+    /// <param name="grid">The evaluated worksheet.</param>
+    /// <param name="final">The summary rows.</param>
+    /// <param name="cashType"><see cref="CashType"/>.</param>
+    /// <param name="previousBalance">The member's available limit before the worksheet, or <c>null</c> when the plan has none.</param>
+    public static Dictionary<string, decimal> ClaimTotals(WorksheetEvaluation grid, WorksheetFinal final, string? cashType = null, decimal? previousBalance = null)
+    {
+        var totals = ClaimSummary(grid, final);
+        var reimbursement = string.Equals(cashType, "R", StringComparison.OrdinalIgnoreCase);
+        totals["CLMPayableByMedix2H"] = reimbursement ? 0m : grid.Totals.ToHospital + final.Excess;
+        totals["CLMPayableByMedix2M"] = final.PayableToMember;
+        if (previousBalance is { } previous)
+        {
+            totals["CLMPreviousBalance"] = previous;
+            totals["CLMBalanceLimit"] = previous;
+        }
+        return totals;
+    }
+
+    private static Dictionary<string, decimal> ClaimSummary(WorksheetEvaluation grid, WorksheetFinal final) => new()
     {
         ["CLMTotalActual"] = grid.Totals.Actual,
         ["CLMTotalApproved"] = final.TotalApproved,

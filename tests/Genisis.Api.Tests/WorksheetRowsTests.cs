@@ -115,7 +115,21 @@ public class WorksheetRowsRulesTests
         var final = WorksheetRules.Final(grid, 100m, 50000m);
         var totals = WorksheetRows.ClaimTotals(grid, final);
         Assert.Equal((1250.91m, 1056.51m, 1056.51m, 100m, 0m, -94.4m, 0m), (totals["CLMTotalActual"], totals["CLMTotalApproved"], totals["CLMFinalApprove"], totals["CLMCoPayRB"], totals["CLMLimitExceeded"], totals["CLMExcess"], totals["CLMReimburse"]));
-        Assert.Equal(7, totals.Count);
+        Assert.Equal(7 + 2, totals.Count);
+        Assert.Equal((1250.91m - 94.4m, 0m), (totals["CLMPayableByMedix2H"], totals["CLMPayableByMedix2M"]));
+    }
+
+    [Fact]
+    public void The_payable_amounts_follow_the_cash_type_and_the_balance_limit_is_the_previous_balance()
+    {
+        var grid = new WorksheetEvaluation([new WorksheetLine(1, 214.4m, "120.00", 120m, 214.4m, -94.4m), new WorksheetLine(3, 100m, "FULL", 100m, 20m, 80m)], new WorksheetTotals(314.4m, 220m, 234.4m, -14.4m));
+        var final = WorksheetRules.Final(grid, 0m, 50000m);
+        var cashless = WorksheetRows.ClaimTotals(grid, final, "C", 50000m);
+        Assert.Equal((234.4m - 94.4m, 80m, 50000m, 50000m), (cashless["CLMPayableByMedix2H"], cashless["CLMPayableByMedix2M"], cashless["CLMPreviousBalance"], cashless["CLMBalanceLimit"]));
+        var reimbursed = WorksheetRows.ClaimTotals(grid, final, "R");
+        Assert.Equal((0m, 80m), (reimbursed["CLMPayableByMedix2H"], reimbursed["CLMPayableByMedix2M"]));
+        Assert.False(reimbursed.ContainsKey("CLMBalanceLimit"));
+        Assert.Equal(("C", "R", null), (WorksheetRows.CashType(" h "), WorksheetRows.CashType("M"), WorksheetRows.CashType("")));
     }
 
     [Fact]
@@ -313,7 +327,7 @@ public class WorksheetRowsReferenceTests(ITestOutputHelper output)
             """, transaction: session.Transaction, commandTimeout: 300)).ToList();
         Assert.True(sample.Count >= 300, $"only {sample.Count} versions in the sample");
 
-        var columns = new[] { "CLMTotalActual", "CLMTotalApproved", "CLMFinalApprove", "CLMCoPayRB", "CLMLimitExceeded", "CLMExcess", "CLMReimburse" };
+        var columns = new[] { "CLMTotalActual", "CLMTotalApproved", "CLMFinalApprove", "CLMCoPayRB", "CLMLimitExceeded", "CLMExcess", "CLMReimburse", "CLMPayableByMedix2H", "CLMPayableByMedix2M", "CLMBalanceLimit" };
         var same = columns.ToDictionary((c) => c, (_) => 0);
         var miss = new Dictionary<string, List<string>>();
         int done = 0;
@@ -327,9 +341,10 @@ public class WorksheetRowsReferenceTests(ITestOutputHelper output)
             done++;
             var lines = WorksheetRows.Columns(flat).Select((c) => new WorksheetLine(c.Slot, Parse(saved["ClaimActual"][c.Column]), null, Parse(saved["ClaimApprove"][c.Column]), Parse(saved["ClaimHos"][c.Column]), Parse(saved["ClaimMember"][c.Column]))).ToList();
             var grid = new WorksheetEvaluation(lines, new WorksheetTotals(lines.Sum((l) => l.Actual), lines.Sum((l) => l.Approved), lines.Sum((l) => l.ToHospital), lines.Sum((l) => l.ToMember)));
-            var totals = WorksheetRows.ClaimTotals(grid, WorksheetRules.Final(grid, Parse(claim["CLMCoPayRB"]), Parse(claim["CLMPreviousBalance"])));
+            var totals = WorksheetRows.ClaimTotals(grid, WorksheetRules.Final(grid, Parse(claim["CLMCoPayRB"]), Parse(claim["CLMPreviousBalance"])), Convert.ToString(claim["CLMCashType"])?.Trim(), Parse(claim["CLMPreviousBalance"]));
             foreach (var column in columns)
             {
+                if (column == "CLMBalanceLimit" && claim[column] is null) { same[column]++; continue; }
                 if (Math.Abs(totals[column] - Parse(claim[column])) < 0.011m) same[column]++;
                 else if ((miss.TryGetValue(column, out var list) ? list : miss[column] = []).Count < 3) miss[column].Add($"{cas} v{version}: saved {Parse(claim[column])} built {totals[column]}");
             }

@@ -213,8 +213,11 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
 * `WorksheetRows.ClaimTotals`: the seven totals of the `Claim` row that follow from the grid and the summary rows (the engine's `WorksheetFinal`): `CLMTotalActual`, `CLMTotalApproved`, `CLMFinalApprove`, `CLMCoPayRB`,
   `CLMLimitExceeded`, `CLMExcess` (what the member owes) and `CLMReimburse` (payable to the member). Rebuilt from 1,786 saved grids (the four tables' numbers, the saved co-payment and available limit) and compared with the
   saved row to the cent: **99.83, 99.55, 99.55, 100.00, 99.72, 100.00 and 100.00 per cent**. The misses are versions where the limit logic differs (an annual limit of another kind, duplicate claims).
-  **Not in it, measured:** `CLMPayableByMedix2H` / `2M` (the Final Total row) are the sums of the hospital / member rows in only 69 / 66 per cent of versions, and `CLMBalanceLimit` is the previous balance less the final approve in
-  only 6 per cent of the 1,704 that have one, so they depend on the annual-limit kind of the plan (the balance routines of section 4b) and are not guessed.
+  **The Final Total row and the balance limit, found by looking at the saved rows** (the earlier note here said they were not simple sums; they depend on the cash type, not on the annual-limit kind): for a cashless worksheet
+  (`CLMCashType` C, the hospital is paid) `CLMPayableByMedix2H` is the hospital row plus what the member owes (the negative member cells) in 95 per cent of 1,286 versions since July 2020, and for a reimbursement (R, the member
+  is paid) it is 0 in all 438; `CLMPayableByMedix2M` is the positive member cells in 97.6 per cent (C) and 99.1 per cent (R). The cash type is the first invoice's pay-to (`WorksheetRows.CashType`: H gives C, otherwise R).
+  `CLMBalanceLimit` is the **previous balance**, not the previous balance less the final approve that the source of the desktop we have computes: it equals the previous balance in 3,158 of 3,369 versions since July 2020 (94 per cent)
+  and the previous less the final in 10 (before 2020: 1,041 and 11); in 61 it is the previous plus the final and in 140 something else (small differences, not explained). `ClaimTotals` writes both when the member's available limit is given.
 
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
 the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `SaveClaim` (about 55 of the 141 `Claim` columns, several from state not in

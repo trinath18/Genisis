@@ -75,6 +75,32 @@ public class WorksheetRowsRulesTests
     }
 
     [Fact]
+    public void The_limit_row_has_the_limit_text_of_each_row_and_the_days_they_were_worked_out_with()
+    {
+        var grid = new WorksheetEvaluation([new WorksheetLine(1, 0, "1,500.00", 0, 0, 0), new WorksheetLine(2, 0, "0", 0, 0, 0), new WorksheetLine(3, 0, " FULL ", 0, 0, 0), new WorksheetLine(8, 0, "300.00", 0, 0, 0)], new WorksheetTotals(0, 0, 0, 0));
+        var itemised = WorksheetRows.Limits(grid, false, new WorksheetRows.LimitDays(Board: 6m, Icu: 0m, PhysicianVisits: 2.5m, Cash: 3m));
+        Assert.Equal(("1,500.00", "0", "FULL", "-", "300.00"), (itemised["CLMBoardAmt"], itemised["CLMICUAmt"], itemised["CLMServices"], itemised["CLMTheatre"], itemised["CLMSurgicalAmt"]));
+        Assert.Equal(("6", "0", "2.5", "0", "3", "0"), (itemised["CLMBoardDays"], itemised["CLMICUDays"], itemised["CLMINHOSPhyDays"], itemised["CLMKIDDCDays"], itemised["CLMCashDays"], itemised["CLMGurdianDays"]));
+        var flat = WorksheetRows.Limits(grid, true, new WorksheetRows.LimitDays(Board: 6m));
+        Assert.Equal("300.00", flat["CLMCOPreHSSum"]);
+        Assert.False(flat.ContainsKey("CLMSurgicalAmt") || flat.ContainsKey("CLMINHOSPhyDays"));
+        Assert.Equal(WorksheetRows.Columns(true).Count + 5, flat.Count);
+        Assert.Equal(WorksheetRows.Columns(false).Count + 6, itemised.Count);
+    }
+
+    [Fact]
+    public void The_days_a_limit_is_worked_out_with_are_the_stay_held_to_the_days_the_plan_allows()
+    {
+        PlanBenefit Plan(string code, string? days) => new() { Code = code, Days = days };
+        Assert.Equal(7m, PlanLimitRules.LimitedDays([Plan("101", "120")], "101", 7m));
+        Assert.Equal(120m, PlanLimitRules.LimitedDays([Plan("101", "120")], "101", 200m));
+        Assert.Equal(7.5m, PlanLimitRules.LimitedDays([Plan("101", "0")], "101", 7.5m));
+        Assert.Equal(7.5m, PlanLimitRules.LimitedDays([Plan("101", null)], "101", 7.5m));
+        Assert.Equal(3m, PlanLimitRules.LimitedDays([Plan("102", "20")], "101", 3m));
+        Assert.Equal(2m, PlanLimitRules.LimitedDays([], "102", 2m));
+    }
+
+    [Fact]
     public void A_table_is_the_grid_column_it_holds_in_the_columns_of_the_tables_rows()
     {
         var grid = new WorksheetEvaluation(
@@ -168,6 +194,72 @@ public class WorksheetRowsReferenceTests(ITestOutputHelper output)
         foreach (var (shape, n) in classes.OrderByDescending((c) => c.Value).Take(20)) output.WriteLine($"  {n,6}x {shape}");
         Assert.True(done >= 300);
         foreach (var (table, (n, same)) in cells) Assert.True(same >= n * 0.90, $"{table}: {same} of {n} cells equal");
+    }
+
+    /// <summary>
+    /// The limit table the same way: each saved <c>ClaimLimit</c> row of the sample is read back (limit texts and days) and written again by <see cref="WorksheetRows.Limits"/>, and every cell it writes is compared with the
+    /// saved text. Then the days the engine can work out alone, Room &amp; Board and ICU (the stay's days held to the plan's), are compared with the saved ones.
+    /// </summary>
+    [Fact]
+    public async Task The_limit_row_written_from_a_saved_rows_own_texts_equals_it_and_the_engine_finds_the_board_and_icu_days()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        await using var session = await TestDb.Sessions().OpenAsync();
+        var sample = (await session.Connection.QueryAsync<(string Cas, int Version, string? Family, string? Payor)>(
+            """
+            SELECT RTRIM(a.CASNumber), a.CLMVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2)
+            FROM genisis.WS_ClaimLimit a
+            JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = a.CASNumber AND v.ClaimVersion = a.CLMVersion
+            JOIN genisis.WS_Claim w ON w.CASNumber = a.CASNumber AND w.ClaimVersion = a.CLMVersion
+            WHERE a.CASNumber NOT LIKE 'ZZ%' AND v.MBMNumber IS NOT NULL AND w.ClaimOpenDate >= '2020-07-01' AND ABS(CHECKSUM(a.CASNumber, a.CLMVersion)) % 20 = 0
+            """, transaction: session.Transaction, commandTimeout: 300)).ToList();
+        Assert.True(sample.Count >= 300, $"only {sample.Count} versions in the sample");
+
+        var classes = new Dictionary<string, int>();
+        int cellsN = 0, cellsSame = 0, rowsSame = 0, done = 0, boardN = 0, boardSame = 0, icuN = 0, icuSame = 0;
+        var stay = new StayDaysRepository();
+        var plan = new PlanBenefitRepository();
+        string? Text(IDictionary<string, object?> row, string column) => Convert.ToString(row[column])?.Trim();
+        foreach (var (cas, version, family, payor) in sample)
+        {
+            if (await session.Connection.QueryFirstOrDefaultAsync("SELECT * FROM genisis.WS_ClaimLimit WHERE CASNumber = @cas AND CLMVersion = @version", new { cas, version }, session.Transaction) is not IDictionary<string, object?> saved) continue;
+            done++;
+            var flat = WorksheetRows.Flat(family, payor);
+            var lines = WorksheetRows.Columns(flat).Select((c) => new WorksheetLine(c.Slot, 0, Text(saved, c.Column), 0, 0, 0)).ToList();
+            decimal D(string column) => Parse(saved[column]);
+            var built = WorksheetRows.Limits(new WorksheetEvaluation(lines, new WorksheetTotals(0, 0, 0, 0)), flat, new WorksheetRows.LimitDays(D("CLMBoardDays"), D("CLMICUDays"), D("CLMINHOSPhyDays"), D("CLMKIDDCDays"), D("CLMCashDays"), D("CLMGurdianDays")));
+            var allSame = true;
+            foreach (var (column, text) in built)
+            {
+                var savedText = Text(saved, column);
+                var same = string.Equals(savedText, text, StringComparison.Ordinal);
+                cellsN++;
+                cellsSame += same ? 1 : 0;
+                if (same) continue;
+                allSame = false;
+                var shape = $"{(column.EndsWith("Days", StringComparison.Ordinal) ? column : "limit")}: saved [{Shape(savedText)}] -> built [{Shape(text)}]{(flat ? " (flat)" : "")}";
+                classes[shape] = classes.GetValueOrDefault(shape) + 1;
+            }
+            rowsSame += allSame ? 1 : 0;
+
+            var benefits = await plan.BenefitsAsync(session, cas, version);
+            var days = await stay.DaysAsync(session, cas, version);
+            if (benefits.Count > 0)
+            {
+                boardN++;
+                boardSame += Math.Abs(PlanLimitRules.LimitedDays(benefits, "101", days.RoomDays) - D("CLMBoardDays")) < 0.005m ? 1 : 0;
+                icuN++;
+                icuSame += Math.Abs(PlanLimitRules.LimitedDays(benefits, "102", days.IcuDays) - D("CLMICUDays")) < 0.005m ? 1 : 0;
+            }
+        }
+        output.WriteLine($"ClaimLimit: {cellsSame} of {cellsN} cells equal ({100.0 * cellsSame / cellsN:F2}%), {rowsSame} of {done} rows entirely equal");
+        foreach (var (shape, n) in classes.OrderByDescending((c) => c.Value).Take(14)) output.WriteLine($"  {n,6}x {shape}");
+        output.WriteLine($"days worked out by the engine: Room & Board {boardSame} of {boardN}, ICU {icuSame} of {icuN}");
+        Assert.True(done >= 300);
+        Assert.True(cellsSame >= cellsN * 0.90, $"{cellsSame} of {cellsN} cells equal");
+        Assert.True(boardN >= 200 && boardSame >= boardN * 0.80, $"Room & Board days: {boardSame} of {boardN}");
     }
 
     private static string Shape(string? text) => text switch

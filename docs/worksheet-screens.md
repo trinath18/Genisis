@@ -526,7 +526,7 @@ Run the regenerated `sql/genisis-main.sql` on the main database (it only creates
 
 ## Verification (phases 1 to 3)
 
-`dotnet build -c Release -warnaserror` clean; `dotnet test` 715 of 715 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
+`dotnet build -c Release -warnaserror` clean; `dotnet test` 718 of 718 passed on the merged branch, which now includes the Membership screens of the team branch (269 of the tests are Worksheet tests; the Upload Bordx tests need the `UploadDb`
 staging database, see `sql/hosting/create-upload-db.sql`); UI lint, Prettier and typecheck clean and 158 unit tests passed; browser suites 279 checks passed in all, no console or network
 errors (the four Worksheet suites are 148 of them: Tracking / Send to A/C / Send to A/R 51, Enquiry 37, Adjustment 42, Registration 18; Invoice Processing 47 besides: 15 read, 32 write); every new procedure was also run as `apiuser` (login impersonation,
 writes rolled back). The Enquiry grid and the calculation engine are checked against the figures saved on the Claim rows (see "The main decision" and the Phase 3 tables).

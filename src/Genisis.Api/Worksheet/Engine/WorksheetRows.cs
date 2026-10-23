@@ -71,6 +71,36 @@ public static class WorksheetRows
         return kind == Kind.Member && value < 1m ? Number(value) : Grid(value);
     }
 
+    /// <summary>The days the limits were worked out with, as <c>saveLimit</c> keeps them next to the limits (<c>DBDaysLmt</c>, <c>ICUDaysLmt</c>, <c>PhyVisitLmt</c>, <c>KidneyMonthsLmt</c>, <c>daycashLmt</c>, <c>lodgerdayLmt</c>).</summary>
+    /// <param name="Board">Room &amp; Board days.</param>
+    /// <param name="Icu">ICU days.</param>
+    /// <param name="PhysicianVisits">Physician visit days (the itemised layout only).</param>
+    /// <param name="KidneyMonths">Kidney months.</param>
+    /// <param name="Cash">Cash allowance days.</param>
+    /// <param name="Guardian">Guardian (lodger) days.</param>
+    public record LimitDays(decimal Board = 0m, decimal Icu = 0m, decimal PhysicianVisits = 0m, decimal KidneyMonths = 0m, decimal Cash = 0m, decimal Guardian = 0m);
+
+    /// <summary>
+    /// The row of <c>ClaimLimit</c> (<c>saveLimit</c>): the limit text of each worksheet row (the grid's Limit column, a dash for a row with none) in the same columns as the other tables, and the days the limits were worked out
+    /// with as VB's number (<c>0</c> when there are none). The physician visit days are written for the itemised layout only.
+    /// </summary>
+    public static Dictionary<string, string> Limits(WorksheetEvaluation grid, bool flat, LimitDays days)
+    {
+        var rows = new Dictionary<string, string>();
+        foreach (var (slot, column) in Columns(flat))
+        {
+            var text = grid.Lines.FirstOrDefault((l) => l.Slot == slot)?.Limit?.Trim();
+            rows[column] = string.IsNullOrEmpty(text) ? Dash : text;
+        }
+        rows["CLMBoardDays"] = Number(days.Board);
+        rows["CLMICUDays"] = Number(days.Icu);
+        if (!flat) rows["CLMINHOSPhyDays"] = Number(days.PhysicianVisits);
+        rows["CLMKIDDCDays"] = Number(days.KidneyMonths);
+        rows["CLMCashDays"] = Number(days.Cash);
+        rows["CLMGurdianDays"] = Number(days.Guardian);
+        return rows;
+    }
+
     /// <summary>The columns and texts of one table for an evaluated worksheet. Rows the plan family does not write are left out.</summary>
     public static Dictionary<string, string> Build(WorksheetEvaluation grid, bool flat, Kind kind)
     {

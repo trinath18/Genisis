@@ -123,6 +123,13 @@ public static class PlanLimitRules
     }
 
     /// <summary>
+    /// The days a limit was worked out with (<c>DBDaysLmt</c>, <c>ICUDaysLmt</c>): the days of the stay held to the days the plan allows for the benefit (<paramref name="code"/> 101 Room &amp; Board, 102 ICU), or the days of
+    /// the stay when the plan gives no day limit.
+    /// </summary>
+    public static decimal LimitedDays(IEnumerable<PlanBenefit> benefits, string code, decimal stayDays) =>
+        Number(benefits.FirstOrDefault((b) => b.Code.Trim() == code)?.Days) is { } allowed and > 0 ? Math.Min(stayDays, allowed) : stayDays;
+
+    /// <summary>
     /// The worksheet rows whose limit <see cref="Derive"/> took from a payor's convention and not from the plan (<see cref="PayorDefaults"/> and the non-panel Room &amp; Board of payor TK), so the calculation can say so.
     /// </summary>
     public static List<int> ConventionSlots(IEnumerable<PlanBenefit> benefits, IReadOnlySet<int>? rowsWithAmount, string? payor, string? hospital)

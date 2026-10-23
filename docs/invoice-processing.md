@@ -198,6 +198,13 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   saved as "-" in 111 versions where the organ row is "0", and 9 versions whose whole approved row is "0" (a status that approves nothing, not worked out). This checks the map and the formats, with the engine out of it;
   the numbers themselves come from the engine, which is right for about 73 per cent of the totals (see step 6).
 
+* `WorksheetRows.Limits`: the row of `ClaimLimit` (`saveLimit`): the limit text of each worksheet row in the same columns, "-" for a row with none, and the six day counts the limits were worked out with
+  (`CLMBoardDays`, `CLMICUDays`, `CLMINHOSPhyDays` for the itemised layout only, `CLMKIDDCDays`, `CLMCashDays`, `CLMGurdianDays`) as VB's number. Read back from 1,806 saved rows since July 2020 and written again:
+  **95.77 per cent of the cells equal** (1,110 rows entirely). All of the rest is the desktop saving an empty string where it never set a variable (the kidney, cash and guardian days in about a third of the rows, and some
+  empty limit cells); the web writes "0" and "-" there, which the desktop and `Worksheet_Amount` read the same, and which no rule in the data separates from the rows that have "0".
+  **The days the engine can find alone:** `PlanLimitRules.LimitedDays` (the stay's days held to the days the plan allows) gives the saved Room & Board days in **1,786 of 1,805** versions (98.9 per cent) and the saved ICU days
+  in 1,804 of 1,805. The physician visit, kidney, cash and guardian days are not worked out: they are held to what the case has left after earlier worksheets (`ClaimSameLimit`), which is the next piece of the limit work.
+
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
 the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `SaveClaim` (about 55 of the 141 `Claim` columns, several from state not in
 the saved rows), `SaveClaimRemarks`, `saveLimit` (the limits and the days they were worked out with), the GST copies of actual and approved, `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit`,

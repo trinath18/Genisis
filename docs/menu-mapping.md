@@ -1,6 +1,9 @@
 # Menu / submenu mapping — VB6 `mdiMain.frm` → web application
 
-Source: `VB6-MenuItems.xlsx` (the 241 `Begin VB.Menu` blocks of `mdiMain.frm`, extracted by `extract-menus.js`, plus the **Required** column maintained by the business).
+Source: `VB6-MenuItems.xlsx` (the 241 `Begin VB.Menu` blocks of `mdiMain.frm`, extracted by `tools/extract-menus.js`, plus the **Required** column maintained by the business).
+The VB6 source of record is the copy on `D:` (`D:\Team Awesome\VB Code-20261009T221049Z-1-001\VB Code`). The sheet was first extracted from the original copy as received; on 24 Oct 2026 the menu was
+extracted again from the `D:` copy and compared with it row by row: the same 241 items with the same captions, hierarchy, shortcuts, access positions, time gates and forms. The two differences are the
+**Visible** flag (below) and `mnuClaimASCII`, whose handler (position 18, `frmNewClaimAscii`) the earlier sheet had left blank and this page already used.
 Menu captions, hierarchy, designer flags and access positions come from the designer blocks and the `*_Click` handlers; nothing is read from a database table
 (only the *permission flags* — `HISMaintenance.dbo.USR.USRAccess`, position *n* = `CheckAccess(n)` — and the time gate `dbo.TimeMain` influence what a user sees).
 
@@ -9,7 +12,9 @@ How to read the status column
 - **Migrated** — a web route and API exist and are tested.
 - **Required, not migrated** — marked `Y` by the business, still to do (the backlog).
 - **Not required** — not marked `Y`; kept in the spreadsheet for traceability, not built.
-- **Hidden in the desktop** — the designer sets `Visible = 0`, so the menu is not shown to users in the desktop app either.
+- **Hidden in the desktop** — the designer sets `Visible = 0` **in the original copy of the source** (134 items). The `D:` copy, the source of record, has no `Visible = 0` flags, so the build it makes shows every item and this
+  label does not describe that build. It is kept because it records which items the original hid, and together with "no click handler" which ones nothing in the desktop could reach; the web access position (a `CheckAccess(n)`
+  gate or a decision recorded in `AccessRight.cs`) is what decides who sees an item here, not this flag.
 
 ## Summary by top menu
 
@@ -181,4 +186,5 @@ How to read the status column
 - Worksheet screens: the form chosen for each item, the access positions and every difference from the desktop are in [worksheet-screens.md](worksheet-screens.md).
 - Finance screens: five of the eight have no VB6 source and one has stale source; how each was rebuilt from the production data, the
   assumptions and the open questions for the Finance users are in [finance-screens.md](finance-screens.md).
-- Regenerate the spreadsheet with `node extract-menus.js` in the VB Code folder; this document is generated from it plus the Required column.
+- Regenerate the spreadsheet with `node tools/extract-menus.js` (it reads `mdiMain.frm` from the `D:` source of record, or from the folder given as its first argument or in `VB6_SOURCE`, and writes `VB6-MenuItems.csv` and `.xls` to the
+  current folder, not into the VB6 source); this document was generated from the sheet plus the Required column and has been edited by hand since (the Invoice module table, the backlog, the notes).

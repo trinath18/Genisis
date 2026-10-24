@@ -11,7 +11,7 @@ A VB6 healthcare desktop application is migrated module by module to a web syste
 | `Genisis/` | Web API (+ serves the built UI) | ASP.NET Core 8, Dapper, FluentValidation, Serilog, xUnit |
 | `GenisisUI/` | Web UI | React 19, Vite, TypeScript, React Hook Form + Yup, TanStack Query, Vitest |
 | `docs/` (workspace root) | migration documentation | Markdown + Mermaid |
-| `VB Code/` | the VB6 source, the **specification** of behaviour | read-only reference |
+| `VB Code/` | the VB6 source, the **specification** of behaviour; the source of record is `D:\Team Awesome\VB Code-20261009T221049Z-1-001\VB Code` (`Documents:RootPath` in `appsettings.json` points at it) | read-only reference |
 
 Rule of the project: **preserve all functionality, workflows and business rules** of the VB6 application; modernise the UI and the code, not the behaviour. When you are unsure how
 something should behave, the VB6 form/module is the answer (`mdiMain.frm` for menus, `docs/menu-mapping.md` to find the form).

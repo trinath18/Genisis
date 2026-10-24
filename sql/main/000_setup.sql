@@ -101,6 +101,11 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
     (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
     (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
+    -- Worksheet Registration writes the rows of a version through the desktop's own parameterised procedures
+    (N'WS_Insert_WS_Claim_2012', @WorksheetDb, N'Insert_WS_Claim_2012'), (N'WS_Insert_WS_ClaimOthers_Jul08', @WorksheetDb, N'Insert_WS_ClaimOthers_Jul08'),
+    (N'WS_Insert_WS_ClaimLimit', @WorksheetDb, N'Insert_WS_ClaimLimit'), (N'WS_Insert_WS_ClaimActual', @WorksheetDb, N'Insert_WS_ClaimActual'),
+    (N'WS_ClaimActualGST', @WorksheetDb, N'ClaimActualGST'), (N'WS_Insert_WS_ClaimActualGST', @WorksheetDb, N'Insert_WS_ClaimActualGST'), (N'WS_Insert_WS_ClaimApprove', @WorksheetDb, N'Insert_WS_ClaimApprove'),
+    (N'WS_Insert_WS_ClaimHOS', @WorksheetDb, N'Insert_WS_ClaimHOS'), (N'WS_Insert_WS_ClaimMBM', @WorksheetDb, N'Insert_WS_ClaimMBM'),
     (N'WS_SUNPosting', @WorksheetDb, N'SUNPosting'), (N'WS_SunPostBatch', @WorksheetDb, N'SunPostBatch'),
     (N'WS_SunPostingMbmInv', @WorksheetDb, N'VIEW_SUN_Posting_MBMInv'),
     (N'Pay_Payment2MBM', @PaymentDb, N'Payment2MBM'), (N'Pay_PVNSeq2013', @PaymentDb, N'PVNSeq2013'),

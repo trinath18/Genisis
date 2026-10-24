@@ -28,6 +28,12 @@ public static class WorksheetRows
 
     private static readonly (int Slot, string Column)[] FlatSums = [(8, "CLMCOPreHSSum"), (13, "CLMCOMPreHSSum")];
 
+    /// <summary>Every column the five grid tables have: the two plan layouts together. A procedure takes all of them; the ones a layout does not write are empty text.</summary>
+    public static IReadOnlyList<string> AllColumns { get; } = [.. Always.Select((c) => c.Column), .. Itemised.Select((c) => c.Column), .. FlatSums.Select((c) => c.Column)];
+
+    /// <summary>The columns of <c>ClaimLimit</c> that hold the days the limits were worked out with.</summary>
+    public static IReadOnlyList<string> DayColumns { get; } = ["CLMBoardDays", "CLMICUDays", "CLMINHOSPhyDays", "CLMKIDDCDays", "CLMCashDays", "CLMGurdianDays"];
+
     /// <summary>The column each worksheet row (grid row) is written to.</summary>
     public static IReadOnlyList<(int Slot, string Column)> Columns(bool flat) => [.. Always, .. (flat ? FlatSums : Itemised)];
 
@@ -100,6 +106,11 @@ public static class WorksheetRows
         rows["CLMGurdianDays"] = Number(days.Guardian);
         return rows;
     }
+
+    /// <summary>
+    /// The GST copy of the actual row (<c>saveActualGST</c>): the grid's GST column, which is a dash in every row because GST has been zero-rated since 2018 (all but 5 of the 33,945 versions saved since July 2020).
+    /// </summary>
+    public static Dictionary<string, string> ActualGst(bool flat) => Columns(flat).ToDictionary((c) => c.Column, (_) => Dash);
 
     /// <summary>The cash type of the worksheet (<c>SaveClaim</c>): <c>C</c> cashless when the hospital is paid, <c>R</c> reimbursement when the member is; <c>null</c> when nobody is named.</summary>
     public static string? CashType(string? payTo) => string.IsNullOrWhiteSpace(payTo) ? null : string.Equals(payTo.Trim(), "H", StringComparison.OrdinalIgnoreCase) ? "C" : "R";

@@ -221,10 +221,35 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   `CLMBalanceLimit` is the **previous balance**, not the previous balance less the final approve that the source of the desktop we have computes: it equals the previous balance in 3,158 of 3,369 versions since July 2020 (94 per cent)
   and the previous less the final in 10 (before 2020: 1,041 and 11); in 61 it is the previous plus the final and in 140 something else (small differences, not explained). `ClaimTotals` writes both when the member's available limit is given.
 
+* `ClaimVersionRow` (`Worksheet/Engine`): **the version row of `Claim`**, the 56 parameters of `Insert_WS_Claim_2012` (a test compares the names with the procedure's own). The case, the user, the dates (the version
+  is opened, last updated and closed the day it is saved, as in all 33,951 versions saved since July 2020), the status (`CLMWSStatus` is the first two letters of the worksheet status; `XR` is a void worksheet: bordx
+  status 1 and reference `VOID`), the constants (`ClaimStatus` C, `CLMBordxWSStatus` and `CLMBordxWSASCII` N, nothing paid yet, top-up N), the payee, bank, account, GP, stay and cash type, the collected-by choices (M in
+  every saved version), and the totals of `ClaimTotals`. The rules the data supported, measured over the 33,718 closed versions saved since July 2020:
+  * **Bordx amount** (`CLMBordxAmt`): the final approve for a reimbursement (9,154 of 9,154) and the amount payable to the hospital plus to the member for a cashless one (24,553 of 24,564); 99.97 per cent together.
+  * **BTBG amount** (`CLMBTBGAmt`): for a member flagged BTBG (`MBMOthersTwo.MBMBTBG` = Y, not `MBM`) with a cashless worksheet, the final approve less the amount payable to the hospital when its sign is the
+    opposite of the hospital's; otherwise 0. For the 3,074 cashless versions of BTBG members this equals the saved amount in 3,052 (99.3 per cent); no other member has one but 4.
+  * **Previous cancer and home nursing limits**: the limit text of the monthly row (slot 17) and the home nursing row (slot 24) as a number (home nursing 33,712 of 33,713, monthly 32,605: 96.7 per cent).
+  * **Previous balance and balance limit** by the kind of limit: annual (the available limit, for both: the desktop in use saves the previous balance as the balance limit), per disability (the plan's limit for both:
+    2,616 of 2,625 and 2,498), none (the final approve for both: 3,142 versions).
+  * Zero in every saved version, so written as 0: the company excess, the company amount, the ex-gratia, the deductible, the major medical, the top-up amounts, the take-over and the case management fees. Top-up members
+    (none is saved) are not covered.
+  **Checked** by rebuilding each version of a sample (1,786, about one in twenty) from its saved grid, limits and summary rows, with what the desktop reads from the screen taken from the saved row: **1,521 versions rebuild
+  with every compared column equal** and every column is at least 92.8 per cent (the four columns the later steps change are not compared: bordx status and reference, last update user and date). The balance limit is the
+  weakest (92.8 per cent; the misses are the previous balance plus or less the final approve, 42 and 6, and 80 others).
+* `ClaimOthersRow` (`SaveClaimRemarks`, `Insert_WS_ClaimOthers_Jul08`): the remarks, the payee's address, the payment mode and the attention line; the gross room rate is added to the worksheet remarks as the desktop does
+  (none of the worksheets saved since July 2020 has one). `WorksheetRows.ActualGst` (`saveActualGST`): the GST copy of the actual row, a dash in every cell: 33,945 versions have the row and all but 5 are dashes.
+  **`saveApproveGST` is not run**: `ClaimApproveGST` has no row for any of the 37,000 versions saved since 2020 (2,377 of 3,923 in 2017, 577 in 2018, 5 in 2019).
+* `RegistrationRepository` (`Worksheet/Calculation`): **writes a version in the desktop's order, inside the caller's transaction, and never commits**: `SaveClaim` (the version row, then the case is no longer
+  pending), `SaveClaimRemarks`, `saveLimit`, `saveActual`, `saveActualGST`, `saveApprove`, `saveHos`, `saveMember`, then `UpdateInvoice` (the invoices of the version are marked as worksheeted; a void worksheet
+  bordxes them under VOID) and `UpdateCasReserve` (the case's reserve is cleared). The desktop's own procedures do the inserts, reached through `genisis.WS_Insert_WS_*` synonyms; the three routines the desktop wrote as
+  recordset edits are `genisis.WorksheetSave_*` (`sql/main/390_worksheet_registration_save.sql`). Nothing calls it yet. **Checked** by writing 620 saved versions again as versions 9001 and up of their cases inside a
+  transaction that is rolled back: every one of the 111,600 grid cells, 34,720 columns of `Claim` and 8,060 of `ClaimOthers` read back as built, the case's pending flag and reserve were set, and afterwards
+  nothing was left (no row with those versions, and a checksum of the whole `CAS` table unchanged).
+  **A difference on purpose:** `Insert_WS_Claim_2012` takes the bank account number as `nvarchar(15)` though `Claim.CLMAccountNo` holds 30, so the desktop cut a longer number to 15 characters without a word (the
+  test found six of its sample: 16-digit numbers; 375 of the numbers saved since July 2020 are 16 to 19 long, after Adjustment's Update put them right). The save writes the whole number right after the procedure.
+
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
-the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `SaveClaim` (about 55 of the 141 `Claim` columns, several from state not in
-the saved rows), `SaveClaimRemarks`, `saveLimit` (the limits and the days they were worked out with), the GST copies of actual and approved, `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit`,
-`UpdateInvoice` (marks the invoices used), `UpdateCasReserve`, the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
+the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit` (the limits and days that are left after each worksheet), the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
 `UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`), the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`) and, for top-up members, `SaveDuplClaim` in four databases.
 
 ## 5. Order of work, and how each step is checked

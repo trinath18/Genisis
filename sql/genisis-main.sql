@@ -108,6 +108,11 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
     (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
     (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
+    -- Worksheet Registration writes the rows of a version through the desktop's own parameterised procedures
+    (N'WS_Insert_WS_Claim_2012', @WorksheetDb, N'Insert_WS_Claim_2012'), (N'WS_Insert_WS_ClaimOthers_Jul08', @WorksheetDb, N'Insert_WS_ClaimOthers_Jul08'),
+    (N'WS_Insert_WS_ClaimLimit', @WorksheetDb, N'Insert_WS_ClaimLimit'), (N'WS_Insert_WS_ClaimActual', @WorksheetDb, N'Insert_WS_ClaimActual'),
+    (N'WS_ClaimActualGST', @WorksheetDb, N'ClaimActualGST'), (N'WS_Insert_WS_ClaimActualGST', @WorksheetDb, N'Insert_WS_ClaimActualGST'), (N'WS_Insert_WS_ClaimApprove', @WorksheetDb, N'Insert_WS_ClaimApprove'),
+    (N'WS_Insert_WS_ClaimHOS', @WorksheetDb, N'Insert_WS_ClaimHOS'), (N'WS_Insert_WS_ClaimMBM', @WorksheetDb, N'Insert_WS_ClaimMBM'),
     (N'WS_SUNPosting', @WorksheetDb, N'SUNPosting'), (N'WS_SunPostBatch', @WorksheetDb, N'SunPostBatch'),
     (N'WS_SunPostingMbmInv', @WorksheetDb, N'VIEW_SUN_Posting_MBMInv'),
     (N'Pay_Payment2MBM', @PaymentDb, N'Payment2MBM'), (N'Pay_PVNSeq2013', @PaymentDb, N'PVNSeq2013'),
@@ -7813,6 +7818,61 @@ BEGIN
     GROUP BY CASE WHEN @report <> 0 THEN HospitalCode END, CASE WHEN @report <> 0 THEN Hospital END, CASE WHEN @report = 2 THEN RTRIM(InvNo) END, CASE WHEN @report = 2 THEN InvDate END,
              CASE WHEN @report IN (0, 1) THEN InvYear END, CASE WHEN @report IN (0, 1) THEN InvMonth END
     ORDER BY CASE WHEN @report IN (0, 1) THEN InvYear END, CASE WHEN @report IN (0, 1) THEN InvMonth END, CASE WHEN @report <> 0 THEN HospitalCode END, CASE WHEN @report = 2 THEN InvDate END;
+END
+GO
+
+-- ===== main/390_worksheet_registration_save.sql =====
+-- Worksheet > Worksheet Registration, the save (legacy frmWorksheetRegGST2015, cmdApprove_Click). The rows of the version are written by the desktop's own parameterised procedures
+-- (reached through the genisis.WS_Insert_WS_* synonyms of 000_setup.sql); the three routines below are the ones the desktop wrote as recordset edits or text.
+
+-- SaveClaim: after the version row of Claim, the case is no longer pending (CAS.CASPending = 'N'). Returns how many cases were changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_ClosePending
+    @cas nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.CAS SET CASPending = 'N' WHERE CASNumber = @cas;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- The desktop's Insert_WS_Claim_2012 takes the bank account number as nvarchar(15) although Claim.CLMAccountNo holds 30 characters, so a longer number (16 digits is usual for some
+-- banks; 375 of the numbers saved since July 2020 are 16 to 19 long, after being corrected through Adjustment's Update) is cut to 15 characters without a word. The save writes the
+-- whole number right after the procedure. Returns how many versions were changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_SetAccountNo
+    @cas nvarchar(30), @version int, @accountNo nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_Claim SET CLMAccountNo = @accountNo WHERE CASNumber = @cas AND ClaimVersion = @version;
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- UpdateInvoice: the invoices of the case that belong to the version are marked as worksheeted; a void worksheet (status XR) also marks them bordxed under the reference VOID.
+-- Returns how many invoices were changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_MarkInvoices
+    @cas nvarchar(30), @version int, @void bit
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_ClaimInvoice
+    SET INVWSed = 1,
+        INVBordxRefNo = CASE WHEN @void = 1 THEN 'VOID' ELSE INVBordxRefNo END,
+        INVBordxed = CASE WHEN @void = 1 THEN '1' ELSE INVBordxed END
+    WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
+    SELECT @@ROWCOUNT;
+END
+GO
+
+-- UpdateCasReserve: the case's reserve amount is cleared once a worksheet is saved. Returns how many cases were changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_ClearReserve
+    @cas nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE dbo.CAS SET CASReserveAmount = 0 WHERE CASNumber = @cas;
+    SELECT @@ROWCOUNT;
 END
 GO
 

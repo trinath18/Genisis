@@ -111,7 +111,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     -- Worksheet Registration writes the rows of a version through the desktop's own parameterised procedures
     (N'WS_Insert_WS_Claim_2012', @WorksheetDb, N'Insert_WS_Claim_2012'), (N'WS_Insert_WS_ClaimOthers_Jul08', @WorksheetDb, N'Insert_WS_ClaimOthers_Jul08'),
     (N'WS_Insert_WS_ClaimLimit', @WorksheetDb, N'Insert_WS_ClaimLimit'), (N'WS_Insert_WS_ClaimActual', @WorksheetDb, N'Insert_WS_ClaimActual'),
-    (N'WS_ExcessSequence', @WorksheetDb, N'EXC_SEQ'), (N'WS_ClaimPayMBMStatus', @WorksheetDb, N'ClaimPayMBMStatus'), (N'WS_ClaimActualGST', @WorksheetDb, N'ClaimActualGST'), (N'WS_Insert_WS_ClaimActualGST', @WorksheetDb, N'Insert_WS_ClaimActualGST'), (N'WS_Insert_WS_ClaimApprove', @WorksheetDb, N'Insert_WS_ClaimApprove'),
+    (N'WS_SameLimit', @WorksheetDb, N'ClaimSameLimit'), (N'WS_ExcessSequence', @WorksheetDb, N'EXC_SEQ'), (N'WS_ClaimPayMBMStatus', @WorksheetDb, N'ClaimPayMBMStatus'), (N'WS_ClaimActualGST', @WorksheetDb, N'ClaimActualGST'), (N'WS_Insert_WS_ClaimActualGST', @WorksheetDb, N'Insert_WS_ClaimActualGST'), (N'WS_Insert_WS_ClaimApprove', @WorksheetDb, N'Insert_WS_ClaimApprove'),
     (N'WS_Insert_WS_ClaimHOS', @WorksheetDb, N'Insert_WS_ClaimHOS'), (N'WS_Insert_WS_ClaimMBM', @WorksheetDb, N'Insert_WS_ClaimMBM'),
     (N'WS_SUNPosting', @WorksheetDb, N'SUNPosting'), (N'WS_SunPostBatch', @WorksheetDb, N'SunPostBatch'),
     (N'WS_SunPostingMbmInv', @WorksheetDb, N'VIEW_SUN_Posting_MBMInv'),
@@ -8031,6 +8031,114 @@ BEGIN
     INSERT genisis.WS_ExcessLetter (EXCNumber, CASNumber, EXCDate, INVNo, INVAmt, ExcessAmt, EXCIssuedBy, EXCIssuedDate, EXCBoardAmt, EXCICUAmt, EXCServices, EXCTheatre, EXCPreHSAmt, EXCSurgicalAmt, EXCAna, EXCNSPreHOS, EXCPhysician, EXCPost, EXCEmergency, EXCAmbulance, EXCOutpatient, EXCMonthly, EXCOrgan, EXCTax, EXCGuardianAMT, EXCMedical, EXCPhone, EXCAdmin, EXCOthers1, EXCBoardTaxAmt, EXCICUTaxAmt, EXCLodgerTaxAmt, EXCTotalExceed, EXCMRI, EXCMPreHSAmt, EXCCoPayment, EXCPreHosp, EXCUndExcess, EXCOthersDesc)
     VALUES (@number, @cas, @date, @invoiceNo, @invoiceAmount, @excessAmount, @issuedBy, @date, @EXCBoardAmt, @EXCICUAmt, @EXCServices, @EXCTheatre, @EXCPreHSAmt, @EXCSurgicalAmt, @EXCAna, @EXCNSPreHOS, @EXCPhysician, @EXCPost, @EXCEmergency, @EXCAmbulance, @EXCOutpatient, @EXCMonthly, @EXCOrgan, @EXCTax, @EXCGuardianAMT, @EXCMedical, @EXCPhone, @EXCAdmin, @EXCOthers1, @EXCBoardTaxAmt, @EXCICUTaxAmt, @EXCLodgerTaxAmt, @EXCTotalExceed, @EXCMRI, @EXCMPreHSAmt, @EXCCoPayment, @EXCPreHosp, @EXCUndExcess, @othersDesc);
     SELECT 1;
+END
+GO
+
+-- saveSameLimit: what is left of the case's limits and days after a worksheet. ClaimSameLimit has one row per case: the desktop adds it with the case's first worksheet and then changes it with every
+-- later one. A column given as NULL (the ones the plan layout does not write) is left as it is. Returns 1 when the row was added and 0 when it was changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_SameLimit
+    @cas nvarchar(30),
+    @CLMBoardAmt nvarchar(30) = NULL,
+    @CLMICUAmt nvarchar(30) = NULL,
+    @CLMServices nvarchar(30) = NULL,
+    @CLMTheatre nvarchar(30) = NULL,
+    @CLMMRI nvarchar(30) = NULL,
+    @CLMAccPostAmt nvarchar(30) = NULL,
+    @CLMAmbulance nvarchar(30) = NULL,
+    @CLMOutpatient nvarchar(30) = NULL,
+    @CLMMonthly nvarchar(30) = NULL,
+    @CLMOrgan nvarchar(30) = NULL,
+    @CLMTax nvarchar(30) = NULL,
+    @CLMGuardianAmt nvarchar(30) = NULL,
+    @CLMMedical nvarchar(30) = NULL,
+    @CLMPhone nvarchar(30) = NULL,
+    @CLMAdmin nvarchar(30) = NULL,
+    @CLMOthers1 nvarchar(30) = NULL,
+    @CLMBoardTaxAmt nvarchar(30) = NULL,
+    @CLMICUTaxAmt nvarchar(30) = NULL,
+    @CLMLodgerTaxAmt nvarchar(30) = NULL,
+    @CLMPreHSAmt nvarchar(30) = NULL,
+    @CLMPreHosp nvarchar(30) = NULL,
+    @CLMSurgicalAmt nvarchar(30) = NULL,
+    @CLMAna nvarchar(30) = NULL,
+    @CLMNSPreHos nvarchar(30) = NULL,
+    @CLMPhysician nvarchar(30) = NULL,
+    @CLMPost nvarchar(30) = NULL,
+    @CLMMPreHSAmt nvarchar(30) = NULL,
+    @CLMCOPreHSSum nvarchar(30) = NULL,
+    @CLMCOMPreHSSum nvarchar(30) = NULL,
+    @CLMBoardDays nvarchar(30) = NULL,
+    @CLMICUDays nvarchar(30) = NULL,
+    @CLMINHOSPhyDays nvarchar(30) = NULL,
+    @CLMKIDDCDays nvarchar(30) = NULL,
+    @CLMCashDays nvarchar(30) = NULL,
+    @CLMGurdianDays nvarchar(30) = NULL,
+    @CLMUndExcess money = NULL,
+    @CLMPerDisLmt money = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.WS_SameLimit WITH (UPDLOCK, HOLDLOCK) WHERE CASNumber = @cas)
+    BEGIN
+        UPDATE genisis.WS_SameLimit SET
+            CLMBoardAmt = COALESCE(@CLMBoardAmt, CLMBoardAmt),
+            CLMICUAmt = COALESCE(@CLMICUAmt, CLMICUAmt),
+            CLMServices = COALESCE(@CLMServices, CLMServices),
+            CLMTheatre = COALESCE(@CLMTheatre, CLMTheatre),
+            CLMMRI = COALESCE(@CLMMRI, CLMMRI),
+            CLMAccPostAmt = COALESCE(@CLMAccPostAmt, CLMAccPostAmt),
+            CLMAmbulance = COALESCE(@CLMAmbulance, CLMAmbulance),
+            CLMOutpatient = COALESCE(@CLMOutpatient, CLMOutpatient),
+            CLMMonthly = COALESCE(@CLMMonthly, CLMMonthly),
+            CLMOrgan = COALESCE(@CLMOrgan, CLMOrgan),
+            CLMTax = COALESCE(@CLMTax, CLMTax),
+            CLMGuardianAmt = COALESCE(@CLMGuardianAmt, CLMGuardianAmt),
+            CLMMedical = COALESCE(@CLMMedical, CLMMedical),
+            CLMPhone = COALESCE(@CLMPhone, CLMPhone),
+            CLMAdmin = COALESCE(@CLMAdmin, CLMAdmin),
+            CLMOthers1 = COALESCE(@CLMOthers1, CLMOthers1),
+            CLMBoardTaxAmt = COALESCE(@CLMBoardTaxAmt, CLMBoardTaxAmt),
+            CLMICUTaxAmt = COALESCE(@CLMICUTaxAmt, CLMICUTaxAmt),
+            CLMLodgerTaxAmt = COALESCE(@CLMLodgerTaxAmt, CLMLodgerTaxAmt),
+            CLMPreHSAmt = COALESCE(@CLMPreHSAmt, CLMPreHSAmt),
+            CLMPreHosp = COALESCE(@CLMPreHosp, CLMPreHosp),
+            CLMSurgicalAmt = COALESCE(@CLMSurgicalAmt, CLMSurgicalAmt),
+            CLMAna = COALESCE(@CLMAna, CLMAna),
+            CLMNSPreHos = COALESCE(@CLMNSPreHos, CLMNSPreHos),
+            CLMPhysician = COALESCE(@CLMPhysician, CLMPhysician),
+            CLMPost = COALESCE(@CLMPost, CLMPost),
+            CLMMPreHSAmt = COALESCE(@CLMMPreHSAmt, CLMMPreHSAmt),
+            CLMCOPreHSSum = COALESCE(@CLMCOPreHSSum, CLMCOPreHSSum),
+            CLMCOMPreHSSum = COALESCE(@CLMCOMPreHSSum, CLMCOMPreHSSum),
+            CLMBoardDays = COALESCE(@CLMBoardDays, CLMBoardDays),
+            CLMICUDays = COALESCE(@CLMICUDays, CLMICUDays),
+            CLMINHOSPhyDays = COALESCE(@CLMINHOSPhyDays, CLMINHOSPhyDays),
+            CLMKIDDCDays = COALESCE(@CLMKIDDCDays, CLMKIDDCDays),
+            CLMCashDays = COALESCE(@CLMCashDays, CLMCashDays),
+            CLMGurdianDays = COALESCE(@CLMGurdianDays, CLMGurdianDays),
+            CLMUndExcess = COALESCE(@CLMUndExcess, CLMUndExcess),
+            CLMPerDisLmt = COALESCE(@CLMPerDisLmt, CLMPerDisLmt)
+        WHERE CASNumber = @cas;
+        SELECT 0;
+    END
+    ELSE
+    BEGIN
+        INSERT genisis.WS_SameLimit (CASNumber, CLMBoardAmt, CLMICUAmt, CLMServices, CLMTheatre, CLMMRI, CLMAccPostAmt, CLMAmbulance, CLMOutpatient, CLMMonthly, CLMOrgan, CLMTax, CLMGuardianAmt, CLMMedical, CLMPhone, CLMAdmin, CLMOthers1, CLMBoardTaxAmt, CLMICUTaxAmt, CLMLodgerTaxAmt, CLMPreHSAmt, CLMPreHosp, CLMSurgicalAmt, CLMAna, CLMNSPreHos, CLMPhysician, CLMPost, CLMMPreHSAmt, CLMCOPreHSSum, CLMCOMPreHSSum, CLMBoardDays, CLMICUDays, CLMINHOSPhyDays, CLMKIDDCDays, CLMCashDays, CLMGurdianDays, CLMUndExcess, CLMPerDisLmt)
+        VALUES (@cas, @CLMBoardAmt, @CLMICUAmt, @CLMServices, @CLMTheatre, @CLMMRI, @CLMAccPostAmt, @CLMAmbulance, @CLMOutpatient, @CLMMonthly, @CLMOrgan, @CLMTax, @CLMGuardianAmt, @CLMMedical, @CLMPhone, @CLMAdmin, @CLMOthers1, @CLMBoardTaxAmt, @CLMICUTaxAmt, @CLMLodgerTaxAmt, @CLMPreHSAmt, @CLMPreHosp, @CLMSurgicalAmt, @CLMAna, @CLMNSPreHos, @CLMPhysician, @CLMPost, @CLMMPreHSAmt, @CLMCOPreHSSum, @CLMCOMPreHSSum, @CLMBoardDays, @CLMICUDays, @CLMINHOSPhyDays, @CLMKIDDCDays, @CLMCashDays, @CLMGurdianDays, @CLMUndExcess, @CLMPerDisLmt);
+        SELECT 1;
+    END
+END
+GO
+
+-- The case's same-limit row as it stands: the days and the excess that are left (NULL columns read as none). No row gives no result.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_SameLimitOf
+    @cas nvarchar(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(CASE WHEN ISNUMERIC(CLMBoardDays) = 1 THEN CONVERT(decimal(18, 2), CLMBoardDays) END, 0) AS Board, ISNULL(CASE WHEN ISNUMERIC(CLMICUDays) = 1 THEN CONVERT(decimal(18, 2), CLMICUDays) END, 0) AS Icu, ISNULL(CASE WHEN ISNUMERIC(CLMINHOSPhyDays) = 1 THEN CONVERT(decimal(18, 2), CLMINHOSPhyDays) END, 0) AS PhysicianVisits,
+           ISNULL(CASE WHEN ISNUMERIC(CLMKIDDCDays) = 1 THEN CONVERT(decimal(18, 2), CLMKIDDCDays) END, 0) AS KidneyMonths, ISNULL(CASE WHEN ISNUMERIC(CLMCashDays) = 1 THEN CONVERT(decimal(18, 2), CLMCashDays) END, 0) AS Cash, ISNULL(CASE WHEN ISNUMERIC(CLMGurdianDays) = 1 THEN CONVERT(decimal(18, 2), CLMGurdianDays) END, 0) AS Guardian, CLMUndExcess AS UndertakingExcess
+    FROM genisis.WS_SameLimit WHERE CASNumber = @cas;
 END
 GO
 

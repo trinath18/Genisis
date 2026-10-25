@@ -30,8 +30,15 @@ internal sealed record SavedVersion(
         return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var n) ? (negative ? -n : n) : 0m;
     }
 
-    /// <summary>The rows the save would write for this version's grid as version <paramref name="newVersion"/>, with its limit days, remarks and (when given) its excess letter taken from what was saved.</summary>
-    public WorksheetVersionRows Rows(int newVersion, ExcessLetterInput? letter = null)
+    /// <summary>The same-limit input for this version: its limit texts, the days its limit row says it used, and what the plan allows when the case has no row.</summary>
+    public SameLimitInput SameLimit(WorksheetRows.LimitDays allowed) => new(
+        SameLimitRow.Limits(Grid, Flat), allowed,
+        new WorksheetRows.LimitDays(Number(Tables["ClaimLimit"]["CLMBoardDays"]), Number(Tables["ClaimLimit"]["CLMICUDays"]), Number(Tables["ClaimLimit"]["CLMINHOSPhyDays"]),
+            Number(Tables["ClaimLimit"]["CLMKIDDCDays"]), Number(Tables["ClaimLimit"]["CLMCashDays"]), Number(Tables["ClaimLimit"]["CLMGurdianDays"])),
+        PerDisabilityLimit: Input.PerDisabilityLimit);
+
+    /// <summary>The rows the save would write for this version's grid as version <paramref name="newVersion"/>, with its limit days, remarks and (when given) its excess letter and same-limit input taken from what was saved.</summary>
+    public WorksheetVersionRows Rows(int newVersion, ExcessLetterInput? letter = null, SameLimitInput? sameLimit = null)
     {
         var days = new WorksheetRows.LimitDays(
             Number(Tables["ClaimLimit"]["CLMBoardDays"]), Number(Tables["ClaimLimit"]["CLMICUDays"]), Number(Tables["ClaimLimit"]["CLMINHOSPhyDays"]),
@@ -46,7 +53,8 @@ internal sealed record SavedVersion(
             WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Hospital),
             WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Member),
             PayMbmStatusRow.Build(Grid, Flat),
-            letter is null ? null : ExcessLetterRow.Build(letter, Grid, Final));
+            letter is null ? null : ExcessLetterRow.Build(letter, Grid, Final),
+            sameLimit);
     }
 
     /// <summary>A saved text, trimmed; empty for NULL.</summary>

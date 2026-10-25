@@ -18,6 +18,7 @@ namespace Genisis.Api.Worksheet.Calculation;
 /// <param name="Member">Payable to, or due from, the member.</param>
 /// <param name="PayMbmStatus">The Y/N flag of each worksheet row (<see cref="PayMbmStatusRow"/>, <c>savePayMBMStatus</c>).</param>
 /// <param name="ExcessLetter">The columns of the case's excess letter (<see cref="ExcessLetterRow.Build"/>), or <c>null</c> when the worksheet leaves no excess to write one for.</param>
+/// <param name="SameLimit">What the case has left of its limits and days (<see cref="SameLimitRow"/>, <c>saveSameLimit</c>); the days are worked out from the case's row in the transaction.</param>
 public sealed record WorksheetVersionRows(
     Dictionary<string, object?> Claim,
     Dictionary<string, object?> Others,
@@ -28,7 +29,8 @@ public sealed record WorksheetVersionRows(
     Dictionary<string, string> Hospital,
     Dictionary<string, string> Member,
     Dictionary<string, string> PayMbmStatus,
-    Dictionary<string, object?>? ExcessLetter = null)
+    Dictionary<string, object?>? ExcessLetter = null,
+    SameLimitInput? SameLimit = null)
 {
     /// <summary>The case the rows are for.</summary>
     public string CaseNo => Convert.ToString(Claim["CasNumber"])!.Trim();
@@ -44,14 +46,15 @@ public sealed record WorksheetVersionRows(
 /// <param name="InvoicesMarked">Invoices of the version marked as worksheeted.</param>
 /// <param name="ExcessNumber">The number the excess sequence gave (<c>E</c>, the case, a dash and the sequence), or <c>null</c> when the worksheet leaves no excess.</param>
 /// <param name="ExcessLetterAdded">The case had no excess letter and one was added.</param>
-public sealed record RegistrationWriteResult(int InvoicesMarked, string? ExcessNumber = null, bool ExcessLetterAdded = false);
+/// <param name="SameLimitLeft">What the case has left after the worksheet (days and undertaking), or <c>null</c> when the rows carry no same-limit input.</param>
+public sealed record RegistrationWriteResult(int InvoicesMarked, string? ExcessNumber = null, bool ExcessLetterAdded = false, SameLimitLeft? SameLimitLeft = null);
 
 /// <summary>Writes the rows of a worksheet version, in the order of the desktop's save, inside the caller's transaction. Nothing here commits.</summary>
 public interface IRegistrationRepository
 {
     /// <summary>
-    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c>, <c>savePayMBMStatus</c> and <c>saveExcessLetter</c>
-    /// (<c>saveApproveGST</c> is not run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
+    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c>, <c>savePayMBMStatus</c>, <c>saveExcessLetter</c> and
+    /// <c>saveSameLimit</c> (<c>saveApproveGST</c> is not run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
     /// </summary>
     Task<RegistrationWriteResult> WriteVersionAsync(IDbSession session, WorksheetVersionRows rows);
 }
@@ -113,8 +116,28 @@ public sealed class RegistrationRepository : IRegistrationRepository
                 p.Add(key switch { "CASNumber" => "cas", "INVNo" => "invoiceNo", "INVAmt" => "invoiceAmount", "EXCDate" => "date", "ExcessAmt" => "excessAmount", "EXCIssuedBy" => "issuedBy", "EXCOthersDesc" => "othersDesc", _ => key }, value);
             letterAdded = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ExcessLetter", p, transaction) == 1;
         }
+        SameLimitLeft? left = null;
+        if (rows.SameLimit is { } same)
+        {
+            var previous = await connection.ProcFirstOrDefaultAsync<SameLimitLeft>("genisis.WorksheetSave_SameLimitOf", new { cas }, transaction);
+            var days = SameLimitRow.NextDays(previous?.Days, same.Allowed, same.Used);
+            var undertaking = SameLimitRow.NextUndertaking(previous?.UndertakingExcess, same.MemberUndertaking, same.UndertakingUsed);
+            left = new SameLimitLeft(days.Board, days.Icu, days.PhysicianVisits, days.KidneyMonths, days.Cash, days.Guardian, undertaking);
+            var p = new DynamicParameters();
+            p.Add("cas", cas);
+            foreach (var (column, text) in same.Limits) p.Add(column, text);
+            p.Add("CLMBoardDays", WorksheetRows.Number(days.Board));
+            p.Add("CLMICUDays", WorksheetRows.Number(days.Icu));
+            p.Add("CLMINHOSPhyDays", WorksheetRows.Number(days.PhysicianVisits));
+            p.Add("CLMKIDDCDays", WorksheetRows.Number(days.KidneyMonths));
+            p.Add("CLMCashDays", WorksheetRows.Number(days.Cash));
+            p.Add("CLMGurdianDays", WorksheetRows.Number(days.Guardian));
+            p.Add("CLMUndExcess", undertaking);
+            p.Add("CLMPerDisLmt", same.PerDisabilityLimit);
+            await connection.ProcScalarAsync<int>("genisis.WorksheetSave_SameLimit", p, transaction);
+        }
         var marked = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_MarkInvoices", new { cas, version, @void = rows.Void }, transaction);
         await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ClearReserve", new { cas }, transaction);
-        return new RegistrationWriteResult(marked, excessNumber, letterAdded);
+        return new RegistrationWriteResult(marked, excessNumber, letterAdded, left);
     }
 }

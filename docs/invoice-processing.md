@@ -248,8 +248,28 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   **A difference on purpose:** `Insert_WS_Claim_2012` takes the bank account number as `nvarchar(15)` though `Claim.CLMAccountNo` holds 30, so the desktop cut a longer number to 15 characters without a word (the
   test found six of its sample: 16-digit numbers; 375 of the numbers saved since July 2020 are 16 to 19 long, after Adjustment's Update put them right). The save writes the whole number right after the procedure.
 
+* `PayMbmStatusRow` (`savePayMBMStatus`, `Worksheet/Engine`): a Y or N per worksheet row of `ClaimPayMBMStatus`: Y when the plan has a numeric limit for the row, nothing was invoiced and something is approved. The desktop's
+  routine is one row behind today's grid from row 19 on (the tax row is tested for `CLMCashDays`, the home nursing row for `CLMOthers1`, the lodger tax row not at all) and the saved rows follow it (`CLMTax` is empty,
+  `CLMCashDays` is N), so the map is kept as it is. **Rebuilt from 1,786 saved grids: 50,008 of 50,008 flags equal**, every row entirely; no closed version saved since July 2020 has a Y in a column it writes.
+* `ExcessLetterRow` (`saveExcessLetter`): the case's letter in `CAS_Excess`, made when the worksheet leaves the member an excess or a limit exceeded and the case has a hospital-paid invoice. **The number**: the sequence
+  behind it (`EXC_SEQ`) moves on at every such save while the letter row is added only when the case has none (the data confirm the source: 773 of 805 cases with two or more such versions have a sequence above 1, 803 of
+  their letters end in -1). **Rebuilt from the saved member column of 1,022 sampled letters**: invoice, dates, issuer, undertaking and description equal in all; the rows the desktop in use never writes are empty in all; the
+  amounts equal in 97.5 to 99.9 per cent; `ExcessAmt` in 96.5 per cent (it is the member's excess alone: the source adds the undertaking, co-payment and limit exceeded, which the total already holds). What differs: 13 per cent
+  of the saved letters have NULL where the rest have 0 in the rows the member could have owed; nothing in the data separates them (not user, month, version, cash type, co-payment or payor), so the web writes the 0 of the
+  other 87 per cent. 855 of 1,022 letters are entirely equal.
+* `SameLimitRow` (`saveSameLimit`): the case's `ClaimSameLimit` row (one per case, added with its first worksheet and changed by every later one): the limit texts as the last worksheet showed them, services, theatre,
+  surgical, anaesthetist and organ written as what is left of a numeric limit once something is approved (FULL stays FULL; VB compares the limit with the approved cell as strings, so a dash sorts before an amount and gives 0;
+  the organ row shows 0 for nothing approved), post-hospitalisation worked out apart, home nursing and the not co-paid others not written. The source also reduces room and board and ICU; the saved rows keep those as shown, so the
+  code does. The days that are left: for a case without a row what the plan allows less what the worksheet used, otherwise what it had left less what the worksheet used, never below none. **Checked** on the last version's saved
+  grid of 1,709 sampled cases: every column has the same effect on what is approved in 98.1 to 100 per cent (1,557 rows equal in every limit); the days, worked out across all the versions of 1,352 cases from the plan's days at
+  the first version, equal the saved ones in 86.5 to 100 per cent per count (939 cases in all six; the misses are plans whose day rows the benefit lookup does not find).
+* The repository now writes those three as well (`genisis.WorksheetSave_PayMbmStatus`, `_NextExcessNumber`, `_ExcessLetter`, `_SameLimit`, `_SameLimitOf`), after `saveMember`, in the desktop's order. The rolled-back
+  re-save of 620 versions reads back 149,420 grid, flag and same-limit cells and checks that the `CAS`, same-limit and excess-sequence tables are as they were; two more tests add an excess letter and a same-limit row to cases
+  that have none and check the second save (the sequence moves on, the letter stays, the days are taken off what is left).
+  **A caution for whoever edits the test file with an editor tool: the CAS checksum guard of that test was lost once between two commits and had to be put back; a script that reads, changes and writes the file is safe.**
+
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
-the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: `savePayMBMStatus` (935 lines), `saveExcessLetter`, `saveSameLimit` (the limits and days that are left after each worksheet), the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
+the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
 `UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`), the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`) and, for top-up members, `SaveDuplClaim` in four databases.
 
 ## 5. Order of work, and how each step is checked

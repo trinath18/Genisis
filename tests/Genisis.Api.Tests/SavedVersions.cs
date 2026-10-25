@@ -30,6 +30,25 @@ internal sealed record SavedVersion(
         return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var n) ? (negative ? -n : n) : 0m;
     }
 
+    /// <summary>The rows the save would write for this version's grid as version <paramref name="newVersion"/>, with its limit days, remarks and (when given) its excess letter taken from what was saved.</summary>
+    public WorksheetVersionRows Rows(int newVersion, ExcessLetterInput? letter = null)
+    {
+        var days = new WorksheetRows.LimitDays(
+            Number(Tables["ClaimLimit"]["CLMBoardDays"]), Number(Tables["ClaimLimit"]["CLMICUDays"]), Number(Tables["ClaimLimit"]["CLMINHOSPhyDays"]),
+            Number(Tables["ClaimLimit"]["CLMKIDDCDays"]), Number(Tables["ClaimLimit"]["CLMCashDays"]), Number(Tables["ClaimLimit"]["CLMGurdianDays"]));
+        return new WorksheetVersionRows(
+            ClaimVersionRow.Build(Input with { Version = newVersion }, Grid, Final),
+            ClaimOthersRow.Build((Others ?? new ClaimOthersInput { CaseNo = CaseNo, Version = newVersion }) with { Version = newVersion }),
+            WorksheetRows.Limits(Grid, Flat, days),
+            WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Actual),
+            WorksheetRows.ActualGst(Flat),
+            WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Approved),
+            WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Hospital),
+            WorksheetRows.Build(Grid, Flat, WorksheetRows.Kind.Member),
+            PayMbmStatusRow.Build(Grid, Flat),
+            letter is null ? null : ExcessLetterRow.Build(letter, Grid, Final));
+    }
+
     /// <summary>A saved text, trimmed; empty for NULL.</summary>
     public static string Text(object? value) => Convert.ToString(value, CultureInfo.InvariantCulture)?.Trim() ?? "";
 

@@ -123,6 +123,16 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         await main.OpenAsync();
         var own = (await main.QueryAsync<string>("SELECT REPLACE(name, '@', '') FROM sys.parameters WHERE object_id = OBJECT_ID('genisis.WorksheetSave_PayMbmStatus') ORDER BY parameter_id")).ToList();
         Assert.Equal(Names(new[] { "cas", "version" }.Concat(PayMbmStatusRow.AllColumns)), Names(own));
+
+        var letterParameters = (await main.QueryAsync<string>("SELECT REPLACE(name, '@', '') FROM sys.parameters WHERE object_id = OBJECT_ID('genisis.WorksheetSave_ExcessLetter')")).Select((n) => n.ToLowerInvariant()).ToHashSet();
+        var renamed = new Dictionary<string, string> { ["CASNumber"] = "cas", ["INVNo"] = "invoiceNo", ["INVAmt"] = "invoiceAmount", ["EXCDate"] = "date", ["ExcessAmt"] = "excessAmount", ["EXCIssuedBy"] = "issuedBy", ["EXCOthersDesc"] = "othersDesc" };
+        var grid = new WorksheetEvaluation([new WorksheetLine(25, 0m, null, 0m, 0m, -10m)], new WorksheetTotals(0m, 0m, 0m, -10m));
+        var final = new WorksheetFinal(0m, 0m, 0m, 0m, 0m, -10m, 0m);
+        foreach (var btbg in new[] { false, true })
+        {
+            var row = ExcessLetterRow.Build(new ExcessLetterInput { CaseNo = "X", UserCode = "U", Today = DateTime.Today, HospitalInvoiceAmount = 1m, MemberBtbg = btbg, GuardianAllowed = true, MedicalReportAllowed = true, TelephoneAllowed = true, AdminAllowed = true, OthersAllowed = true }, grid, final)!;
+            foreach (var column in row.Keys.Where((k) => k != "EXCIssuedDate")) Assert.Contains((renamed.GetValueOrDefault(column) ?? column).ToLowerInvariant(), letterParameters);
+        }
     }
 
     /// <summary>
@@ -204,19 +214,8 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
                 if (saved is null || saved.Others is null) continue;
                 var newVersion = next++;
                 var flat = saved.Flat;
-                var claimRow = ClaimVersionRow.Build(saved.Input with { Version = newVersion }, saved.Grid, saved.Final);
-                var rows = new WorksheetVersionRows(
-                    claimRow,
-                    ClaimOthersRow.Build(saved.Others with { Version = newVersion }),
-                    WorksheetRows.Limits(saved.Grid, flat, new WorksheetRows.LimitDays(
-                        SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMBoardDays"]), SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMICUDays"]), SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMINHOSPhyDays"]),
-                        SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMKIDDCDays"]), SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMCashDays"]), SavedVersion.Number(saved.Tables["ClaimLimit"]["CLMGurdianDays"]))),
-                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Actual),
-                    WorksheetRows.ActualGst(flat),
-                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Approved),
-                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Hospital),
-                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Member),
-                    PayMbmStatusRow.Build(saved.Grid, flat));
+                var rows = saved.Rows(newVersion);
+                var claimRow = rows.Claim;
                 var result = await repository.WriteVersionAsync(write, rows);
                 Assert.Equal(0, result.InvoicesMarked);
                 done++;
@@ -276,6 +275,78 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         foreach (var table in new[] { "ClaimActual", "ClaimActualGST", "ClaimApprove", "ClaimHos", "ClaimMember", "ClaimLimit", "ClaimPayMBMStatus" })
             Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM genisis.WS_{table} WHERE CLMVersion >= @first", new { first = FirstTestVersion }, read.Transaction));
         Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ClaimOthers WHERE ClaimVersion >= @first", new { first = FirstTestVersion }, read.Transaction));
+    }
+
+    /// <summary>
+    /// A case that has an excess version and no letter: the first save adds the letter with the number E, the case, a dash and 1 (or the sequence after the one it has); the next save that leaves an excess moves
+    /// the sequence on and leaves the letter as it was; a save without an excess touches neither. All in a transaction that is rolled back.
+    /// </summary>
+    [Fact]
+    public async Task An_excess_letter_is_added_once_and_the_sequence_moves_on_at_every_save_that_leaves_an_excess()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        var repository = new RegistrationRepository();
+        await using var read = await TestDb.Sessions().OpenAsync();
+        var candidate = await read.Connection.QueryFirstOrDefaultAsync<(string Cas, int Version, string? Family, string? Payor, string? Btbg, string? InvoiceNo, decimal InvoiceAmount)?>(
+            """
+            SELECT TOP (1) RTRIM(c.CASNumber), c.ClaimVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2), RTRIM(v.MBMBTBG),
+                   (SELECT TOP (1) RTRIM(i.INVNo) FROM genisis.WS_ClaimInvoice i WHERE i.CASNumber = c.CASNumber AND i.INVPayTo = 'H' ORDER BY i.INVIndex),
+                   (SELECT TOP (1) i.INVAmount FROM genisis.WS_ClaimInvoice i WHERE i.CASNumber = c.CASNumber AND i.INVPayTo = 'H' ORDER BY i.INVIndex)
+            FROM genisis.WS_Claim c JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = c.CASNumber AND v.ClaimVersion = c.ClaimVersion
+            WHERE c.ClaimVersion <> 0 AND c.ClaimStatus = 'C' AND c.ClaimOpenDate >= '2020-07-01' AND (c.CLMExcess < 0 OR c.CLMLimitExceeded < 0) AND c.CASNumber NOT LIKE 'ZZ%'
+              AND NOT EXISTS (SELECT 1 FROM genisis.WS_ExcessLetter e WHERE e.CASNumber = c.CASNumber)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoice i WHERE i.CASNumber = c.CASNumber AND i.INVPayTo = 'H')
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimApprove p WHERE p.CASNumber = c.CASNumber AND p.CLMVersion = c.ClaimVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimHos h WHERE h.CASNumber = c.CASNumber AND h.CLMVersion = c.ClaimVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimMember m WHERE m.CASNumber = c.CASNumber AND m.CLMVersion = c.ClaimVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimLimit l WHERE l.CASNumber = c.CASNumber AND l.CLMVersion = c.ClaimVersion)
+              AND EXISTS (SELECT 1 FROM genisis.WS_ClaimActual a WHERE a.CASNumber = c.CASNumber AND a.CLMVersion = c.ClaimVersion)
+            ORDER BY c.CASNumber DESC
+            """, transaction: read.Transaction, commandTimeout: 120);
+        Assert.NotNull(candidate);
+        var (cas, version, family, payor, btbg, invoiceNo, invoiceAmount) = candidate.Value;
+        var saved = await SavedVersion.ReadAsync(read, cas, version, family, payor, btbg);
+        Assert.NotNull(saved);
+        var letter = new ExcessLetterInput { CaseNo = cas, UserCode = "E2E", Today = new DateTime(2026, 10, 24), InvoiceNo = invoiceNo, HospitalInvoiceAmount = invoiceAmount, MemberBtbg = btbg == "Y" };
+        var sequenceBefore = await read.Connection.ExecuteScalarAsync<int?>("SELECT EXCSequence FROM genisis.WS_ExcessSequence WHERE CASNumber = @cas", new { cas }, read.Transaction);
+
+        await using (var write = await TestDb.Sessions().BeginAsync())
+        {
+            var first = await repository.WriteVersionAsync(write, saved.Rows(9001, letter));
+            Assert.True(first.ExcessLetterAdded);
+            Assert.Equal($"E{cas}-{(sequenceBefore ?? 0) + 1}", first.ExcessNumber);
+            var row = new Dictionary<string, object?>((IDictionary<string, object?>)await write.Connection.QueryFirstAsync("SELECT * FROM genisis.WS_ExcessLetter WHERE CASNumber = @cas", new { cas }, write.Transaction), StringComparer.OrdinalIgnoreCase);
+            var built = saved.Rows(9001, letter).ExcessLetter!;
+            Assert.Equal(first.ExcessNumber, SavedVersion.Text(row["EXCNumber"]));
+            foreach (var (column, value) in built)
+            {
+                var same = value switch
+                {
+                    null => row[column] is null,
+                    decimal d => Math.Abs(d - SavedVersion.Number(row[column])) < 0.011m,
+                    DateTime dt => row[column] is DateTime s && dt.Date == s.Date,
+                    _ => SavedVersion.Text(value) == SavedVersion.Text(row[column]),
+                };
+                Assert.True(same, $"{column}: built '{value}' read '{SavedVersion.Text(row[column])}'");
+            }
+
+            var second = await repository.WriteVersionAsync(write, saved.Rows(9002, letter));
+            Assert.False(second.ExcessLetterAdded);
+            Assert.Equal($"E{cas}-{(sequenceBefore ?? 0) + 2}", second.ExcessNumber);
+            Assert.Equal(first.ExcessNumber, await write.Connection.ExecuteScalarAsync<string>("SELECT RTRIM(EXCNumber) FROM genisis.WS_ExcessLetter WHERE CASNumber = @cas", new { cas }, write.Transaction));
+            Assert.Equal(1, await write.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ExcessLetter WHERE CASNumber = @cas", new { cas }, write.Transaction));
+
+            var none = await repository.WriteVersionAsync(write, saved.Rows(9003));
+            Assert.Null(none.ExcessNumber);
+            Assert.False(none.ExcessLetterAdded);
+            Assert.Equal((sequenceBefore ?? 0) + 2, await write.Connection.ExecuteScalarAsync<int>("SELECT EXCSequence FROM genisis.WS_ExcessSequence WHERE CASNumber = @cas", new { cas }, write.Transaction));
+        }
+
+        Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ExcessLetter WHERE CASNumber = @cas", new { cas }, read.Transaction));
+        Assert.Equal(sequenceBefore, await read.Connection.ExecuteScalarAsync<int?>("SELECT EXCSequence FROM genisis.WS_ExcessSequence WHERE CASNumber = @cas", new { cas }, read.Transaction));
+        Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion >= @first", new { cas, first = FirstTestVersion }, read.Transaction));
     }
 
     /// <summary>The routines that update rows other than the version's own: the invoices of a version, the case's pending flag and its reserve.</summary>

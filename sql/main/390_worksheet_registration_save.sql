@@ -133,3 +133,79 @@ BEGIN
     END
 END
 GO
+
+-- GetExcessCode: the next sequence of the case's excess letters (EXC_SEQ: one row per case, 1 the first time) and the letter number E + case + - + sequence. The desktop calls it at every save
+-- that leaves the member an excess or a limit exceeded, before it looks whether the case has a letter, so the sequence moves on at each such save (773 of the 805 cases with two or more
+-- such versions have a sequence above 1) while the letter keeps the number it was first given.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_NextExcessNumber
+    @cas varchar(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @seq int;
+    IF EXISTS (SELECT 1 FROM genisis.WS_ExcessSequence WITH (UPDLOCK, HOLDLOCK) WHERE CASNumber = @cas)
+    BEGIN
+        UPDATE genisis.WS_ExcessSequence SET @seq = EXCSequence = EXCSequence + 1 WHERE CASNumber = @cas;
+    END
+    ELSE
+    BEGIN
+        INSERT genisis.WS_ExcessSequence (CASNumber, EXCSequence) VALUES (@cas, 1);
+        SET @seq = 1;
+    END
+    SELECT 'E' + RTRIM(@cas) + '-' + CAST(@seq AS varchar(10));
+END
+GO
+
+-- saveExcessLetter: the case's letter is added when it has none (CAS_Excess holds one row per case). Returns 1 when the letter was added and 0 when the case already had one.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_ExcessLetter
+    @cas varchar(15),
+    @number varchar(15),
+    @date datetime,
+    @invoiceNo varchar(1000) = NULL,
+    @invoiceAmount money = NULL,
+    @excessAmount money = NULL,
+    @issuedBy nvarchar(50) = NULL,
+    @EXCBoardAmt nvarchar(15) = NULL,
+    @EXCICUAmt nvarchar(15) = NULL,
+    @EXCServices nvarchar(15) = NULL,
+    @EXCTheatre nvarchar(15) = NULL,
+    @EXCPreHSAmt nvarchar(15) = NULL,
+    @EXCSurgicalAmt nvarchar(15) = NULL,
+    @EXCAna nvarchar(15) = NULL,
+    @EXCNSPreHOS nvarchar(15) = NULL,
+    @EXCPhysician nvarchar(15) = NULL,
+    @EXCPost nvarchar(15) = NULL,
+    @EXCEmergency nvarchar(15) = NULL,
+    @EXCAmbulance nvarchar(15) = NULL,
+    @EXCOutpatient nvarchar(15) = NULL,
+    @EXCMonthly nvarchar(15) = NULL,
+    @EXCOrgan nvarchar(15) = NULL,
+    @EXCTax nvarchar(15) = NULL,
+    @EXCGuardianAMT nvarchar(15) = NULL,
+    @EXCMedical nvarchar(15) = NULL,
+    @EXCPhone nvarchar(15) = NULL,
+    @EXCAdmin nvarchar(15) = NULL,
+    @EXCOthers1 nvarchar(15) = NULL,
+    @EXCBoardTaxAmt nvarchar(15) = NULL,
+    @EXCICUTaxAmt nvarchar(15) = NULL,
+    @EXCLodgerTaxAmt nvarchar(15) = NULL,
+    @EXCTotalExceed nvarchar(15) = NULL,
+    @EXCMRI nvarchar(15) = NULL,
+    @EXCMPreHSAmt nvarchar(15) = NULL,
+    @EXCCoPayment nvarchar(15) = NULL,
+    @EXCPreHosp nvarchar(15) = NULL,
+    @EXCUndExcess nvarchar(15) = NULL,
+    @othersDesc nvarchar(1000) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.WS_ExcessLetter WITH (UPDLOCK, HOLDLOCK) WHERE CASNumber = @cas)
+    BEGIN
+        SELECT 0;
+        RETURN;
+    END
+    INSERT genisis.WS_ExcessLetter (EXCNumber, CASNumber, EXCDate, INVNo, INVAmt, ExcessAmt, EXCIssuedBy, EXCIssuedDate, EXCBoardAmt, EXCICUAmt, EXCServices, EXCTheatre, EXCPreHSAmt, EXCSurgicalAmt, EXCAna, EXCNSPreHOS, EXCPhysician, EXCPost, EXCEmergency, EXCAmbulance, EXCOutpatient, EXCMonthly, EXCOrgan, EXCTax, EXCGuardianAMT, EXCMedical, EXCPhone, EXCAdmin, EXCOthers1, EXCBoardTaxAmt, EXCICUTaxAmt, EXCLodgerTaxAmt, EXCTotalExceed, EXCMRI, EXCMPreHSAmt, EXCCoPayment, EXCPreHosp, EXCUndExcess, EXCOthersDesc)
+    VALUES (@number, @cas, @date, @invoiceNo, @invoiceAmount, @excessAmount, @issuedBy, @date, @EXCBoardAmt, @EXCICUAmt, @EXCServices, @EXCTheatre, @EXCPreHSAmt, @EXCSurgicalAmt, @EXCAna, @EXCNSPreHOS, @EXCPhysician, @EXCPost, @EXCEmergency, @EXCAmbulance, @EXCOutpatient, @EXCMonthly, @EXCOrgan, @EXCTax, @EXCGuardianAMT, @EXCMedical, @EXCPhone, @EXCAdmin, @EXCOthers1, @EXCBoardTaxAmt, @EXCICUTaxAmt, @EXCLodgerTaxAmt, @EXCTotalExceed, @EXCMRI, @EXCMPreHSAmt, @EXCCoPayment, @EXCPreHosp, @EXCUndExcess, @othersDesc);
+    SELECT 1;
+END
+GO

@@ -17,6 +17,7 @@ namespace Genisis.Api.Worksheet.Calculation;
 /// <param name="Hospital">Payable to the hospital.</param>
 /// <param name="Member">Payable to, or due from, the member.</param>
 /// <param name="PayMbmStatus">The Y/N flag of each worksheet row (<see cref="PayMbmStatusRow"/>, <c>savePayMBMStatus</c>).</param>
+/// <param name="ExcessLetter">The columns of the case's excess letter (<see cref="ExcessLetterRow.Build"/>), or <c>null</c> when the worksheet leaves no excess to write one for.</param>
 public sealed record WorksheetVersionRows(
     Dictionary<string, object?> Claim,
     Dictionary<string, object?> Others,
@@ -26,7 +27,8 @@ public sealed record WorksheetVersionRows(
     Dictionary<string, string> Approve,
     Dictionary<string, string> Hospital,
     Dictionary<string, string> Member,
-    Dictionary<string, string> PayMbmStatus)
+    Dictionary<string, string> PayMbmStatus,
+    Dictionary<string, object?>? ExcessLetter = null)
 {
     /// <summary>The case the rows are for.</summary>
     public string CaseNo => Convert.ToString(Claim["CasNumber"])!.Trim();
@@ -40,14 +42,16 @@ public sealed record WorksheetVersionRows(
 
 /// <summary>What writing a version changed besides its own rows.</summary>
 /// <param name="InvoicesMarked">Invoices of the version marked as worksheeted.</param>
-public sealed record RegistrationWriteResult(int InvoicesMarked);
+/// <param name="ExcessNumber">The number the excess sequence gave (<c>E</c>, the case, a dash and the sequence), or <c>null</c> when the worksheet leaves no excess.</param>
+/// <param name="ExcessLetterAdded">The case had no excess letter and one was added.</param>
+public sealed record RegistrationWriteResult(int InvoicesMarked, string? ExcessNumber = null, bool ExcessLetterAdded = false);
 
 /// <summary>Writes the rows of a worksheet version, in the order of the desktop's save, inside the caller's transaction. Nothing here commits.</summary>
 public interface IRegistrationRepository
 {
     /// <summary>
-    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c> and <c>savePayMBMStatus</c> (<c>saveApproveGST</c> is not
-    /// run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
+    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c>, <c>savePayMBMStatus</c> and <c>saveExcessLetter</c>
+    /// (<c>saveApproveGST</c> is not run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
     /// </summary>
     Task<RegistrationWriteResult> WriteVersionAsync(IDbSession session, WorksheetVersionRows rows);
 }
@@ -97,8 +101,20 @@ public sealed class RegistrationRepository : IRegistrationRepository
         status.Add("version", version);
         foreach (var column in PayMbmStatusRow.AllColumns) status.Add(column, rows.PayMbmStatus.GetValueOrDefault(column));
         await connection.ProcScalarAsync<int>("genisis.WorksheetSave_PayMbmStatus", status, transaction);
+        string? excessNumber = null;
+        var letterAdded = false;
+        if (rows.ExcessLetter is { } letter)
+        {
+            excessNumber = await connection.ProcScalarAsync<string>("genisis.WorksheetSave_NextExcessNumber", new { cas }, transaction);
+            var p = new DynamicParameters();
+            p.Add("cas", cas);
+            p.Add("number", excessNumber);
+            foreach (var (key, value) in letter.Where((l) => l.Key != "EXCIssuedDate"))
+                p.Add(key switch { "CASNumber" => "cas", "INVNo" => "invoiceNo", "INVAmt" => "invoiceAmount", "EXCDate" => "date", "ExcessAmt" => "excessAmount", "EXCIssuedBy" => "issuedBy", "EXCOthersDesc" => "othersDesc", _ => key }, value);
+            letterAdded = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ExcessLetter", p, transaction) == 1;
+        }
         var marked = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_MarkInvoices", new { cas, version, @void = rows.Void }, transaction);
         await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ClearReserve", new { cas }, transaction);
-        return new RegistrationWriteResult(marked);
+        return new RegistrationWriteResult(marked, excessNumber, letterAdded);
     }
 }

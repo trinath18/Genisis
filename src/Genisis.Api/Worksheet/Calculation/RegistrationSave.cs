@@ -16,6 +16,7 @@ namespace Genisis.Api.Worksheet.Calculation;
 /// <param name="Approve">What the plan lets through.</param>
 /// <param name="Hospital">Payable to the hospital.</param>
 /// <param name="Member">Payable to, or due from, the member.</param>
+/// <param name="PayMbmStatus">The Y/N flag of each worksheet row (<see cref="PayMbmStatusRow"/>, <c>savePayMBMStatus</c>).</param>
 public sealed record WorksheetVersionRows(
     Dictionary<string, object?> Claim,
     Dictionary<string, object?> Others,
@@ -24,7 +25,8 @@ public sealed record WorksheetVersionRows(
     Dictionary<string, string> ActualGst,
     Dictionary<string, string> Approve,
     Dictionary<string, string> Hospital,
-    Dictionary<string, string> Member)
+    Dictionary<string, string> Member,
+    Dictionary<string, string> PayMbmStatus)
 {
     /// <summary>The case the rows are for.</summary>
     public string CaseNo => Convert.ToString(Claim["CasNumber"])!.Trim();
@@ -44,8 +46,8 @@ public sealed record RegistrationWriteResult(int InvoicesMarked);
 public interface IRegistrationRepository
 {
     /// <summary>
-    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c> and <c>saveMember</c> (<c>saveApproveGST</c> is not run: no worksheet
-    /// saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
+    /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c> and <c>savePayMBMStatus</c> (<c>saveApproveGST</c> is not
+    /// run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
     /// </summary>
     Task<RegistrationWriteResult> WriteVersionAsync(IDbSession session, WorksheetVersionRows rows);
 }
@@ -90,6 +92,11 @@ public sealed class RegistrationRepository : IRegistrationRepository
         await connection.ProcExecAsync("genisis.WS_Insert_WS_ClaimApprove", Grid(cas, version, rows.Approve, WorksheetRows.AllColumns), transaction);
         await connection.ProcExecAsync("genisis.WS_Insert_WS_ClaimHOS", Grid(cas, version, rows.Hospital, WorksheetRows.AllColumns), transaction);
         await connection.ProcExecAsync("genisis.WS_Insert_WS_ClaimMBM", Grid(cas, version, rows.Member, WorksheetRows.AllColumns), transaction);
+        var status = new DynamicParameters();
+        status.Add("cas", cas);
+        status.Add("version", version);
+        foreach (var column in PayMbmStatusRow.AllColumns) status.Add(column, rows.PayMbmStatus.GetValueOrDefault(column));
+        await connection.ProcScalarAsync<int>("genisis.WorksheetSave_PayMbmStatus", status, transaction);
         var marked = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_MarkInvoices", new { cas, version, @void = rows.Void }, transaction);
         await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ClearReserve", new { cas }, transaction);
         return new RegistrationWriteResult(marked);

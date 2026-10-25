@@ -51,3 +51,85 @@ BEGIN
     SELECT @@ROWCOUNT;
 END
 GO
+
+-- savePayMBMStatus: the Y/N flag of each worksheet row of a version (ClaimPayMBMStatus has one row per version). The desktop edited a recordset: a row is added when the version has none, otherwise
+-- its columns are set. A column given as NULL (the ones the plan layout does not write) is left as it is. Returns 1 when the row was added and 0 when it was changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_PayMbmStatus
+    @cas nvarchar(30), @version smallint,
+    @CLMBoardAmt char(1) = NULL,
+    @CLMICUAmt char(1) = NULL,
+    @CLMServices char(1) = NULL,
+    @CLMTheatre char(1) = NULL,
+    @CLMMRI char(1) = NULL,
+    @CLMAccPostAmt char(1) = NULL,
+    @CLMAmbulance char(1) = NULL,
+    @CLMOutpatient char(1) = NULL,
+    @CLMMonthly char(1) = NULL,
+    @CLMOrgan char(1) = NULL,
+    @CLMCashDays char(1) = NULL,
+    @CLMGuardianAmt char(1) = NULL,
+    @CLMMedical char(1) = NULL,
+    @CLMPhone char(1) = NULL,
+    @CLMAdmin char(1) = NULL,
+    @CLMOthers1 char(1) = NULL,
+    @CLMOthersNotCoPay char(1) = NULL,
+    @CLMBoardTaxAmt char(1) = NULL,
+    @CLMICUTaxAmt char(1) = NULL,
+    @CLMLodgerTaxAmt char(1) = NULL,
+    @CLMPreHSAmt char(1) = NULL,
+    @CLMPreHosp char(1) = NULL,
+    @CLMSurgicalAmt char(1) = NULL,
+    @CLMAna char(1) = NULL,
+    @CLMNSPreHos char(1) = NULL,
+    @CLMPhysician char(1) = NULL,
+    @CLMPost char(1) = NULL,
+    @CLMMPreHSAmt char(1) = NULL,
+    @CLMCOPreHSSum char(1) = NULL,
+    @CLMCOMPreHSSum char(1) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM genisis.WS_ClaimPayMBMStatus WITH (UPDLOCK, HOLDLOCK) WHERE CASNumber = @cas AND CLMVersion = @version)
+    BEGIN
+        UPDATE genisis.WS_ClaimPayMBMStatus SET
+        CLMBoardAmt = COALESCE(@CLMBoardAmt, CLMBoardAmt),
+        CLMICUAmt = COALESCE(@CLMICUAmt, CLMICUAmt),
+        CLMServices = COALESCE(@CLMServices, CLMServices),
+        CLMTheatre = COALESCE(@CLMTheatre, CLMTheatre),
+        CLMMRI = COALESCE(@CLMMRI, CLMMRI),
+        CLMAccPostAmt = COALESCE(@CLMAccPostAmt, CLMAccPostAmt),
+        CLMAmbulance = COALESCE(@CLMAmbulance, CLMAmbulance),
+        CLMOutpatient = COALESCE(@CLMOutpatient, CLMOutpatient),
+        CLMMonthly = COALESCE(@CLMMonthly, CLMMonthly),
+        CLMOrgan = COALESCE(@CLMOrgan, CLMOrgan),
+        CLMCashDays = COALESCE(@CLMCashDays, CLMCashDays),
+        CLMGuardianAmt = COALESCE(@CLMGuardianAmt, CLMGuardianAmt),
+        CLMMedical = COALESCE(@CLMMedical, CLMMedical),
+        CLMPhone = COALESCE(@CLMPhone, CLMPhone),
+        CLMAdmin = COALESCE(@CLMAdmin, CLMAdmin),
+        CLMOthers1 = COALESCE(@CLMOthers1, CLMOthers1),
+        CLMOthersNotCoPay = COALESCE(@CLMOthersNotCoPay, CLMOthersNotCoPay),
+        CLMBoardTaxAmt = COALESCE(@CLMBoardTaxAmt, CLMBoardTaxAmt),
+        CLMICUTaxAmt = COALESCE(@CLMICUTaxAmt, CLMICUTaxAmt),
+        CLMLodgerTaxAmt = COALESCE(@CLMLodgerTaxAmt, CLMLodgerTaxAmt),
+        CLMPreHSAmt = COALESCE(@CLMPreHSAmt, CLMPreHSAmt),
+        CLMPreHosp = COALESCE(@CLMPreHosp, CLMPreHosp),
+        CLMSurgicalAmt = COALESCE(@CLMSurgicalAmt, CLMSurgicalAmt),
+        CLMAna = COALESCE(@CLMAna, CLMAna),
+        CLMNSPreHos = COALESCE(@CLMNSPreHos, CLMNSPreHos),
+        CLMPhysician = COALESCE(@CLMPhysician, CLMPhysician),
+        CLMPost = COALESCE(@CLMPost, CLMPost),
+        CLMMPreHSAmt = COALESCE(@CLMMPreHSAmt, CLMMPreHSAmt),
+        CLMCOPreHSSum = COALESCE(@CLMCOPreHSSum, CLMCOPreHSSum),
+        CLMCOMPreHSSum = COALESCE(@CLMCOMPreHSSum, CLMCOMPreHSSum)
+        WHERE CASNumber = @cas AND CLMVersion = @version;
+        SELECT 0;
+    END
+    ELSE
+    BEGIN
+        INSERT genisis.WS_ClaimPayMBMStatus (CASNumber, CLMVersion, CLMBoardAmt, CLMICUAmt, CLMServices, CLMTheatre, CLMMRI, CLMAccPostAmt, CLMAmbulance, CLMOutpatient, CLMMonthly, CLMOrgan, CLMCashDays, CLMGuardianAmt, CLMMedical, CLMPhone, CLMAdmin, CLMOthers1, CLMOthersNotCoPay, CLMBoardTaxAmt, CLMICUTaxAmt, CLMLodgerTaxAmt, CLMPreHSAmt, CLMPreHosp, CLMSurgicalAmt, CLMAna, CLMNSPreHos, CLMPhysician, CLMPost, CLMMPreHSAmt, CLMCOPreHSSum, CLMCOMPreHSSum)
+        VALUES (@cas, @version, @CLMBoardAmt, @CLMICUAmt, @CLMServices, @CLMTheatre, @CLMMRI, @CLMAccPostAmt, @CLMAmbulance, @CLMOutpatient, @CLMMonthly, @CLMOrgan, @CLMCashDays, @CLMGuardianAmt, @CLMMedical, @CLMPhone, @CLMAdmin, @CLMOthers1, @CLMOthersNotCoPay, @CLMBoardTaxAmt, @CLMICUTaxAmt, @CLMLodgerTaxAmt, @CLMPreHSAmt, @CLMPreHosp, @CLMSurgicalAmt, @CLMAna, @CLMNSPreHos, @CLMPhysician, @CLMPost, @CLMMPreHSAmt, @CLMCOPreHSSum, @CLMCOMPreHSSum);
+        SELECT 1;
+    END
+END
+GO

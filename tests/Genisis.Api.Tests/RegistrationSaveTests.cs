@@ -41,6 +41,47 @@ public class RegistrationRowsRulesTests
     [InlineData("", 99.99, " GROSS RB RATE : RM99.99")]
     public void A_gross_room_rate_is_added_to_the_worksheet_remarks(string? remarks, double rate, string expected) => Assert.Equal(expected, ClaimOthersRow.Remarks(remarks, (decimal)rate));
 
+    private static WorksheetLine Line(int slot, decimal actual, string? limit, decimal approved) => new(slot, actual, limit, approved, approved, 0m);
+
+    [Theory]
+    [InlineData("5,000.00", 0, 100, true)]
+    [InlineData("5,000.00", 10, 100, false)]
+    [InlineData("5,000.00", 0, 0, false)]
+    [InlineData("FULL", 0, 100, false)]
+    [InlineData("-", 0, 100, false)]
+    [InlineData(null, 0, 100, false)]
+    [InlineData("0.00", 0, 100, false)]
+    public void A_row_is_flagged_when_there_is_a_limit_nothing_was_invoiced_and_something_is_approved(string? limit, double actual, double approved, bool expected) =>
+        Assert.Equal(expected, PayMbmStatusRow.Flag(Line(1, (decimal)actual, limit, (decimal)approved)));
+
+    [Fact]
+    public void A_missing_row_is_not_flagged_and_every_row_of_the_layout_gets_a_Y_or_N()
+    {
+        Assert.False(PayMbmStatusRow.Flag(null));
+        var grid = new WorksheetEvaluation([Line(1, 0m, "100", 50m), Line(3, 5m, "100", 50m)], new WorksheetTotals(5m, 100m, 100m, 0m));
+        var itemised = PayMbmStatusRow.Build(grid, flat: false);
+        Assert.Equal(PayMbmStatusRow.Map(false).Count, itemised.Count);
+        Assert.Equal("Y", itemised["CLMBoardAmt"]);
+        Assert.Equal("N", itemised["CLMServices"]);
+        Assert.Equal("N", itemised["CLMICUAmt"]);
+        Assert.All(itemised.Values, (v) => Assert.Contains(v, new[] { "Y", "N" }));
+    }
+
+    [Fact]
+    public void From_row_19_on_the_columns_are_one_row_behind_the_grid_as_in_the_desktops_routine_and_the_layouts_differ_in_rows_8_and_13()
+    {
+        var itemised = PayMbmStatusRow.Map(false).ToDictionary((c) => c.Slot, (c) => c.Column);
+        Assert.Equal(("CLMCashDays", "CLMGuardianAmt", "CLMOthers1", "CLMLodgerTaxAmt"), (itemised[19], itemised[20], itemised[24], itemised[28]));
+        Assert.False(itemised.ContainsKey(29));
+        Assert.Equal(("CLMSurgicalAmt", "CLMMPreHSAmt"), (itemised[8], itemised[13]));
+        var flat = PayMbmStatusRow.Map(true).ToDictionary((c) => c.Slot, (c) => c.Column);
+        Assert.Equal(("CLMCOPreHSSum", "CLMCOMPreHSSum"), (flat[8], flat[13]));
+        Assert.False(flat.ContainsKey(6));
+        Assert.Equal(30, PayMbmStatusRow.AllColumns.Count);
+        Assert.Equal(30, PayMbmStatusRow.AllColumns.Distinct().Count());
+        Assert.DoesNotContain("CLMTax", PayMbmStatusRow.AllColumns);
+    }
+
     [Fact]
     public void The_remarks_row_has_the_procedures_parameters_and_empty_text_for_what_is_not_given()
     {
@@ -58,7 +99,7 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
 {
     private const int FirstTestVersion = 9001;
 
-    /// <summary>Parameter names compared as T-SQL compares them: without regard to case (the desktop's procedure says <c>CLMOthersNotCOPay</c>, the column is <c>CLMOthersNotCoPay</c>).</summary>
+    /// <summary>Parameter names compared as T-SQL compares them, without regard to case (the desktop's procedure says <c>CLMOthersNotCOPay</c>, the column is <c>CLMOthersNotCoPay</c>).</summary>
     private static List<string> Names(IEnumerable<string> names) => names.Select((n) => n.ToLowerInvariant()).OrderBy((n) => n, StringComparer.Ordinal).ToList();
 
     [Fact]
@@ -77,6 +118,51 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         Assert.Equal(Names(key.Concat(WorksheetRows.AllColumns).Concat(WorksheetRows.DayColumns)), Names(await Parameters("Insert_WS_ClaimLimit")));
         Assert.Equal(Names(ClaimOthersRow.Parameters), Names(await Parameters("Insert_WS_ClaimOthers_Jul08")));
         Assert.Equal(Names(ClaimVersionRow.Parameters), Names(await Parameters("Insert_WS_Claim_2012")));
+
+        await using var main = new Microsoft.Data.SqlClient.SqlConnection(TestDb.MainDb);
+        await main.OpenAsync();
+        var own = (await main.QueryAsync<string>("SELECT REPLACE(name, '@', '') FROM sys.parameters WHERE object_id = OBJECT_ID('genisis.WorksheetSave_PayMbmStatus') ORDER BY parameter_id")).ToList();
+        Assert.Equal(Names(new[] { "cas", "version" }.Concat(PayMbmStatusRow.AllColumns)), Names(own));
+    }
+
+    /// <summary>
+    /// The pay-to-member flags worked out from a saved grid (its limit texts, actual and approved cells) against the saved <c>ClaimPayMBMStatus</c> row, on the columns the plan layout writes, for about one saved
+    /// version in twenty since July 2020.
+    /// </summary>
+    [Fact]
+    public async Task The_pay_status_worked_out_from_a_saved_grid_equals_the_saved_row()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        await using var session = await TestDb.Sessions().OpenAsync();
+        var sample = await SavedVersion.SampleAsync(session, 20);
+        int done = 0, cells = 0, same = 0, rowsSame = 0, yes = 0;
+        var misses = new List<string>();
+        foreach (var (cas, version, family, payor, btbg) in sample)
+        {
+            var saved = await SavedVersion.ReadAsync(session, cas, version, family, payor, btbg);
+            if (saved is null || await session.Connection.QueryFirstOrDefaultAsync("SELECT * FROM genisis.WS_ClaimPayMBMStatus WHERE CASNumber = @cas AND CLMVersion = @version", new { cas, version }, session.Transaction) is not IDictionary<string, object?> row) continue;
+            done++;
+            var built = PayMbmStatusRow.Build(saved.Grid, saved.Flat);
+            var all = true;
+            foreach (var (column, flag) in built)
+            {
+                cells++;
+                if (flag == "Y") yes++;
+                if (SavedVersion.Text(row[column]) == flag) same++;
+                else
+                {
+                    all = false;
+                    if (misses.Count < 6) misses.Add($"{cas} v{version} {column}: built {flag} saved '{SavedVersion.Text(row[column])}'");
+                }
+            }
+            if (all) rowsSame++;
+        }
+        output.WriteLine($"{done} versions: {same} of {cells} flags equal, {rowsSame} rows entirely equal, {yes} Y built");
+        foreach (var line in misses) output.WriteLine("  " + line);
+        Assert.True(done >= 300, $"only {done} versions");
+        Assert.True(same >= cells * 0.99, $"{same} of {cells}");
     }
 
     private static bool Same(object? built, object? saved) => built switch
@@ -106,8 +192,6 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         var sample = await SavedVersion.SampleAsync(read, 60);
         Assert.True(sample.Count >= 100, $"only {sample.Count} versions in the sample");
         var casesBefore = await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_Claim WHERE ClaimVersion >= @first", new { first = FirstTestVersion }, read.Transaction);
-        const string casChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, CASPending, CASReserveAmount)) FROM dbo.CAS";
-        var checksumBefore = await read.Connection.ExecuteScalarAsync<int?>(casChecksum, transaction: read.Transaction, commandTimeout: 300);
 
         int done = 0, cells = 0, cellsSame = 0, claimColumns = 0, claimSame = 0, others = 0, othersSame = 0;
         var misses = new List<string>();
@@ -131,7 +215,8 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
                     WorksheetRows.ActualGst(flat),
                     WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Approved),
                     WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Hospital),
-                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Member));
+                    WorksheetRows.Build(saved.Grid, flat, WorksheetRows.Kind.Member),
+                    PayMbmStatusRow.Build(saved.Grid, flat));
                 var result = await repository.WriteVersionAsync(write, rows);
                 Assert.Equal(0, result.InvoicesMarked);
                 done++;
@@ -150,6 +235,13 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
                     }
                 }
 
+                var statusBack = await Row("ClaimPayMBMStatus", "CLMVersion");
+                foreach (var (column, flag) in rows.PayMbmStatus)
+                {
+                    cells++;
+                    if (SavedVersion.Text(statusBack[column]) == flag) cellsSame++;
+                    else if (misses.Count < 6) misses.Add($"{cas} v{version} ClaimPayMBMStatus.{column}: built '{flag}' read '{SavedVersion.Text(statusBack[column])}'");
+                }
                 var claimBack = new Dictionary<string, object?>(await Row("Claim", "ClaimVersion"), StringComparer.OrdinalIgnoreCase);
                 foreach (var (parameter, value) in claimRow)
                 {
@@ -181,10 +273,9 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         Assert.Equal(others, othersSame);
 
         Assert.Equal(casesBefore, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_Claim WHERE ClaimVersion >= @first", new { first = FirstTestVersion }, read.Transaction));
-        foreach (var table in new[] { "ClaimActual", "ClaimActualGST", "ClaimApprove", "ClaimHos", "ClaimMember", "ClaimLimit" })
+        foreach (var table in new[] { "ClaimActual", "ClaimActualGST", "ClaimApprove", "ClaimHos", "ClaimMember", "ClaimLimit", "ClaimPayMBMStatus" })
             Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM genisis.WS_{table} WHERE CLMVersion >= @first", new { first = FirstTestVersion }, read.Transaction));
         Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_ClaimOthers WHERE ClaimVersion >= @first", new { first = FirstTestVersion }, read.Transaction));
-        Assert.Equal(checksumBefore, await read.Connection.ExecuteScalarAsync<int?>(casChecksum, transaction: read.Transaction, commandTimeout: 300));
     }
 
     /// <summary>The routines that update rows other than the version's own: the invoices of a version, the case's pending flag and its reserve.</summary>

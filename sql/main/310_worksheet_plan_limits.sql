@@ -17,9 +17,9 @@ BEGIN
         @own = RTRIM(v.PLNCode), @dependant = RTRIM(v.MBMCPLNCode), @newPlan = RTRIM(v.MBMNewPlanCode), @patient = v.MBMPatientCovID,
         @ins = RTRIM(v.INSCode), @hlt = RTRIM(v.HLTCode), @adm = v.CASDateAdmitted, @payorEff = v.MBMPayorEffDate, @newEff = v.MBMNewPolEffDate,
         @takeOver = RTRIM(c.CASTakeOverPlan)
-    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    FROM genisis.WorksheetCase(@cas) v
     JOIN dbo.CAS c ON c.CASNumber = v.CASNumber
-    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+    WHERE v.MBMNumber IS NOT NULL;
 
     IF ISNULL(@takeOver, N'') <> N'' BEGIN SET @plancode = @takeOver; SET @anyHealthType = 1; END
     ELSE IF ISNULL(@newPlan, N'') <> N''

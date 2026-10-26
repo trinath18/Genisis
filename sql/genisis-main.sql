@@ -6542,6 +6542,26 @@ BEGIN
 END
 GO
 
+-- ===== main/305_worksheet_case.sql =====
+-- The case's member, patient and plan as the worksheet engine needs them. It is what VIEW_Claim_MBM_Case_worksheetAdjustment gives for the case's columns, joined the same way (the member must have an
+-- MBMOthersTwo row), but starting from the case and not from a saved worksheet version, so a worksheet that is not saved yet can be worked out. The columns are the ones the engine procedures read.
+CREATE OR ALTER FUNCTION genisis.WorksheetCase (@cas nvarchar(15))
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT cs.CASNumber, cs.MBMNumber, cs.MBMPatientCovID, cs.CASDateAdmitted, cs.CASClaimability, cs.CASHOSCode,
+           m.PLNCode, m.INSCode, m.HLTCode, m.PAYCode, m.MBMMemberType, m.MBMPayorEffDate, m.MBMPayorExpDate,
+           cp.MBMCPLNCode, o.MBMNewPlanCode, o.MBMNewPolEffDate
+    FROM dbo.CAS cs
+    JOIN dbo.MBM m ON m.MBMNumber = cs.MBMNumber
+    JOIN dbo.MBMOthersTwo o2 ON o2.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON o.MBMNumber = m.MBMNumber
+    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = cs.MBMNumber AND cp.MBMCCoverID = cs.MBMPatientCovID
+    WHERE cs.CASNumber = @cas
+)
+GO
+
 -- ===== main/310_worksheet_plan_limits.sql =====
 -- Worksheet calculation engine, step 4: the limits the plan fixes (display_benefit of the Registration form). The benefit rows (BNF) of the plan the desktop reads, the row with the latest
 -- effective date up to its bound for each benefit code. Which plan, in the desktop's order:
@@ -6562,9 +6582,9 @@ BEGIN
         @own = RTRIM(v.PLNCode), @dependant = RTRIM(v.MBMCPLNCode), @newPlan = RTRIM(v.MBMNewPlanCode), @patient = v.MBMPatientCovID,
         @ins = RTRIM(v.INSCode), @hlt = RTRIM(v.HLTCode), @adm = v.CASDateAdmitted, @payorEff = v.MBMPayorEffDate, @newEff = v.MBMNewPolEffDate,
         @takeOver = RTRIM(c.CASTakeOverPlan)
-    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    FROM genisis.WorksheetCase(@cas) v
     JOIN dbo.CAS c ON c.CASNumber = v.CASNumber
-    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+    WHERE v.MBMNumber IS NOT NULL;
 
     IF ISNULL(@takeOver, N'') <> N'' BEGIN SET @plancode = @takeOver; SET @anyHealthType = 1; END
     ELSE IF ISNULL(@newPlan, N'') <> N''
@@ -6605,7 +6625,7 @@ BEGIN
         LEFT(RTRIM(p.PLNCode), 1) AS PlanFamily, RTRIM(p.NewSMPlan) AS NewSmPlan, CASE WHEN RTRIM(p.NewSMPlan) = N'Y' THEN ISNULL(p.PLNMRIPercentage, 0) ELSE 0 END AS MriPercent,
         RTRIM(p.PLNMajorMedInd) AS MajorMedInd, LEFT(@cas, 2) AS PayorCode, RTRIM(c.CASHOSCode) AS HospitalCode, (SELECT TOP (1) RTRIM(y.PAYRBTax) FROM dbo.PAY y WHERE y.PAYCode = LEFT(@cas, 2)) AS PayorRoomTax,
         ISNULL(inv.RoomTaxNew, 0) AS RoomTaxNew, ISNULL(inv.GrossRoomBoard, 0) AS GrossRoomBoard, inv.LastInvoiceDate
-    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    FROM genisis.WorksheetCase(@cas) v
     JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
     JOIN dbo.CAS c ON c.CASNumber = v.CASNumber
     OUTER APPLY (SELECT SUM(genisis.Worksheet_Amount(a.CLMNewRBTax)) AS RoomTaxNew, SUM(genisis.Worksheet_Amount(a.CLMGrossRB)) AS GrossRoomBoard, MAX(i.InvDate) AS LastInvoiceDate
@@ -6613,7 +6633,7 @@ BEGIN
                  WHERE i.CASNumber = @cas AND i.INVWSversion = CAST(@version AS nvarchar(10))) inv
     JOIN dbo.PLN p ON p.PLNCode = RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END)
                   AND p.PAYCode = v.PAYCode AND p.HLTCode = v.HLTCode
-    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+    WHERE v.MBMNumber IS NOT NULL;
 END
 GO
 
@@ -6632,11 +6652,11 @@ BEGIN
              WHEN a.SuppLimitStatus = N'C' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = v.MBMPatientCovID)
              ELSE m.MBMAvailableLimit END AS Balance,
         RTRIM(a.SuppLimitStatus) AS LimitType
-    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    FROM genisis.WorksheetCase(@cas) v
     JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
     OUTER APPLY (SELECT TOP (1) al.SuppLimitStatus FROM dbo.AnnualLimit al
                  WHERE al.PLNCode = RTRIM(v.PLNCode) AND al.INSCode = RTRIM(v.INSCode) AND al.AnnualEffDate <= v.CASDateAdmitted ORDER BY al.AnnualEffDate DESC) a
-    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+    WHERE v.MBMNumber IS NOT NULL;
 END
 GO
 

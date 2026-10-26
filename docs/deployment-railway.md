@@ -7,6 +7,37 @@ and the archive through HISDB's synonyms) stay on the SQL Server where they are,
 > **This reaches the real databases.** A deployed API that points at the development SQL Server on `MYDELL` reads and writes the same data as the local one (every save, invoice, case and membership change).
 > Do not point it at a SQL Server you are not willing to have changed from the internet, and do not leave the tunnel or the firewall rule open when the deployment is not in use.
 
+## 0. The deployment that exists, and how it is updated
+
+Genisis is already deployed: the Railway project `extraordinary-liberation`, service `genisis`, at **https://genisis-production.up.railway.app**. It is **not** built from the repositories of this guide but from
+**`nyeduruwada/vb2web`** (branch `main`; a clone sits next to `Genisis` and `GenisisUI` in the workspace), a deployment copy of both with its own root `Dockerfile` that builds the UI in a Node stage and the API in a .NET
+stage into one image, and its own `railway.json`. Railway rebuilds and redeploys on every push to that branch (about 80 seconds; the old deployment keeps serving until the new one passes the health check on `/`).
+Sections 1 to 6 below describe a standalone container of the API repository alone (its `Dockerfile`, which uses the UI bundle committed in `wwwroot`); they are the reference for the variables and the checks, and the
+way to deploy without the copy.
+
+**The service's settings** (variable names; the values are in Railway and nowhere else): `ASPNETCORE_ENVIRONMENT`, `Auth__JwtKey` (64 characters, stable), `ConnectionStrings__MainDb`, `__Maintenance` and `__WorkSheet` (the
+SQL login `apiuser`, `Encrypt=True;TrustServerCertificate=True`), `Ascii__ClaimFolder`, `Ascii__CaseFolder`. **The database is the SQL Server on the development machine (MYDELL)**, reached through the public address of
+its network on port 1433: the service and the development databases are the same data. Every change of the SQL scripts that the app needs is therefore live as soon as it is applied to the development
+databases; apply it before the deployment that needs it.
+
+**To update the deployment** (done on 2026-10-26 for Genisis `dd64c98` and GenisisUI `9f8256c`):
+
+1. Commit and push the work in `Genisis` and `GenisisUI` (the tree to deploy must be committed: the copy is made from `git archive HEAD`, so nothing uncommitted or untracked travels).
+2. Replace `Genisis/` and `GenisisUI/` of the `vb2web` clone with the exported trees (delete the old folders first so removed files go; do not copy the API repository's own `Dockerfile`, `.dockerignore` and `railway.json` into it:
+   `vb2web` has its own at the root). Its `.gitignore` keeps `bin`, `obj`, `node_modules`, `dist`, `logs` and `.vs` out.
+3. Build it the way the Dockerfile does before pushing: `npm ci && npm run build` in `GenisisUI`, then `dotnet publish Genisis/src/Genisis.Api/Genisis.Api.csproj -c Release` with `wwwroot` replaced by the UI's `dist`
+   (the bundle must be the same as the one committed in the API repository), then start the output in Production against a database and check `/`, a login with a made-up user (the app's own 401 message) and a
+   few protected routes (401 without a token).
+4. Commit in `vb2web` in the style of its history (`Update Genisis app: ...`) and push `main`. Watch the deployment: `railway service status` (BUILDING, DEPLOYING, SUCCESS) and `railway logs --deployment`; then repeat the
+   checks of step 3 against the domain (the bundle name on `/` changes with every UI build).
+
+The Railway CLI (`@railway/cli` 5.70.0, installed globally) is logged in as the account owner; its login expires: `railway login` prints a link and a code to approve in the browser. The `Genisis` folder is linked to the
+project (kept in the CLI's own settings, not in the repository).
+
+**What was checked on 2026-10-26** before the push: the API login `apiuser` can use every object the exposed API reaches (all 373 procedures of the `genisis` schema, the tables and views behind the synonyms), except
+the three procedures of the Registration save that no endpoint calls yet (`sql/hosting/grant-api-login.sql` grants them for when it does; run it then). After the deployment: `/` serves the new bundle, the login reaches the database,
+the new Invoice and Case routes answer 401 where the old build answered the UI page, and the log has no error.
+
 ## 1. What was checked without Railway
 
 Railway was not touched from here (no account access, no CLI, no Docker on the build machine). What was run instead:

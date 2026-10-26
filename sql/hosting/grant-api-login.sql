@@ -126,6 +126,15 @@ SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceActOthers_New_2019 T
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceActOthers_New_2019 TO ' + @q + N';';
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceNotCov08 TO ' + @q + N';';
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceNotCov08 TO ' + @q + N';';
+-- Worksheet Registration: the legacy parameterized procedures its save calls through the genisis.WS_Insert_WS_* synonyms
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_Claim_2012 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimOthers_Jul08 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimLimit TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimActual TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimApprove TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimHOS TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimMBM TO ' + @q + N';';
 EXEC (@s);
 GO
 

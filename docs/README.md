@@ -19,6 +19,7 @@ meets the brief, only partly meets it, or does not meet it yet.
 | CI/CD with automated linting, testing and build validation | `Genisis/.github/workflows/ci.yml`, `GenisisUI/.github/workflows/ci.yml` |
 | Invoice Processing (`frmInvoice`) and Worksheet Registration: how an invoice reaches a worksheet, the checks and procedures, data findings, plan | [invoice-processing.md](invoice-processing.md) |
 | Invoice menu, the other four required items: Original Invoice Update, Invoice MBM Accounting, Invoice HOS Accounting, Invoice Tracking (what the desktop does, what differs and why, the figures that change) | [invoice-screens.md](invoice-screens.md) |
+| Deploying the API and UI to Railway as one container (the Dockerfile, the variables, the SQL login and the way to the database, what was and was not checked, rollback) | [deployment-railway.md](deployment-railway.md) |
 | Per-module behaviour notes and intentional deviations | [case-registration-migration.md](case-registration-migration.md), [case-adjustment-migration.md](case-adjustment-migration.md), [case-remaining-screens-ui.md](case-remaining-screens-ui.md), [case-remaining-screens-backend.md](case-remaining-screens-backend.md), [worksheet-screens.md](worksheet-screens.md) |
 
 ## Compliance with the brief

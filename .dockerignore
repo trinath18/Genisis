@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/logs/
+**/.vs/
+.git/
+.github/
+tests/
+docs/
+sql/
+tools/
+publish/
+*.md
+*.ps1

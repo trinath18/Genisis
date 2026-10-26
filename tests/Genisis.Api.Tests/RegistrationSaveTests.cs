@@ -1,5 +1,6 @@
 using System.Globalization;
 using Dapper;
+using Genisis.Api.Data;
 using Genisis.Api.Worksheet;
 using Genisis.Api.Worksheet.Calculation;
 using Genisis.Api.Worksheet.Engine;
@@ -214,11 +215,14 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         const string casChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, CASPending, CASReserveAmount)) FROM dbo.CAS";
         const string sameLimitChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, CLMBoardAmt, CLMServices, CLMBoardDays, CLMICUDays, CLMCashDays, CLMUndExcess, CLMPerDisLmt)) FROM genisis.WS_SameLimit";
         const string excessChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, EXCSequence)) FROM genisis.WS_ExcessSequence";
+        const string limitChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(MBMNumber, MBMAvailableLimit)) FROM dbo.MBM";
+        const string coveredChecksum = "SELECT CHECKSUM_AGG(CHECKSUM(MBMCNumber, MBMCCoverID, MBMCAvailableLimit)) FROM dbo.MBMCoveredPersons";
+        var limitsBefore = (await read.Connection.ExecuteScalarAsync<int?>(limitChecksum, transaction: read.Transaction, commandTimeout: 300), await read.Connection.ExecuteScalarAsync<int?>(coveredChecksum, transaction: read.Transaction, commandTimeout: 300));
         var checksumBefore = (await read.Connection.ExecuteScalarAsync<int?>(casChecksum, transaction: read.Transaction, commandTimeout: 300),
             await read.Connection.ExecuteScalarAsync<int?>(sameLimitChecksum, transaction: read.Transaction, commandTimeout: 300),
             await read.Connection.ExecuteScalarAsync<int?>(excessChecksum, transaction: read.Transaction, commandTimeout: 300));
 
-        int done = 0, cells = 0, cellsSame = 0, claimColumns = 0, claimSame = 0, others = 0, othersSame = 0;
+        int done = 0, cells = 0, cellsSame = 0, claimColumns = 0, claimSame = 0, others = 0, othersSame = 0, unsupportedVersions = 0;
         var misses = new List<string>();
         await using (var write = await TestDb.Sessions().BeginAsync())
         {
@@ -230,10 +234,19 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
                 var newVersion = next++;
                 var flat = saved.Flat;
                 var rows = saved.Rows(newVersion, sameLimit: saved.SameLimit(new WorksheetRows.LimitDays()));
+                if (await repository.CheckMemberBalanceAsync(write, rows) is { Unsupported: true })
+                {
+                    unsupportedVersions++;
+                    await Assert.ThrowsAsync<InvalidOperationException>(() => repository.WriteVersionAsync(write, rows));
+                    Assert.Equal(0, await write.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @newVersion", new { cas, newVersion }, write.Transaction));
+                    next--;
+                    continue;
+                }
                 var claimRow = rows.Claim;
                 var result = await repository.WriteVersionAsync(write, rows);
                 Assert.Equal(0, result.InvoicesMarked);
                 Assert.NotNull(result.SameLimitLeft);
+                Assert.NotNull(result.MemberBalance);
                 done++;
 
                 async Task<IDictionary<string, object?>> Row(string table, string versionColumn) =>
@@ -293,9 +306,11 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
             }
         }
 
+        output.WriteLine($"{unsupportedVersions} versions of unsupported kinds were refused before anything was written");
         output.WriteLine($"{done} versions written: {cellsSame} of {cells} grid cells, {claimSame} of {claimColumns} Claim columns and {othersSame} of {others} ClaimOthers columns read back as built");
         foreach (var line in misses) output.WriteLine("  " + line);
         Assert.True(done >= 100, $"only {done} versions could be written");
+        Assert.True(unsupportedVersions > 0, "no worksheet of an unsupported kind (a lifetime plan, a top-up) was in the sample, so the refusal was not exercised");
         Assert.Equal(cells, cellsSame);
         Assert.Equal(claimColumns, claimSame);
         Assert.Equal(others, othersSame);
@@ -307,6 +322,7 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         Assert.Equal(checksumBefore, (await read.Connection.ExecuteScalarAsync<int?>(casChecksum, transaction: read.Transaction, commandTimeout: 300),
             await read.Connection.ExecuteScalarAsync<int?>(sameLimitChecksum, transaction: read.Transaction, commandTimeout: 300),
             await read.Connection.ExecuteScalarAsync<int?>(excessChecksum, transaction: read.Transaction, commandTimeout: 300)));
+        Assert.Equal(limitsBefore, (await read.Connection.ExecuteScalarAsync<int?>(limitChecksum, transaction: read.Transaction, commandTimeout: 300), await read.Connection.ExecuteScalarAsync<int?>(coveredChecksum, transaction: read.Transaction, commandTimeout: 300)));
     }
 
     /// <summary>
@@ -321,9 +337,9 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         await SqlScripts.EnsureDeployedAsync(mainDb);
         var repository = new RegistrationRepository();
         await using var read = await TestDb.Sessions().OpenAsync();
-        var candidate = await read.Connection.QueryFirstOrDefaultAsync<(string Cas, int Version, string? Family, string? Payor, string? Btbg, string? InvoiceNo, decimal InvoiceAmount)?>(
+        var pool = (await read.Connection.QueryAsync<(string Cas, int Version, string? Family, string? Payor, string? Btbg, string? InvoiceNo, decimal InvoiceAmount)>(
             """
-            SELECT TOP (1) RTRIM(c.CASNumber), c.ClaimVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2), RTRIM(v.MBMBTBG),
+            SELECT TOP (60) RTRIM(c.CASNumber), c.ClaimVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2), RTRIM(v.MBMBTBG),
                    (SELECT TOP (1) RTRIM(i.INVNo) FROM genisis.WS_ClaimInvoice i WHERE i.CASNumber = c.CASNumber AND i.INVPayTo = 'H' ORDER BY i.INVIndex),
                    (SELECT TOP (1) i.INVAmount FROM genisis.WS_ClaimInvoice i WHERE i.CASNumber = c.CASNumber AND i.INVPayTo = 'H' ORDER BY i.INVIndex)
             FROM genisis.WS_Claim c JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = c.CASNumber AND v.ClaimVersion = c.ClaimVersion
@@ -336,10 +352,18 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
               AND EXISTS (SELECT 1 FROM genisis.WS_ClaimLimit l WHERE l.CASNumber = c.CASNumber AND l.CLMVersion = c.ClaimVersion)
               AND EXISTS (SELECT 1 FROM genisis.WS_ClaimActual a WHERE a.CASNumber = c.CASNumber AND a.CLMVersion = c.ClaimVersion)
             ORDER BY c.CASNumber DESC
-            """, transaction: read.Transaction, commandTimeout: 120);
-        Assert.NotNull(candidate);
-        var (cas, version, family, payor, btbg, invoiceNo, invoiceAmount) = candidate.Value;
-        var saved = await SavedVersion.ReadAsync(read, cas, version, family, payor, btbg);
+            """, transaction: read.Transaction, commandTimeout: 120)).ToList();
+        string cas = "", btbg = "";
+        string? invoiceNo = null;
+        decimal invoiceAmount = 0m;
+        SavedVersion? saved = null;
+        foreach (var (poolCas, poolVersion, family, payor, poolBtbg, poolInvoiceNo, poolInvoiceAmount) in pool)
+        {
+            var candidateVersion = await SavedVersion.ReadAsync(read, poolCas, poolVersion, family, payor, poolBtbg);
+            if (candidateVersion is null || await repository.CheckMemberBalanceAsync(read, candidateVersion.Rows(9001)) is not { Unsupported: false }) continue;
+            (cas, btbg, invoiceNo, invoiceAmount, saved) = (poolCas, poolBtbg ?? "", poolInvoiceNo, poolInvoiceAmount, candidateVersion);
+            break;
+        }
         Assert.NotNull(saved);
         var letter = new ExcessLetterInput { CaseNo = cas, UserCode = "E2E", Today = new DateTime(2026, 10, 24), InvoiceNo = invoiceNo, HospitalInvoiceAmount = invoiceAmount, MemberBtbg = btbg == "Y" };
         var sequenceBefore = await read.Connection.ExecuteScalarAsync<int?>("SELECT EXCSequence FROM genisis.WS_ExcessSequence WHERE CASNumber = @cas", new { cas }, read.Transaction);
@@ -392,9 +416,9 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         await SqlScripts.EnsureDeployedAsync(mainDb);
         var repository = new RegistrationRepository();
         await using var read = await TestDb.Sessions().OpenAsync();
-        var candidate = await read.Connection.QueryFirstOrDefaultAsync<(string Cas, int Version, string? Family, string? Payor, string? Btbg)?>(
+        var pool = (await read.Connection.QueryAsync<(string Cas, int Version, string? Family, string? Payor, string? Btbg)>(
             """
-            SELECT TOP (1) RTRIM(c.CASNumber), c.ClaimVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2), RTRIM(v.MBMBTBG)
+            SELECT TOP (60) RTRIM(c.CASNumber), c.ClaimVersion, LEFT(RTRIM(CASE WHEN v.MBMPatientCovID <> N'00' AND ISNULL(RTRIM(v.MBMCPLNCode), N'') <> N'' THEN v.MBMCPLNCode ELSE v.PLNCode END), 1), LEFT(RTRIM(v.PAYCode), 2), RTRIM(v.MBMBTBG)
             FROM genisis.WS_Claim c JOIN dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v ON v.CASNumber = c.CASNumber AND v.ClaimVersion = c.ClaimVersion
             WHERE c.ClaimVersion = 1 AND c.ClaimStatus = 'C' AND c.ClaimOpenDate >= '2020-07-01' AND c.CASNumber NOT LIKE 'ZZ%'
               AND NOT EXISTS (SELECT 1 FROM genisis.WS_SameLimit s WHERE s.CASNumber = c.CASNumber)
@@ -405,10 +429,17 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
               AND EXISTS (SELECT 1 FROM genisis.WS_ClaimActual a WHERE a.CASNumber = c.CASNumber AND a.CLMVersion = c.ClaimVersion)
               AND (SELECT CASE WHEN ISNUMERIC(l.CLMBoardDays) = 1 THEN CONVERT(decimal(18, 2), l.CLMBoardDays) ELSE 0 END FROM genisis.WS_ClaimLimit l WHERE l.CASNumber = c.CASNumber AND l.CLMVersion = c.ClaimVersion) > 0
             ORDER BY c.CASNumber DESC
-            """, transaction: read.Transaction, commandTimeout: 120);
-        Assert.NotNull(candidate);
-        var (cas, version, family, payor, btbg) = candidate.Value;
-        var saved = await SavedVersion.ReadAsync(read, cas, version, family, payor, btbg);
+            """, transaction: read.Transaction, commandTimeout: 120)).ToList();
+        string cas = "";
+        int version = 0;
+        SavedVersion? saved = null;
+        foreach (var (poolCas, poolVersion, family, payor, btbg) in pool)
+        {
+            var candidateVersion = await SavedVersion.ReadAsync(read, poolCas, poolVersion, family, payor, btbg);
+            if (candidateVersion is null || await repository.CheckMemberBalanceAsync(read, candidateVersion.Rows(9001)) is not { Unsupported: false }) continue;
+            (cas, version, saved) = (poolCas, poolVersion, candidateVersion);
+            break;
+        }
         Assert.NotNull(saved);
         var benefits = await new PlanBenefitRepository().BenefitsAsync(read, cas, version);
         decimal PlanDays(string code) => SavedVersion.Number(benefits.FirstOrDefault((b) => b.Code.Trim() == code)?.Days);
@@ -432,6 +463,83 @@ public class RegistrationSaveDatabaseTests(ITestOutputHelper output)
         }
 
         Assert.Equal(0, await read.Connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM genisis.WS_SameLimit WHERE CASNumber = @cas", new { cas }, read.Transaction));
+    }
+
+    /// <summary>
+    /// The member's available limit: over a pool of recent cases the procedure is asked, without writing, which record each would draw on; for one case of every kind of limit and record found the limit is then
+    /// reduced inside a transaction and the record is read back (the final approve taken off, never below 0), nothing else of the member changes, and the rollback leaves the member as it was. A case of each
+    /// reason for leaving the limit alone is found and shown not to write.
+    /// </summary>
+    [Fact]
+    public async Task The_final_approve_is_taken_off_the_record_the_plan_names_and_nothing_else_of_the_member_changes()
+    {
+        var mainDb = TestDb.MainDb;
+        if (mainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(mainDb);
+        await using var read = await TestDb.Sessions().OpenAsync();
+        var pool = (await read.Connection.QueryAsync<(string Cas, int Version)>(
+            """
+            SELECT TOP (3000) RTRIM(c.CASNumber), c.ClaimVersion FROM genisis.WS_Claim c
+            WHERE c.ClaimVersion <> 0 AND c.ClaimStatus = 'C' AND c.ClaimOpenDate >= '2021-02-01' AND c.CASNumber NOT LIKE 'ZZ%' AND c.CLMFinalApprove > 0
+            ORDER BY ABS(CHECKSUM(c.CASNumber, c.ClaimVersion))
+            """, transaction: read.Transaction, commandTimeout: 120)).ToList();
+        Assert.True(pool.Count >= 1000, $"only {pool.Count} cases in the pool");
+
+        var byRecord = new Dictionary<string, (string Cas, int Version, MemberBalanceResult Plan)>();
+        var byReason = new Dictionary<string, (string Cas, int Version)>();
+        foreach (var (cas, version) in pool)
+        {
+            var dry = await read.Connection.ProcFirstOrDefaultAsync<MemberBalanceResult>("genisis.WorksheetSave_MemberBalance", new { cas, version, apply = false }, read.Transaction);
+            if (dry is null) continue;
+            if (dry.Reason is null) byRecord.TryAdd($"{dry.LimitKind} {(dry.Record!.StartsWith("MBMCovered", StringComparison.Ordinal) ? "covered person" : "member")}", (cas, version, dry));
+            else byReason.TryAdd(dry.Reason, (cas, version));
+        }
+        foreach (var key in byRecord.Keys) output.WriteLine($"found: {key}");
+        foreach (var key in byReason.Keys) output.WriteLine($"leaves the limit alone: {key}");
+        Assert.Contains("A member", byRecord.Keys);
+        Assert.Contains("C covered person", byRecord.Keys);
+        Assert.Contains("the claim is not accepted", byReason.Keys);
+        Assert.Contains("a lifetime plan is not supported", byReason.Keys);
+
+        async Task<(List<(string Id, decimal? Limit)> Records, int Total)> Snapshot(Microsoft.Data.SqlClient.SqlConnection connection, Microsoft.Data.SqlClient.SqlTransaction? transaction, string cas)
+        {
+            var mbm = await connection.ExecuteScalarAsync<string>("SELECT RTRIM(MBMNumber) FROM dbo.CAS WHERE CASNumber = @cas", new { cas }, transaction);
+            var rows = (await connection.QueryAsync<(string Id, decimal? Limit)>(
+                "SELECT 'MBM', MBMAvailableLimit FROM dbo.MBM WHERE RTRIM(MBMNumber) = @mbm UNION ALL SELECT 'CP ' + RTRIM(MBMCCoverID), MBMCAvailableLimit FROM dbo.MBMCoveredPersons WHERE RTRIM(MBMCNumber) = @mbm", new { mbm }, transaction)).OrderBy((r) => r.Id, StringComparer.Ordinal).ToList();
+            return (rows, rows.Count);
+        }
+
+        foreach (var (key, (cas, version, plan)) in byRecord)
+        {
+            var before = await Snapshot(read.Connection, read.Transaction, cas);
+            await using (var write = await TestDb.Sessions().BeginAsync())
+            {
+                var done = await write.Connection.ProcFirstOrDefaultAsync<MemberBalanceResult>("genisis.WorksheetSave_MemberBalance", new { cas, version, apply = true }, write.Transaction);
+                Assert.True(done!.Applied, key);
+                Assert.Equal(plan.After, done.After);
+                var afterRows = (await Snapshot(write.Connection, write.Transaction, cas)).Records;
+                var target = done.Record == "MBM" ? "MBM" : "CP " + done.Record!.Split(' ')[1];
+                foreach (var (id, limit) in afterRows)
+                {
+                    var was = before.Records.First((r) => r.Id == id).Limit;
+                    if (id == target) Assert.Equal(done.After, limit);
+                    else Assert.Equal(was, limit);
+                }
+                Assert.Equal(Math.Max((plan.Before ?? 0m) - (plan.FinalApprove ?? 0m), 0m), done.After);
+            }
+            Assert.Equal(before.Records, (await Snapshot(read.Connection, read.Transaction, cas)).Records);
+        }
+
+        foreach (var (reason, (cas, version)) in byReason)
+        {
+            var before = await Snapshot(read.Connection, read.Transaction, cas);
+            await using (var write = await TestDb.Sessions().BeginAsync())
+            {
+                var done = await write.Connection.ProcFirstOrDefaultAsync<MemberBalanceResult>("genisis.WorksheetSave_MemberBalance", new { cas, version, apply = true }, write.Transaction);
+                Assert.False(done!.Applied && done.Reason is not null, reason);
+                Assert.Equal(before.Records, (await Snapshot(write.Connection, write.Transaction, cas)).Records);
+            }
+        }
     }
 
     /// <summary>The routines that update rows other than the version's own: the invoices of a version, the case's pending flag and its reserve.</summary>

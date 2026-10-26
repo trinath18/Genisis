@@ -42,21 +42,39 @@ public sealed record WorksheetVersionRows(
     public bool Void => Convert.ToString(Claim["CLMWSStatus"])?.Trim() == ClaimVersionRow.VoidStatus;
 }
 
+/// <summary>What <c>UpdateMBMBalance</c> did to the member's available limit.</summary>
+/// <param name="Reason">Why the limit was not touched (the claim is not accepted, a top-up member, a lifetime plan, no annual limit, a kind D limit...), or <c>null</c> when it was.</param>
+/// <param name="Record">Whose limit: <c>MBM</c> or <c>MBMCoveredPersons</c> and the cover.</param>
+/// <param name="LimitKind">The plan's kind of limit: A, B, C or D.</param>
+/// <param name="FinalApprove">What the worksheet approved.</param>
+/// <param name="Before">The available limit before.</param>
+/// <param name="After">The available limit after (never below 0).</param>
+/// <param name="Applied">The limit was written.</param>
+/// <param name="Unsupported">The worksheet is of a kind the save cannot do yet (a top-up member, a lifetime plan, a take-over case, a kind D limit, a member without the limit record): the save refuses it.</param>
+public sealed record MemberBalanceResult(string? Reason, string? Record, string? LimitKind, decimal? FinalApprove, decimal? Before, decimal? After, bool Applied, bool Unsupported);
+
 /// <summary>What writing a version changed besides its own rows.</summary>
 /// <param name="InvoicesMarked">Invoices of the version marked as worksheeted.</param>
 /// <param name="ExcessNumber">The number the excess sequence gave (<c>E</c>, the case, a dash and the sequence), or <c>null</c> when the worksheet leaves no excess.</param>
 /// <param name="ExcessLetterAdded">The case had no excess letter and one was added.</param>
 /// <param name="SameLimitLeft">What the case has left after the worksheet (days and undertaking), or <c>null</c> when the rows carry no same-limit input.</param>
-public sealed record RegistrationWriteResult(int InvoicesMarked, string? ExcessNumber = null, bool ExcessLetterAdded = false, SameLimitLeft? SameLimitLeft = null);
+/// <param name="MemberBalance">What was done to the member's available limit.</param>
+public sealed record RegistrationWriteResult(int InvoicesMarked, string? ExcessNumber = null, bool ExcessLetterAdded = false, SameLimitLeft? SameLimitLeft = null, MemberBalanceResult? MemberBalance = null);
 
 /// <summary>Writes the rows of a worksheet version, in the order of the desktop's save, inside the caller's transaction. Nothing here commits.</summary>
 public interface IRegistrationRepository
 {
     /// <summary>
     /// <c>SaveClaim</c>, <c>SaveClaimRemarks</c>, <c>saveLimit</c>, <c>saveActual</c>, <c>saveActualGST</c>, <c>saveApprove</c>, <c>saveHos</c>, <c>saveMember</c>, <c>savePayMBMStatus</c>, <c>saveExcessLetter</c> and
-    /// <c>saveSameLimit</c> (<c>saveApproveGST</c> is not run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c> and <c>UpdateCasReserve</c>.
+    /// <c>saveSameLimit</c> (<c>saveApproveGST</c> is not run: no worksheet saved since 2019 has its GST approve row), then <c>UpdateInvoice</c>, <c>UpdateCasReserve</c> and <c>UpdateMBMBalance</c>.
     /// </summary>
     Task<RegistrationWriteResult> WriteVersionAsync(IDbSession session, WorksheetVersionRows rows);
+
+    /// <summary>
+    /// What the save would do to the member's available limit, worked out before anything is written. <c>Unsupported</c> in the result means the worksheet is of a kind the save cannot do yet (a top-up member, a lifetime
+    /// plan, a take-over case, a kind D limit): <see cref="WriteVersionAsync"/> refuses it, and so should the caller before asking the user to confirm.
+    /// </summary>
+    Task<MemberBalanceResult?> CheckMemberBalanceAsync(IDbSession session, WorksheetVersionRows rows);
 }
 
 /// <inheritdoc />
@@ -82,12 +100,17 @@ public sealed class RegistrationRepository : IRegistrationRepository
     }
 
     /// <inheritdoc />
+    public Task<MemberBalanceResult?> CheckMemberBalanceAsync(IDbSession session, WorksheetVersionRows rows) =>
+        session.Connection.ProcFirstOrDefaultAsync<MemberBalanceResult>("genisis.WorksheetSave_MemberBalance", new { cas = rows.CaseNo, version = rows.Version, apply = false, amount = Convert.ToDecimal(rows.Claim["CLMFinalApprove"], System.Globalization.CultureInfo.InvariantCulture) }, session.Transaction);
+
+    /// <inheritdoc />
     public async Task<RegistrationWriteResult> WriteVersionAsync(IDbSession session, WorksheetVersionRows rows)
     {
         var connection = session.Connection;
         var transaction = session.Transaction;
         var cas = rows.CaseNo;
         var version = rows.Version;
+        if (await CheckMemberBalanceAsync(session, rows) is { Unsupported: true } unsupported) throw new InvalidOperationException($"The worksheet of {cas} cannot be saved yet: {unsupported.Reason}.");
         await connection.ProcExecAsync("genisis.WS_Insert_WS_Claim_2012", Typed(rows.Claim), transaction);
         if (Convert.ToString(rows.Claim["CLMAccountNo"]) is { Length: > ProcedureAccountNoLength } accountNo)
             await connection.ProcScalarAsync<int>("genisis.WorksheetSave_SetAccountNo", new { cas, version, accountNo }, transaction);
@@ -138,6 +161,8 @@ public sealed class RegistrationRepository : IRegistrationRepository
         }
         var marked = await connection.ProcScalarAsync<int>("genisis.WorksheetSave_MarkInvoices", new { cas, version, @void = rows.Void }, transaction);
         await connection.ProcScalarAsync<int>("genisis.WorksheetSave_ClearReserve", new { cas }, transaction);
-        return new RegistrationWriteResult(marked, excessNumber, letterAdded, left);
+        var balance = await connection.ProcFirstOrDefaultAsync<MemberBalanceResult>("genisis.WorksheetSave_MemberBalance", new { cas, version, apply = true }, transaction);
+        await connection.ProcScalarAsync<int>("genisis.WorksheetSave_PreviousUndertaking", new { cas, version, amount = left?.UndertakingExcess ?? 0m }, transaction);
+        return new RegistrationWriteResult(marked, excessNumber, letterAdded, left, balance);
     }
 }

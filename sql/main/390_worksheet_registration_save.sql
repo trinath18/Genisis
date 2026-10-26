@@ -317,3 +317,88 @@ BEGIN
     FROM genisis.WS_SameLimit WHERE CASNumber = @cas;
 END
 GO
+
+-- UpdateMBMBalance (a member that is not a top-up and not on a lifetime plan): the worksheet's final approve is taken off the available limit of the member or covered person it draws on, never below 0.
+-- Whose limit that is follows the kind of limit of the plan (AnnualLimit.SuppLimitStatus): A one limit for the member whoever the patient is; B one for the principal (patient 00) and one for all the
+-- dependants together (cover 01); C one for each patient (the principal's is the member's). A member of type P always draws on the member's own limit. The source of the desktop works the limit out again as
+-- the plan's limit less the sum of every claim of the member (Claim_GetAnnLimit, a raw WHERE text, never called here) and only for a plan whose supplementary limit is above zero; the desktop in use does not:
+-- over the 2,907 pairs of consecutive claims of one limit, the next claim's saved previous balance equals the earlier one's less its final approve in 80 per cent (kind A), 94 (B) and 86 (C) of the claims of plans
+-- with a supplementary limit, and in 93 and 75 per cent of those without, but equals limit less the sum of earlier claims in 71 per cent. It is not done for a claim that is repudiated, cancelled, not decided or
+-- pay-and-claim rejected, for a plan without an annual limit (the AnnLmtInd of the plan, except for health type S), or for kind D (a dependant on the supplementary limit; 1 of 29 pairs follow the rule).
+-- With @apply = 0 nothing is written. One row comes back: Reason (NULL when the limit applies), the record and the figures, Applied (a write was made) and Unsupported (the worksheet is of a kind the save cannot do yet: top-up,
+-- lifetime plan, take-over, kind D). The desktop's UpdateMBMLifeTimeBal, UpdateMBMBnfBal (lifetime plans only), UpdateCASTakeOverLmt and the top-up routines are not ported: the lifetime balance of 694 consecutive claims
+-- follows no simple rule (20 equal the earlier balance less its final approve), 8 cases have ever been take-over cases, and no saved worksheet has a top-up.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_MemberBalance
+    @cas nvarchar(30), @version int, @apply bit = 1, @amount money = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @mbm nvarchar(30), @patient nvarchar(2), @memType nvarchar(2), @plan nvarchar(20), @ins nvarchar(20), @hlt nvarchar(5), @annInd nvarchar(2), @admitted datetime,
+            @claimability nvarchar(2), @topup nvarchar(2), @lifetime nvarchar(2), @takeOver nvarchar(2);
+    -- the case's member, patient and plan, as VIEW_Claim_MBM_Case_worksheetAdjustment joins them, but from the base tables: the view starts from the version row, which may not be written yet
+    SELECT TOP (1) @mbm = RTRIM(cs.MBMNumber), @patient = RTRIM(cs.MBMPatientCovID), @memType = RTRIM(m.MBMMemberType),
+           @plan = RTRIM(CASE WHEN RTRIM(cs.MBMPatientCovID) <> '00' AND ISNULL(RTRIM(cp.MBMCPLNCode), '') <> '' THEN cp.MBMCPLNCode ELSE m.PLNCode END), @ins = RTRIM(m.INSCode), @hlt = RTRIM(m.HLTCode),
+           @annInd = RTRIM(pln.AnnLmtIND), @admitted = cs.CASDateAdmitted, @claimability = RTRIM(cs.CASClaimability), @topup = RTRIM(m.MBMTopupInd), @lifetime = RTRIM(pln.PLNLifeTimeStatus),
+           @takeOver = RTRIM(cs.CASTakeOverInd)
+    FROM dbo.CAS cs JOIN dbo.MBM m ON m.MBMNumber = cs.MBMNumber
+    LEFT JOIN dbo.MBMCoveredPersons cp ON cp.MBMCNumber = cs.MBMNumber AND cp.MBMCCoverID = cs.MBMPatientCovID
+    LEFT JOIN dbo.PLN pln ON pln.PLNCode = m.PLNCode
+    WHERE cs.CASNumber = @cas;
+
+    DECLARE @status nvarchar(2), @finalApprove money;
+    SELECT TOP (1) @status = RTRIM(a.SuppLimitStatus) FROM dbo.AnnualLimit a WHERE a.PLNCode = @plan AND a.INSCode = @ins AND a.AnnualEffDate <= @admitted ORDER BY a.AnnualEffDate DESC;
+    -- @amount is what the worksheet approves when its version row is not written yet (the check made before anything is written); otherwise the version row is read.
+    SET @finalApprove = @amount;
+    IF @finalApprove IS NULL SELECT @finalApprove = ISNULL(CLMFinalApprove, 0) FROM genisis.WS_Claim WHERE CASNumber = @cas AND ClaimVersion = @version;
+    -- What the save cannot do yet is marked Unsupported (the save refuses such a worksheet and writes nothing); the others are cases where the desktop leaves the limit alone.
+    DECLARE @unsupported bit = 0;
+    DECLARE @reason nvarchar(60) = CASE
+        WHEN @mbm IS NULL THEN N'the case has no member'
+        WHEN @finalApprove IS NULL THEN N'the version has no claim row'
+        WHEN @claimability IN ('RR', 'CC', 'NN', 'NR', 'PR') THEN N'the claim is not accepted'
+        WHEN @topup = 'Y' THEN N'a top-up member is not supported'
+        WHEN @lifetime = 'Y' THEN N'a lifetime plan is not supported'
+        WHEN @takeOver = 'Y' THEN N'a take-over case is not supported'
+        WHEN @status IS NULL THEN N'the plan has no annual limit row'
+        WHEN @hlt <> 'S' AND @annInd = 'N' THEN N'the plan has no annual limit'
+        WHEN @status = 'D' THEN N'a kind D limit is not supported'
+        WHEN @status NOT IN ('A', 'B', 'C') THEN N'an unknown kind of limit' END;
+    IF @reason IN (N'the version has no claim row', N'a top-up member is not supported', N'a lifetime plan is not supported', N'a take-over case is not supported', N'a kind D limit is not supported', N'an unknown kind of limit') SET @unsupported = 1;
+
+    DECLARE @new money, @record nvarchar(20), @before money, @cover nvarchar(2);
+    IF @reason IS NULL
+    BEGIN
+        SET @record = CASE WHEN @memType = 'P' OR @patient = '00' THEN N'MBM' WHEN @status = 'B' THEN N'MBMCoveredPersons 01' WHEN @status = 'C' THEN N'MBMCoveredPersons ' + @patient ELSE N'MBM' END;
+        SET @cover = CASE WHEN @status = 'B' THEN '01' ELSE @patient END;
+        IF @record = N'MBM' SELECT @before = MBMAvailableLimit FROM dbo.MBM WHERE RTRIM(MBMNumber) = @mbm;
+        ELSE SELECT @before = MBMCAvailableLimit FROM dbo.MBMCoveredPersons WHERE RTRIM(MBMCNumber) = @mbm AND RTRIM(MBMCCoverID) = @cover;
+        IF @before IS NULL
+        BEGIN
+            SET @reason = N'the member has no available limit to take it off';
+            SET @unsupported = 1;
+        END
+        ELSE
+        BEGIN
+            SET @new = CASE WHEN @before - @finalApprove <= 0 THEN 0 ELSE @before - @finalApprove END;
+            IF @apply = 1
+            BEGIN
+                IF @record = N'MBM' UPDATE dbo.MBM SET MBMAvailableLimit = @new WHERE RTRIM(MBMNumber) = @mbm;
+                ELSE UPDATE dbo.MBMCoveredPersons SET MBMCAvailableLimit = @new WHERE RTRIM(MBMCNumber) = @mbm AND RTRIM(MBMCCoverID) = @cover;
+            END
+        END
+    END
+    SELECT @reason AS Reason, @record AS Record, @status AS LimitKind, @finalApprove AS FinalApprove, @before AS Before, @new AS After, CAST(CASE WHEN @reason IS NULL AND @apply = 1 THEN 1 ELSE 0 END AS bit) AS Applied, @unsupported AS Unsupported;
+END
+GO
+
+-- UpdateUnderWriting: the excess undertaking the case had before the worksheet is kept on the version row (Claim.CLMPreviousUndExcess): what the case's same-limit row held, or the member's own for a case
+-- without one. Zero in 33,664 of the 33,718 versions saved since July 2020 (empty in 54). Returns how many version rows were changed.
+CREATE OR ALTER PROCEDURE genisis.WorksheetSave_PreviousUndertaking
+    @cas nvarchar(30), @version int, @amount money
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE genisis.WS_Claim SET CLMPreviousUndExcess = @amount WHERE CASNumber = @cas AND ClaimVersion = @version;
+    SELECT @@ROWCOUNT;
+END
+GO

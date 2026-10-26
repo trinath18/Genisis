@@ -268,8 +268,29 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   that have none and check the second save (the sequence moves on, the letter stays, the days are taken off what is left).
   **A caution for whoever edits the test file with an editor tool: the CAS checksum guard of that test was lost once between two commits and had to be put back; a script that reads, changes and writes the file is safe.**
 
+* **The member's available limit** (`UpdateMBMBalance`, `genisis.WorksheetSave_MemberBalance`, run by the repository after `UpdateCasReserve`): the worksheet's final approve is taken off the available limit of the
+  record the plan's kind of limit (`AnnualLimit.SuppLimitStatus`) names, never below 0: A one limit for the member whoever the patient is; B the member's own for the principal (patient 00) and cover 01 of
+  `MBMCoveredPersons` for every dependant together; C the member's for the principal and the patient's own cover; a member of type P always draws on the member's own record. **The source of the desktop we have works
+  the limit out again** (the plan's limit less the sum of the member's `CLMFinalApprove` over every claim, through `Claim_GetAnnLimit`, which appends a raw WHERE text and is never called here; with a policy-year window
+  that uses today's year; and only when the plan's supplementary limit is above zero). **The desktop in use does not**, and the saved claims show it: over 2,907 pairs of consecutive claims of one limit (kind C, members
+  without a policy-year window) the next claim's saved previous balance equals the earlier one's previous balance less its final approve in 95.6 per cent, and equals the plan's limit less the sum of the earlier
+  claims in 70.8. Over a wider sample (3,089 members, kinds A to D), the next previous balance equals the earlier one less its final approve in 80 per cent (A), 94 (B) and 86 (C) of the claims of plans with a
+  supplementary limit above zero, and in 93 (A) and 75 per cent (C) of those without (so the gate on the supplementary limit does not apply), and in 1 of 29 for kind D. The remaining claims are limits changed by
+  something else (a renewal, an adjustment, a claim approved elsewhere).
+  **What the save refuses instead of guessing**: a worksheet of a top-up member, a lifetime plan (`PLNLifeTimeStatus` Y), a take-over case (`CASTakeOverInd` Y), a kind D limit, or a member without the limit record
+  gets `InvalidOperationException` before anything is written (`CheckMemberBalanceAsync` classifies it from the case, so it also works before the version row exists). The desktop does not touch the limit for a claim
+  that is repudiated, cancelled, not decided or pay-and-claim rejected, or for a plan without an annual limit, and neither does the save. **Of the 620 sampled versions 32 (5.2 per cent) are refused as lifetime plans or
+  similar**: that share of the real worksheets cannot be saved through the web until those routines are ported. `UpdateMBMLifeTimeBal` is not ported because the saved lifetime balance of 694 consecutive claims follows no simple
+  rule (20 equal the earlier balance less its final approve); `UpdateMBMBnfBal` runs for lifetime plans only and none of the 1,734 lifetime-plan versions saved since July 2020 has a home nursing amount;
+  `UpdateCASTakeOverLmt` concerns 8 cases ever; the top-up routines have no saved worksheet to be checked against. `UpdateUnderWriting` (`genisis.WorksheetSave_PreviousUndertaking`) keeps the undertaking on the
+  version row: zero in 33,664 of the 33,718 versions saved since July 2020.
+  **Checked** by a rolled-back write test over a pool of recent cases: the procedure is asked which record each would draw on, one case of every kind found (A member; B member and covered person; C member and
+  covered person) is reduced inside a transaction and read back (the final approve taken off, never below 0), nothing else of the member changes and the rollback leaves the member as it was; one case of each reason for
+  leaving the limit alone is shown not to write. The re-save of 620 versions refuses its 32 unsupported ones, writes the other 588 (141,708 grid, flag and same-limit cells, 32,928 `Claim` columns, 7,644 `ClaimOthers`
+  columns, all read back as built) and checks that the members' limits are as they were after the rollback.
+
 **Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
-the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: the member's balances (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
+the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: the lifetime, benefit, take-over and top-up balances (see above) (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
 `UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`), the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`) and, for top-up members, `SaveDuplClaim` in four databases.
 
 ## 5. Order of work, and how each step is checked

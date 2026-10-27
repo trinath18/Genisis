@@ -34,6 +34,8 @@ public static class WorksheetServiceCollectionExtensions
         services.AddSingleton<ICalculationRepository, CalculationRepository>();
         services.AddSingleton<IRegistrationRepository, RegistrationRepository>();
         services.AddScoped<CalculationService>();
+        services.AddSingleton<IRegistrationReadRepository, RegistrationReadRepository>();
+        services.AddScoped<RegistrationService>();
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();

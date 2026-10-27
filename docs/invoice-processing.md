@@ -289,9 +289,11 @@ excess, ex-gratia and the limit); `CLMPayableByMedix2H` + `2M` equals `CLMFinalA
   leaving the limit alone is shown not to write. The re-save of 620 versions refuses its 32 unsupported ones, writes the other 588 (141,708 grid, flag and same-limit cells, 32,928 `Claim` columns, 7,644 `ClaimOthers`
   columns, all read back as built) and checks that the members' limits are as they were after the rollback.
 
-**Not built, and why no endpoint writes yet.** Registration's save is 25 routines in one transaction (section 4b). A worksheet saved with only some of them would leave the case, the member's balances, the excess letter and
-the credit or debit note out of step with it, so nothing is written until the whole sequence can be. What is left, in the order the desktop runs it: the lifetime, benefit, take-over and top-up balances (see above) (`UpdateMBMBalance` is 606 lines, `UpdateMBMBalanceTU`, `UpdateClaimTopup`, `UpdateUnderWriting`, `UpdateMBMBnfBal`,
-`UpdateMBMLifeTimeBal`, `UpdateCASTakeOverLmt`), the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`) and, for top-up members, `SaveDuplClaim` in four databases.
+**Exposed 2026-10-26** as `GET` and `POST /api/worksheet/registration/{case}` (`docs/worksheet-screens.md`, "Worksheet Registration: Register"). The save is 25 routines in one transaction (section 4b), and a worksheet saved
+with only some of them would leave the case, the member's balances, the excess letter and the credit or debit note out of step with it. So the endpoint runs the routines above in one transaction and **refuses, before anything
+is written, the worksheets whose routines are not built**: a top-up member (`UpdateMBMBalanceTU`, `UpdateClaimTopup`, `SaveDuplClaim` in four databases), a lifetime plan (`UpdateMBMBnfBal`, `UpdateMBMLifeTimeBal`: the rule is
+supported by the saved data for the lifetime limit, 77 per cent, but not for the annual limit of those members), a take-over case (`UpdateCASTakeOverLmt`), a kind D limit, a plan with a limit for each disability and a linked
+case. **Not built and not refused**: the credit or debit note (`UpdateCreditDebit`, `HCreditDebit`): a worksheet that leaves the member a balance is saved without a note number and the result says so.
 
 ## 5. Order of work, and how each step is checked
 

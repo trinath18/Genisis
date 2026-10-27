@@ -110,6 +110,18 @@ public sealed class CalculationRepository : ICalculationRepository
 /// <summary>Rules of what the calculation screen tells the user about its figures.</summary>
 public static class CalculationRules
 {
+    /// <summary>The 29 rows of a calculated worksheet with the captions of the benefits and, when there are any, the limits saved with the version.</summary>
+    public static List<CalculationLine> Lines(WorksheetEvaluation grid, IReadOnlyDictionary<int, RowCaption> captions, IReadOnlyDictionary<int, string?> savedLimits) => grid.Lines.Select(l =>
+    {
+        captions.TryGetValue(l.Slot, out var caption);
+        savedLimits.TryGetValue(l.Slot, out var savedLimit);
+        return new CalculationLine
+        {
+            Slot = l.Slot, Category = caption?.Category, Benefit = caption?.Benefit ?? $"Row {l.Slot}", Limit = l.Limit, SavedLimit = savedLimit,
+            Actual = l.Actual, Approved = l.Approved, ToHospital = l.ToHospital, ToMember = l.ToMember,
+        };
+    }).ToList();
+
     /// <summary>
     /// The notes that say where a calculation cannot be trusted: no limit from the plan for a row that has an amount (the row is then shown as not covered, which can be wrong), and
     /// a plan that has no benefit rows at all.
@@ -152,18 +164,9 @@ public class CalculationService(IDbSessions sessions, ICalculationRepository rep
         var saved = await repository.SavedAsync(session, cas, chosen);
         var calculation = await calculator.CalculateAsync(cas, chosen, saved?.TotalApproved ?? 0m) ?? throw new NotFoundException(NotFound);
         var captions = (await repository.CaptionsAsync(session)).ToDictionary(c => c.Slot);
-        var savedLimits = (await engine.LimitsAsync(session, cas, chosen)).ToDictionary(l => l.Slot, l => l.LimitText);
+        var savedLimits = (await engine.LimitsAsync(session, cas, chosen)).ToDictionary(l => l.Slot, l => (string?)l.LimitText);
 
-        var lines = calculation.Grid.Lines.Select(l =>
-        {
-            captions.TryGetValue(l.Slot, out var caption);
-            savedLimits.TryGetValue(l.Slot, out var savedLimit);
-            return new CalculationLine
-            {
-                Slot = l.Slot, Category = caption?.Category, Benefit = caption?.Benefit ?? $"Row {l.Slot}", Limit = l.Limit, SavedLimit = savedLimit,
-                Actual = l.Actual, Approved = l.Approved, ToHospital = l.ToHospital, ToMember = l.ToMember,
-            };
-        }).ToList();
+        var lines = CalculationRules.Lines(calculation.Grid, captions, savedLimits);
         var final = calculation.Final;
         return new CalculationResult
         {

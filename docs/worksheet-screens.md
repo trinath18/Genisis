@@ -10,7 +10,7 @@ Worksheet Tracking. The other three (the top-level row, Generate Credit/Debit No
 | Worksheet Send to A/C | `mnuWSToAC` | `FrmWksSendToAC` | `/worksheet/send-to-accounts` | 24 | **Migrated** (phase 1) |
 | Worksheet Send to A/R | `mnuWSReturnCLM` | `FrmARRecFrCLM` | `/worksheet/send-to-ar` | 24 | **Migrated, reduced** (phase 1, see below) |
 | Worksheet Enquiry | `mnuWSEnq` | `frmWorksheetEnq` (about 20,000 lines) | `/worksheet/enquiry` | 13 | **Migrated, read-only** (phase 2, see below) |
-| Worksheet Registration | `mnuNewWorksheet` | `frmWorksheetRegGST2015` (22,253 code lines) | `/worksheet/registration` | 22 | Phase 3 (menu entry present, page not built) |
+| Worksheet Registration | `mnuNewWorksheet` | `frmWorksheetRegGST2015` (22,253 code lines) | `/worksheet/registration` | 22 | **Migrated for the ordinary worksheet** (Register tab: form and save, see "Worksheet Registration: Register"; refuses plans with a limit for each disability, linked cases, top-up, lifetime, take-over and kind D; no debit/credit note number yet), and the Recalculate tab |
 | Worksheet Adjustment | `mnuWSAdjust` | `frmWorksheetAdj2013` / `frmWorksheetAdjGST` (19,818 / 20,957 code lines) | `/worksheet/adjustment` | 23 | **Partly migrated** (phase 3: viewing and the Update button; Approve, notes and letters not yet, see below) |
 
 ## How the desktop wires these items (and what was decided)
@@ -481,12 +481,41 @@ that are not ported. A calculation therefore carries notes that name every row t
 `GET /api/worksheet/calculation/{case}?version=` (access position 22 or 23) and the **Worksheet Registration** page: enter a case, see its worksheet calculated from the invoices and the plan
 row by row (Benefits, Limit from the plan, Limit as saved, Actual, Approved, Payable to Hosp, Due to/(frm) Mem), the summary beside what the desktop saved (a figure that differs by a cent or more is in
 bold, and so is a limit whose effect differs from the saved one), the days summed from the invoices and the notes. It writes nothing. Page text: "Entering the invoices of a new worksheet and
-saving it are not available yet, so nothing is written here."
+saving it are not available yet, so nothing is written here." (This was the page's text before the Register tab; the Recalculate tab now says "To register the next worksheet of a case use the Register tab.")
 
 **Why a new worksheet cannot be registered yet.** Registration does not create invoices: it works on the invoices of the case, and opens the separate invoice form (`frmInvoice`, which is not
 on the Required list and is not migrated) to enter them; its own save writes the worksheet tables. Every invoice in the development database already belongs to a saved worksheet
 (`INVWSversion` is set on all 39,684), so there is no unregistered invoice to calculate or save, and nothing to test registering a new worksheet against but the saved rows. Registering a
 worksheet needs invoices to exist (entered in the desktop, or by an invoice screen once one is migrated), the calculation (done, 69 per cent) and the save below.
+
+### Worksheet Registration: Register (the form and the save)
+
+**Built 2026-10-26.** The Worksheet Registration page has two tabs: **Register** (new) and **Recalculate a saved worksheet** (the calculation page above, unchanged). Register works on the next worksheet of a case:
+
+* `GET /api/worksheet/registration/{case}` (position 22) is the form load: the case, member, patient, plan and hospital, the invoices entered for the next version (the case's last closed worksheet plus one,
+  `Invoice_NextVersion`), the worksheet worked out from them and the patient's plan (the same engine as the calculation page, now for a version that has no saved worksheet), the Room & Board and ICU days, the
+  starting values of the payment fields (a member-paid worksheet starts with the member's name, address, bank and account, the desktop's "Get Address" box; the last document is the latest invoice date), the 12
+  worksheet statuses, the banks, the states and the payment modes. `blocked` says why the save cannot do the worksheet.
+* `POST /api/worksheet/registration/{case}` is `cmdApprove_Click`: the desktop's checks in their order (`RegistrationChecks`; the first problem comes back as the message, the bank account's digit message with
+  it when it is the other), then, without `confirmed`, the question "Are you sure?" and nothing written; with `confirmed`, every row of the version in one transaction (`RegistrationRepository`: the version row
+  of `Claim`, `ClaimOthers`, the five grid tables and the GST copy, the pay-to-member flags, the excess letter, the same-limit row, the invoices marked, the reserve cleared, the member's available limit,
+  the undertaking). A worksheet already registered for that version is a conflict, and a version that has no invoice is refused ("Worksheet cannot be saved without any invoice!") even when confirmed.
+* The page asks the question, shows "Record Save: {case}-{version}", the excess letter number and the change to the member's limit when there are any, and what the save did not do.
+
+**Refused, with the reason on the form and the Register button disabled** (the checks before anything is written): a plan with a limit for each disability (7.8 per cent of the worksheets saved since July 2020:
+its previous limit comes from the case's earlier worksheets); a case linked to another case (4.9 per cent); and what the member-balance step cannot do: a top-up member, a lifetime plan (5.2 per cent), a
+take-over case, a kind D limit.
+
+**What the save does not do yet**: it issues no debit or credit note number (`UpdateCreditDebit`, `HCreditDebit`): the rule is not simple (9,260 of the 10,515 saved versions with a negative member total
+have no note) and is not ported, so the result says "No debit or credit note number was issued" when the worksheet leaves the member a balance; `saveApproveGST` is not written (no worksheet saved since 2019 has
+its row); the excess letter's BTBG allowances are not read (a BTBG member's letter lists only the rows the flags allow, and the flags are not read yet, so none); the collected-by choices, ex-gratia and case
+management fee are the values every saved worksheet has (member, none, zero).
+
+**Checked**: `WorksheetRegistrationRulesTests` (8 tests: the refusals, the starting values, the checks on what the form holds in the desktop's order, the statuses, the plan's days) and
+`WorksheetRegistrationDatabaseTests` (2 tests, in one transaction that is rolled back: a real case gets an invoice through Invoice Processing's own save, the form is loaded, the status check, the question, the
+confirmed save writes the version row, the five grid tables, `ClaimOthers`, marks the invoice and changes the member's limit, a second save is refused, an unknown case is not found, and nothing is left
+afterwards); the browser suite `worksheet-registration.mjs` (39 checks: the form and the checks against the real API and data, the POST that would write intercepted and answered by the suite).
+Worksheet Adjustment's and Registration's payment fields are one component (`PaymentFields`).
 
 ### Approve: what the desktop does, and what is migrated
 

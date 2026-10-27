@@ -148,7 +148,7 @@ How to read the status column
 | # | Menu path | Control | Access pos | Opens (VB6) | Status | Web route |
 |---:|---|---|---:|---|---|---|
 | 1 | Worksheet | `Claim` |  |  | Not required (hidden in the desktop) |  |
-| 2 | Worksheet > Worksheet Registration | `mnuNewWorksheet` |  | frmWorksheetRegGST2015 (newest registration form in the project; no click handler) | Required, **partly migrated**: the calculation page only (nothing is saved, no invoice entry) |  |
+| 2 | Worksheet > Worksheet Registration | `mnuNewWorksheet` |  | frmWorksheetRegGST2015 (newest registration form in the project; no click handler) | Required, **migrated for the ordinary worksheet**: the Register tab (form and save) and the Recalculate tab; it refuses plans with a limit for each disability, linked cases, top-up, lifetime, take-over and kind D, and issues no debit or credit note number yet |  |
 | 3 | Worksheet > WorkSheet Adjustment | `mnuWSAdjust` | 23 |  | Migrated | `/worksheet/adjustment` |
 | 4 | Worksheet > Worksheet Enquiry | `mnuWSEnq` | 13 | frmWorksheetEnq | Migrated | `/worksheet/enquiry` |
 | 5 | Worksheet > Generate Credit/Debit Note | `mnuCreditDebitNote` |  |  | Not required (hidden in the desktop) |  |

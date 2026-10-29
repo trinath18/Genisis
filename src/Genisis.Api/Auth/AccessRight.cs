@@ -86,6 +86,12 @@ public static class AccessRight
     public const int WorksheetTracking = 24;
     public const int WorksheetEnquiry = 13;
     public const int WorksheetSendToAccounts = 24;
+
+    /// <summary>
+    /// Claim Bordx screens: position 15, the one Claim Bordx > Worksheet > Insert Worksheet checks (mnuGenerateBordx_Click; Print Bordx checks 17). The Bor Delivery, Monitoring, Approval and Storage items
+    /// have no click handler in the desktop, so a position is a decision: they are gated like the first item of the menu.
+    /// </summary>
+    public const int ClaimBordx = 15;
     public const int WorksheetSendToAr = 24;
 
     // Finance menu (mdiMain.frm): Invoice Receipt, Short Payment Receipt and Reverse Receipt check 9 (Invoice_Click, mnuInvRecAdj_Click,

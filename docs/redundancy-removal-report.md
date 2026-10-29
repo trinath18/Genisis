@@ -48,6 +48,7 @@ Headline items:
 | The same forms' `Stop` button and `intExit` flag, `Check All` button, `BordxNoArray` / `Arraycnt` bookkeeping, `m_blnDirection` sort flags | obsolete / replaced | removed; the grid's select-all, sorting and request cancellation | interrupt plumbing and hand-kept arrays of the single-threaded VB6 list |
 | `dbo.Bordx_Sent2Payor`, `dbo.Bordx_ReturnPayor`, `dbo.Bordx_Sent2AC` (dynamic SQL on a text `@strAppend`) | unsafe pattern | **not called** by the web; **left in the database** | the desktop still calls them; to be dropped with the desktop (section 5) |
 | `frmUploadBordxSentDate` (169 lines, one empty `cmdReturnDate_Click`) | dead form | not migrated | no code |
+| `FrmBordxRevise`: `WSNoArray` / `Arraycnt` bookkeeping, `m_blnDirection` sort flags, the `Form_Unload` that unloads itself, the `lblSearhCriteria` label | obsolete / replaced | removed | hand-kept arrays and a self-unload loop; the grid keeps the ticks and sorting |
 | Claim ASCII + Case ASCII (two near-identical forms) | duplicated UI | merged into one `AsciiExportForm` configured per screen | DRY; wording differences become configuration |
 | "File on PC" (`C:\`, `C:\CaseASCII\`) | desktop-only | replaced by a browser download | a browser cannot write to a local folder |
 | `cmdPrev` / `cmdNext` on Case Adjustment, redundant Member / Member No fields | obsolete | removed (user request) | search dialog replaces stepping; the case owns the member |

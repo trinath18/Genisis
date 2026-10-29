@@ -2,15 +2,15 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**56 of the 108 are built, 52 are not.** Nine of the 52 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 43 screens to build or to decide about.
+**57 of the 108 are built, 51 are not.** Nine of the 51 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 42 screens to build or to decide about.
 
 ## What the inventory found
 
-1. **Only 7 of the 52 have a click handler in `mdiMain.frm`** (Logout, Close Connection, Generate Invoice, Generate Invoice (Endorsement), Refund Listing, Print Bordx, Suspension). The desktop never opened the rest from the menu, so a form has to be matched to each by name and caption. Where that match is a guess it says so below, and the business should confirm it before the screen is built; building the wrong form would write the wrong columns.
+1. **Only 7 of the 51 have a click handler in `mdiMain.frm`** (Logout, Close Connection, Generate Invoice, Generate Invoice (Endorsement), Refund Listing, Print Bordx, Suspension). The desktop never opened the rest from the menu, so a form has to be matched to each by name and caption. Where that match is a guess it says so below, and the business should confirm it before the screen is built; building the wrong form would write the wrong columns.
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 52, by menu
+## The 51, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -38,13 +38,12 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | DCU Tracking > Claim Report | `FrmDCUReport1` / `FrmDCUReport2` (by name; no handler) | 17,593 / 17,591 | the largest forms in the project; a reporting screen |
 | Claim Pass to A/C | no match found by name | | business to name the form |
 
-### Claim Bordx (17 left; 5 built)
+### Claim Bordx (16 left; 6 built)
 
 Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delivery, Monitoring.
 
 | Item | Form (by name unless noted) | Size | Notes |
 |---|---|---:|---|
-| Worksheet > Remove Worksheet | `FrmBordxRevise` ("Bordereaux Revise") | 717 | uses `VIEW_BordxRevise`, `BordxWSArchive` |
 | Print Bordx | `FrmPrintBordx` (handler, position 17) | 1,656 | a report; `FrmPrintBordxEx`, `frmPrintBordxBSN` / `IBM` / `SPNB` are per-payor variants |
 | Print Recovery | `frmGenerateRecovery` ("Generate Recovery Listing") | 837 | |
 | Payment Advice > Generate Bordx No | `frmPayAdviceHosp` ("Payment Advice - Generate Bordx") | 2,455 | an AXA Affin copy exists (`PaymentAdviceBordxAXA`) |

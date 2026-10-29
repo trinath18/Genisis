@@ -7,6 +7,7 @@ Menu path: **Claim Bordx** (legacy `mdiMain.frm`, top menu `mnuFinance`'s siblin
 | Menu path | Legacy form | Web route | API | Status |
 |---|---|---|---|---|
 | Claim Bordx > Worksheet > Insert Worksheet | `FrmWksBordx` ("Select Worksheets for Bordx") | `/claim-bordx/insert-worksheet` | `/api/case/listing` | The same form Case > Inpatient Case Listing opens (`mnuGenerateBordx_Click` and `mnuAppCase_Click` both show `FrmWksBordx`), migrated with the Case module; this entry is a second door to it behind position 15 |
+| Claim Bordx > Worksheet > Remove Worksheet | `FrmBordxRevise` ("Bordereaux Revise") | `/claim-bordx/remove-worksheet` | `/api/claim-bordx/revise` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to Payor | `FrmSendtoPayor` ("Bordx Delivery") | `/claim-bordx/send-to-payor` | `/api/claim-bordx/delivery/to-payor` | Migrated |
 | Claim Bordx > Bor Delivery > Returned From Payor | `FrmReturnPayor` ("Bordx Delivery") | `/claim-bordx/returned-from-payor` | `/api/claim-bordx/delivery/from-payor` | Migrated (form chosen by name, see "Assumptions") |
 | Claim Bordx > Bor Delivery > Send to A/C | `FrmSendtoAC` ("Bordx Sent to A/C") | `/claim-bordx/send-to-accounts` | `/api/claim-bordx/delivery/to-accounts` | Migrated |
@@ -58,6 +59,16 @@ The four desktop forms are copies of one another: the same criteria block, the s
 - Position 15 for the items without a click handler (above).
 - A bordx has to be **sent to accounts before it can be returned from the payor** because `VIEW_BordxReturn_Pay` (what `Bordx_ReturnPayor` returns) keeps only those (`HAVING BordxSendtoACStatus = 1`). The form's own SQL comment says `BordxPAYToStatus = '1'` (sent to payor). The deployed procedure and view are what the desktop runs today, so they were followed.
 
+## Remove Worksheet (Bordereaux Revise)
+
+Look a bordx up by number (`genisis.BordxRevise_Search`, the old `dbo.BordxRevise`: the worksheets of the bordx with member and patient), tick the worksheets to take out of it and remove them (`genisis.BordxRevise_Remove`, the old `RemoveFromBordx`; file `sql/main/410_claim_bordx_revise.sql`, synonym `genisis.WS_BordxWSArchive`).
+
+- **Checks in the desktop's order:** `Please select a Bordx No` (Go), `No record found!`, `This Bordx has been sent out.` (the list is shown but Remove is disabled), then Remove: `You are going to remove a worksheet from current Bordereaux. Are you sure?`, `Record updated...`, and the form is cleared.
+- **What a removal writes, per worksheet:** the bordx loses one claim (`BordxNoClaims - 1`) and the worksheet's approved amount (`BordxClaimAmt`); a `BordxWSArchive` row records the case, version, bordx, bordx date, user and day; the worksheet's invoices are un-bordxed (`INVBordxRefNo = ''`, `INVBordxed = 0`); the worksheet is free (`ClaimBordxStatus = 0`, no bordx), and one that had already gone to the payor as an ASCII file (`CLMBordxWSASCII = 'Y'`) goes back to `'N'` with status `'D'`.
+- **Scan codes:** a code starting `LO` in the Bordx No box opens another screen, as in the other search screens; `LOB002` is this screen.
+- **Differences:** the whole removal is one transaction (the desktop ran each statement on its own); a bordx sent out, a worksheet that is not in the bordx and a bordx or worksheet that is gone are refused in the database too (the desktop only disabled the button); removing with nothing ticked says so (the desktop did nothing); the desktop took the bordx number for the archive row and the amounts from the screen's box and the claim count from the claim's own bordx, which are the same in practice and are checked to be the same here; the archive row's day is the server's.
+- **Data:** 19,318 of 19,780 bordx have worksheets, and for the 300 most recent every worksheet is listed (the procedure's inner joins to the cross-reference tables drop none). `BordxNoClaims` and `BordxClaimAmt` do **not** equal the count and sum of the claims for most of the older bordx in the development copy (3,039 of 19,556 agree on count), so the rule could not be compared with saved results; the rolled-back test checks each column the removal writes, the archive row, the un-bordxed invoices and the ASCII case, and a checksum of the four tables before and after.
+
 ## Data and verification
 
 The development database's 19,780 bordx are all in their first state (none sent to a payor or to accounts, none returned, none approved), so the screens could **not** be compared with saved results of the desktop. What was checked instead:
@@ -69,14 +80,14 @@ The development database's 19,780 bordx are all in their first state (none sent 
 
 ## Tests
 
-- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests).
-- UI: `bordxDeliveryRules.test.ts` (14 tests).
-- Browser: `e2e/claim-bordx-delivery.mjs` (56 checks: API, menu, the four pages, the update POSTs (intercepted, nothing is written), access).
+- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests) and `BordxReviseTests.cs` (13 tests the same way).
+- UI: `bordxDeliveryRules.test.ts` (14 tests) and `bordxReviseRules.test.ts` (5).
+- Browser: `e2e/claim-bordx-delivery.mjs` (75 checks: API, menu, the five pages, the update and removal POSTs (intercepted, nothing is written), scan code, access).
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/400_claim_bordx_delivery.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
-| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
-| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `bordxDeliveryRules.test.ts`), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |
+| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
+| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
+| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |

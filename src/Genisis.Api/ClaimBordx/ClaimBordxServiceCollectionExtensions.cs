@@ -1,4 +1,5 @@
 using Genisis.Api.ClaimBordx.Delivery;
+using Genisis.Api.ClaimBordx.Revise;
 
 namespace Genisis.Api.ClaimBordx;
 
@@ -10,6 +11,8 @@ public static class ClaimBordxServiceCollectionExtensions
     {
         services.AddSingleton<IBordxDeliveryRepository, BordxDeliveryRepository>();
         services.AddScoped<BordxDeliveryService>();
+        services.AddSingleton<IBordxReviseRepository, BordxReviseRepository>();
+        services.AddScoped<BordxReviseService>();
         return services;
     }
 }

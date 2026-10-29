@@ -34,12 +34,12 @@ How to read the status column
 | Payment | 27 | 15 | 0 | 14 | 4 |
 | Receipt | 6 | 5 | 0 | 4 | 1 |
 | Posting | 4 | 3 | 0 | 3 | 1 |
-| Maintenance | 24 | 16 | 10 | 6 | 13 |
+| Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **58** | **50** | **134** |
+| **Total** | **236** | **113** | **60** | **48** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 58 and 50. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 60 and 48. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -88,6 +88,8 @@ How to read the status column
 | Claim Bordx > Bor Delivery > Returned From Payor | `RetfrPay` | FrmReturnPayor (no click handler; chosen by name) | `/claim-bordx/returned-from-payor` | 15 * | `/api/claim-bordx/delivery/from-payor` |
 | Claim Bordx > Bor Delivery > Send to A/C | `mnuSentAC` | FrmSendtoAC (no click handler) | `/claim-bordx/send-to-accounts` | 15 * | `/api/claim-bordx/delivery/to-accounts` |
 | Claim Bordx > Bordx Approval | `mnuApproval` | FrmBordxApproval (no click handler) | `/claim-bordx/approval` | 15 * | `/api/claim-bordx/delivery/approval` |
+| Maintenance > Member | `MaintenanceOthers` | frmMaintenanceMembers (no click handler; chosen by name) | `/maintenance/member` | 1 * | `/api/maintenance/member-dates` |
+| Maintenance > Suspension | `Suspension` | frmSuspensionDetail | `/maintenance/suspension` | 27 | `/api/maintenance/suspension` |
 | Maintenance > Plan | `MaintenancePlan` | Plan maintenance forms | `/maintenance/plan` (tabs: Plan, Annual Limit, Premium, code lists, MCO fee, special note) | 1 | `/api/maintenance/{plans, annual-limits, premiums, code-lists, mco-fees, mgmt-fees, special-notes, benefit-limits}` |
 | Maintenance > Benefits | `mnuBenefits` | Benefits maintenance forms | `/maintenance/benefits` | 1 | `/api/maintenance/benefits` |
 
@@ -209,7 +211,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-50 items (recounted 2026-10-29). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+48 items (recounted 2026-10-29). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
@@ -225,7 +227,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Posting** (3): Invoice; Invoice > Hospital; Invoice > Member (Finance > SUN Posting is this form, built)
 
-**Maintenance** (6): Member; Panel Hospital Maintenance; Suspension; Company Info; Surgical Schedule; Security (its three children are built)
+**Maintenance** (4): Panel Hospital Maintenance; Company Info; Surgical Schedule; Security (its three children are built). Member and Suspension are built ([maintenance-screens.md](maintenance-screens.md)).
 
 ## Notes
 

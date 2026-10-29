@@ -59,6 +59,7 @@ public class BordxDeliveryRulesTests
     [InlineData(BordxDeliveryKinds.ToPayor, 'P', "to payor")]
     [InlineData(BordxDeliveryKinds.ToAccounts, 'A', "to accounts")]
     [InlineData(BordxDeliveryKinds.FromPayor, 'R', "as returned from the payor")]
+    [InlineData(BordxDeliveryKinds.Approval, 'V', "as approved")]
     public void The_route_names_map_to_the_codes_the_procedures_take(string kind, char code, string label) => Assert.Equal((code, label), (BordxDeliveryKinds.Code(kind), BordxDeliveryKinds.Label(kind)));
 
     [Fact]
@@ -207,6 +208,36 @@ public class BordxDeliveryDatabaseTests
 
         Assert.Equal(before, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxPAYDOCFRStatus, BordxPAYRecDocDate, BordxPAYRecDocBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120));
         Assert.Equal(claimsBefore, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, ClaimVersion, CLMAppStatus)) FROM genisis.WS_Claim", transaction: read.Transaction, commandTimeout: 120));
+    }
+
+    [Fact]
+    public async Task Approving_a_bordx_sets_its_three_approval_columns_lists_it_as_approved_and_a_second_approval_is_refused()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        await using var read = await TestDb.Sessions().OpenAsync();
+        var (payor, from, to) = await APayorWithBordxAsync(read);
+        var all = (await Repository.SearchAsync(read, 'V', new BordxDeliveryFilter { Payor = payor })).Count;
+        Assert.True(all > 1);
+        var before = await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxAppStatus, BordxAppDate, BordxAppBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120);
+
+        await using (var write = await TestDb.Sessions().BeginAsync())
+        {
+            var date = new DateTime(2026, 10, 7);
+            Assert.Equal(StoredProcedures.Ok, await Repository.SendAsync(write, 'V', from, date, "ZZTEST"));
+            var row = await write.Connection.QueryFirstAsync("SELECT BordxAppStatus, BordxAppDate, BordxAppBy, BordxPAYToStatus, BordxSendtoACStatus FROM genisis.WS_Bordx WHERE BordxRefNo = @from", new { from }, write.Transaction);
+            Assert.Equal((true, date, "ZZTEST", "0", false), ((bool)row.BordxAppStatus, (DateTime)row.BordxAppDate, ((string)row.BordxAppBy).Trim(), ((string)row.BordxPAYToStatus).Trim(), (bool)row.BordxSendtoACStatus));
+            Assert.Equal(StoredProcedures.Conflict, await Repository.SendAsync(write, 'V', from, date, "ZZTEST"));
+
+            var approved = await Repository.SearchAsync(write, 'V', new BordxDeliveryFilter { Payor = payor, Status = "1" });
+            var row0 = Assert.Single(approved);
+            Assert.Equal((from, true, date, "ZZTEST"), (row0.BordxNo, row0.Sent, row0.SentOn, row0.SentBy));
+            Assert.Equal(all - 1, (await Repository.SearchAsync(write, 'V', new BordxDeliveryFilter { Payor = payor, Status = "0" })).Count);
+            Assert.Equal(all, (await Repository.SearchAsync(write, 'V', new BordxDeliveryFilter { Payor = payor, Status = "2" })).Count);
+            Assert.NotEqual(to, from);
+        }
+
+        Assert.Equal(before, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxAppStatus, BordxAppDate, BordxAppBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120));
     }
 
     [Fact]

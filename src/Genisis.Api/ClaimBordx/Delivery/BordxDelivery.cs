@@ -5,7 +5,7 @@ using Genisis.Api.Worksheet;
 
 namespace Genisis.Api.ClaimBordx.Delivery;
 
-/// <summary>The steps of the delivery chain this screen family covers: a bordx sent to its payor (<c>FrmSendtoPayor</c>), sent to accounts (<c>FrmSendtoAC</c>) or returned by the payor (<c>FrmReturnPayor</c>).</summary>
+/// <summary>The steps of the delivery chain this screen family covers: a bordx sent to its payor (<c>FrmSendtoPayor</c>), sent to accounts (<c>FrmSendtoAC</c>), returned by the payor (<c>FrmReturnPayor</c>) or approved (<c>FrmBordxApproval</c>).</summary>
 public static class BordxDeliveryKinds
 {
     /// <summary>The route name of "Send to Payor".</summary>
@@ -17,14 +17,17 @@ public static class BordxDeliveryKinds
     /// <summary>The route name of "Returned From Payor".</summary>
     public const string FromPayor = "from-payor";
 
-    /// <summary>The route constraint the controller uses.</summary>
-    public const string RoutePattern = "{kind:regex(^(to-payor|to-accounts|from-payor)$)}";
+    /// <summary>The route name of "Bordx Approval".</summary>
+    public const string Approval = "approval";
 
-    /// <summary>The code the SQL procedures take for a route name: <c>P</c>, <c>A</c> or <c>R</c>.</summary>
-    public static char Code(string kind) => kind switch { ToPayor => 'P', FromPayor => 'R', _ => 'A' };
+    /// <summary>The route constraint the controller uses.</summary>
+    public const string RoutePattern = "{kind:regex(^(to-payor|to-accounts|from-payor|approval)$)}";
+
+    /// <summary>The code the SQL procedures take for a route name: <c>P</c>, <c>A</c>, <c>R</c> or <c>V</c>.</summary>
+    public static char Code(string kind) => kind switch { ToPayor => 'P', FromPayor => 'R', Approval => 'V', _ => 'A' };
 
     /// <summary>The name of the step in the messages.</summary>
-    public static string Label(string kind) => kind switch { ToPayor => "to payor", FromPayor => "as returned from the payor", _ => "to accounts" };
+    public static string Label(string kind) => kind switch { ToPayor => "to payor", FromPayor => "as returned from the payor", Approval => "as approved", _ => "to accounts" };
 }
 
 /// <summary>One bordx of the delivery list (a row of <c>lstBordxDelivery</c>).</summary>
@@ -45,7 +48,7 @@ public record BordxDeliveryRow
     /// <summary>Bordx status (C closed, R returned...).</summary>
     public string? BordxStatus { get; set; }
 
-    /// <summary>The screen's own step is done: sent to the payor, sent to accounts or returned from the payor.</summary>
+    /// <summary>The screen's own step is done: sent to the payor, sent to accounts, returned from the payor or approved.</summary>
     public bool Sent { get; set; }
 
     /// <summary>The date of that step.</summary>
@@ -118,7 +121,7 @@ public class BordxDeliveryFilter
     /// <summary>Date sent to accounts to (send to A/C only).</summary>
     public DateTime? SentTo { get; set; }
 
-    /// <summary>Status: <c>0</c> not sent (not returned), <c>1</c> sent (returned), <c>2</c> both (the screen starts on not sent).</summary>
+    /// <summary>Status: <c>0</c> not sent (not returned, not approved), <c>1</c> sent (returned, approved), <c>2</c> both (the screen starts on not sent).</summary>
     public string? Status { get; set; }
 }
 

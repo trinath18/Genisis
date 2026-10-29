@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Genisis.Api.Controllers;
 
-/// <summary>Claim Bordx > Bor Delivery > Send to Payor, Send to A/C and Returned From Payor (legacy FrmSendtoPayor, FrmSendtoAC and FrmReturnPayor): <c>kind</c> is <c>to-payor</c>, <c>to-accounts</c> or <c>from-payor</c>.</summary>
+/// <summary>Claim Bordx > Bor Delivery > Send to Payor, Send to A/C and Returned From Payor, and Claim Bordx > Bordx Approval (legacy FrmSendtoPayor, FrmSendtoAC, FrmReturnPayor and FrmBordxApproval): <c>kind</c> is <c>to-payor</c>, <c>to-accounts</c>, <c>from-payor</c> or <c>approval</c>.</summary>
 [Route("api/claim-bordx/delivery/" + BordxDeliveryKinds.RoutePattern)]
 [RequireAccess(AccessRight.ClaimBordx)]
 public class ClaimBordxDeliveryController(BordxDeliveryService service) : ApiControllerBase

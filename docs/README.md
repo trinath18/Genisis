@@ -21,7 +21,7 @@ meets the brief, only partly meets it, or does not meet it yet.
 | Invoice menu, the other four required items: Original Invoice Update, Invoice MBM Accounting, Invoice HOS Accounting, Invoice Tracking (what the desktop does, what differs and why, the figures that change) | [invoice-screens.md](invoice-screens.md) |
 | Deploying the API and UI to Railway as one container (the Dockerfile, the variables, the SQL login and the way to the database, what was and was not checked, rollback) | [deployment-railway.md](deployment-railway.md) |
 | Per-module behaviour notes and intentional deviations | [case-registration-migration.md](case-registration-migration.md), [case-adjustment-migration.md](case-adjustment-migration.md), [case-remaining-screens-ui.md](case-remaining-screens-ui.md), [case-remaining-screens-backend.md](case-remaining-screens-backend.md), [worksheet-screens.md](worksheet-screens.md), [claim-bordx-screens.md](claim-bordx-screens.md) |
-| What is still to build (the 51 Required items, with forms, sizes and open questions) | [remaining-work.md](remaining-work.md) |
+| What is still to build (the 50 Required items, with forms, sizes and open questions) | [remaining-work.md](remaining-work.md) |
 
 ## Compliance with the brief
 
@@ -77,7 +77,7 @@ Legend: **Met** — in place and verified · **Partly** — in place for part of
 
 An audit of the repositories against `script.txt` (every library, document, pipeline and rule above checked in the code, not from memory). What the brief asks for and this migration does **not** yet deliver:
 
-1. **"Preserve ALL existing functionality"** is met screen by screen, not for the whole application: 57 of the 108 Required screens (the business marked 113 menu items, five of them parent menus) are built, 51 are not (the backlog by module in [menu-mapping.md](menu-mapping.md), each item's form, size and open questions in [remaining-work.md](remaining-work.md); Claim Bordx 16, Payment 14, Maintenance 6, Contribution Billing 4, Receipt 4, Posting 3, and a few others).
+1. **"Preserve ALL existing functionality"** is met screen by screen, not for the whole application: 58 of the 108 Required screens (the business marked 113 menu items, five of them parent menus) are built, 50 are not (the backlog by module in [menu-mapping.md](menu-mapping.md), each item's form, size and open questions in [remaining-work.md](remaining-work.md); Claim Bordx 15, Payment 14, Maintenance 6, Contribution Billing 4, Receipt 4, Posting 3, and a few others).
 2. **The Worksheet module is not finished.** Migrated: Tracking, Send to A/C, Send to A/R, Enquiry, and Adjustment's Update, credit / debit notes, Excess letter and Final LG. **Registration saves ordinary worksheets only** (lifetime plans, plans with a limit for each disability, linked cases, top-up, take-over and kind D worksheets are refused; no debit or credit note number is issued) and **Adjustment's Approve is not built.** The calculation engine they need reproduces the desktop's saved totals for about 69 per cent of worksheets (measured on 819 of the 70,426 saved versions) from the invoices and the plan alone (measured, see [worksheet-screens.md](worksheet-screens.md) "Step 6"); the gap is the plan rules for benefits the plan's rows do not list, plus the Room & Board co-payment.
 3. **Linting is `oxlint`, not ESLint** (ESLint-compatible rules, 0 warnings); Prettier skips a documented list of older files.
 4. **No formal WCAG audit or colour-contrast measurement** has been run; the accessibility features listed above are in place.

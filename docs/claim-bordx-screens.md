@@ -10,6 +10,7 @@ Menu path: **Claim Bordx** (legacy `mdiMain.frm`, top menu `mnuFinance`'s siblin
 | Claim Bordx > Worksheet > Remove Worksheet | `FrmBordxRevise` ("Bordereaux Revise") | `/claim-bordx/remove-worksheet` | `/api/claim-bordx/revise` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to Payor | `FrmSendtoPayor` ("Bordx Delivery") | `/claim-bordx/send-to-payor` | `/api/claim-bordx/delivery/to-payor` | Migrated |
 | Claim Bordx > Bor Delivery > Returned From Payor | `FrmReturnPayor` ("Bordx Delivery") | `/claim-bordx/returned-from-payor` | `/api/claim-bordx/delivery/from-payor` | Migrated (form chosen by name, see "Assumptions") |
+| Claim Bordx > Bor Delivery > Returned Fr Payor (Not App) | `FrmReturnPayorCase` ("Bordx Delivery") | `/claim-bordx/returned-not-approved` | `/api/claim-bordx/return-case` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to A/C | `FrmSendtoAC` ("Bordx Sent to A/C") | `/claim-bordx/send-to-accounts` | `/api/claim-bordx/delivery/to-accounts` | Migrated |
 | Claim Bordx > Bordx Approval | `FrmBordxApproval` | `/claim-bordx/approval` | `/api/claim-bordx/delivery/approval` | Migrated |
 
@@ -69,25 +70,37 @@ Look a bordx up by number (`genisis.BordxRevise_Search`, the old `dbo.BordxRevis
 - **Differences:** the whole removal is one transaction (the desktop ran each statement on its own); a bordx sent out, a worksheet that is not in the bordx and a bordx or worksheet that is gone are refused in the database too (the desktop only disabled the button); removing with nothing ticked says so (the desktop did nothing); the desktop took the bordx number for the archive row and the amounts from the screen's box and the claim count from the claim's own bordx, which are the same in practice and are checked to be the same here; the archive row's day is the server's.
 - **Data:** 19,318 of 19,780 bordx have worksheets, and for the 300 most recent every worksheet is listed (the procedure's inner joins to the cross-reference tables drop none). `BordxNoClaims` and `BordxClaimAmt` do **not** equal the count and sum of the claims for most of the older bordx in the development copy (3,039 of 19,556 agree on count), so the rule could not be compared with saved results; the rolled-back test checks each column the removal writes, the archive row, the un-bordxed invoices and the ASCII case, and a checksum of the four tables before and after.
 
+## Returned Fr Payor (Not App)
+
+One worksheet at a time (`sql/main/420_claim_bordx_return_case.sql`, `BordxReturnCase.cs`): type a claim number and leave the box, and the Version drop-down is filled with the case's versions (`Bordx_ReturnPayorCase` case 2) and the worksheet is looked up (case 1: the worksheet and its bordx, only when the bordx has been sent to the payor, otherwise **Bordx not send to Payor!**). **Approved Status** (N - No, Y - Yes; starts on No) and **Update** set `Claim.CLMAppStatus` after `Do you want to update the record?`; the screen shows `Record updated...`, puts the status back to No and looks the worksheet up again.
+
+- **Checks:** `Please Enter Claim No`, `Please Enter Approved Status`; the desktop crashed (`CInt('')`) when Update was pressed without a worksheet looked up; the web says `Please Enter Claim No`. The database also refuses a worksheet whose bordx has not been sent to the payor, and the API only accepts N or Y.
+- **Not carried over:** the autocomplete code of the Version combo and its `null` check (the browser's drop-down does this), the `CmdToPayor` name (it is the Update button).
+
+## What `CLMAppStatus` means (to confirm with the business)
+
+Returned From Payor writes `CLMAppStatus = 'Y'` (on the bordx's claims that are `N`, blank or NULL) and Returned Fr Payor (Not App) writes `'N'` or `'Y'`. In the development data the column holds only `NULL` (64,910 worksheets), `A` (5,511), `P` (4) and `R` (2), so a `Y` or `N` written by either screen is a value nothing else in the data uses. The screens are ported as the desktop coded them; if the business means approved / pending / rejected (A, P, R), the two updates need changing, and so does the condition `(N, blank, NULL)` of Returned From Payor.
+
 ## Data and verification
 
 The development database's 19,780 bordx are all in their first state (none sent to a payor or to accounts, none returned, none approved), so the screens could **not** be compared with saved results of the desktop. What was checked instead:
 
 - Every criterion of the search against a direct `COUNT(*)` on `Bordx` for a payor with many bordx (the database test `The_search_gives_what_the_table_holds_for_each_criterion`).
+- The development data has **no bordx sent to the payor**, so Returned Fr Payor (Not App) cannot find a worksheet there; its database test marks a bordx as sent inside the transaction and checks the lookup, both updates and the refusal, and the checksum of `Claim` before and after.
 - Every update (all four kinds) in a transaction that is **rolled back**, reading the columns back and comparing a checksum of the whole table, and of `Claim` for the return, before and after.
 - The second update of the same bordx is refused, and a missing bordx is not found.
 - In the browser, the whole flow through a list the test fakes for Returned From Payor (nothing in the data has been sent to accounts yet).
 
 ## Tests
 
-- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests) and `BordxReviseTests.cs` (13 tests the same way).
-- UI: `bordxDeliveryRules.test.ts` (14 tests) and `bordxReviseRules.test.ts` (5).
-- Browser: `e2e/claim-bordx-delivery.mjs` (75 checks: API, menu, the five pages, the update and removal POSTs (intercepted, nothing is written), scan code, access).
+- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests), `BordxReviseTests.cs` (13 the same way) and `BordxReturnCaseTests.cs` (7). The whole API suite: **996 tests** (989 before this screen, run in full at 12 m 59 s).
+- UI: `bordxDeliveryRules.test.ts` (14 tests), `bordxReviseRules.test.ts` (5) and `bordxReturnCaseRules.test.ts` (5).
+- Browser: `e2e/claim-bordx-delivery.mjs` (91 checks: API, menu, the six pages, the update, removal and status POSTs (intercepted, nothing is written), scan code, access).
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
-| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
-| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |
+| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql`, `420_claim_bordx_return_case.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
+| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` and `ReturnCase/BordxReturnCase.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `ClaimBordxReturnCaseController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
+| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts`, `BordxReturnCasePage.tsx`, `bordxReturnCaseRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |

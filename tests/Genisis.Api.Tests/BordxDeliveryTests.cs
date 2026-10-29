@@ -263,7 +263,7 @@ public class BordxDeliveryDatabaseTests
             Assert.Equal(StoredProcedures.Conflict, await Repository.SendAsync(write, 'A', to, date, "ZZTEST2"));
 
             Assert.Equal(StoredProcedures.NotFound, await Repository.SendAsync(write, 'P', "NO SUCH BORDX", date, "ZZTEST"));
-            Assert.Equal(1, (await Repository.SearchAsync(write, 'P', new BordxDeliveryFilter { Payor = payor, Status = "1" })).Count);
+            Assert.Single(await Repository.SearchAsync(write, 'P', new BordxDeliveryFilter { Payor = payor, Status = "1" }));
         }
 
         Assert.Equal(before, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxPAYToStatus, BordxPAYSentDate, BordxPAYSentBy, BordxSendtoACStatus, BordxSendACDate, BordxSendACBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120));

@@ -1,10 +1,11 @@
 using Genisis.Api.Maintenance.AccountTransaction;
+using Genisis.Api.Maintenance.MemberDates;
 using Genisis.Api.Maintenance.MmaEntry;
 using Genisis.Api.Maintenance.Security;
 
 namespace Genisis.Api.Maintenance;
 
-/// <summary>Registers the services and repositories of the Maintenance screens (Account Transaction, Security, MMA).</summary>
+/// <summary>Registers the services and repositories of the Maintenance screens (Account Transaction, Security, MMA, Member).</summary>
 public static class MaintenanceScreensServiceCollectionExtensions
 {
     /// <summary>Adds the Maintenance screens' repositories (stateless, singletons) and services (scoped).</summary>
@@ -18,6 +19,8 @@ public static class MaintenanceScreensServiceCollectionExtensions
         services.AddScoped<SecurityUserService>();
         services.AddSingleton<IMmaEntryRepository, MmaEntryRepository>();
         services.AddScoped<MmaEntryService>();
+        services.AddSingleton<IMemberDatesRepository, MemberDatesRepository>();
+        services.AddScoped<MemberDatesService>();
         return services;
     }
 }

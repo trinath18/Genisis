@@ -26,6 +26,9 @@ public static class AccessRight
     /// <summary>Maintenance > Account Transaction (MnuAccountTrans_Click) checks position 1 too.</summary>
     public const int AccountTransaction = 1;
 
+    /// <summary>Maintenance > Member (MaintenanceOthers) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int MemberMaintenance = 1;
+
     /// <summary>Maintenance > Security > Department: the matrix's own Department right (ACS 111), not the desktop's CheckAccess(2), which is Membership > Adjustment.</summary>
     public const int SecurityDepartment = 111;
 

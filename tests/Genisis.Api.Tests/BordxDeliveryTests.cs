@@ -58,6 +58,7 @@ public class BordxDeliveryRulesTests
     [Theory]
     [InlineData(BordxDeliveryKinds.ToPayor, 'P', "to payor")]
     [InlineData(BordxDeliveryKinds.ToAccounts, 'A', "to accounts")]
+    [InlineData(BordxDeliveryKinds.FromPayor, 'R', "as returned from the payor")]
     public void The_route_names_map_to_the_codes_the_procedures_take(string kind, char code, string label) => Assert.Equal((code, label), (BordxDeliveryKinds.Code(kind), BordxDeliveryKinds.Label(kind)));
 
     [Fact]
@@ -156,6 +157,56 @@ public class BordxDeliveryDatabaseTests
         var bySent = new BordxDeliveryFilter { Payor = payor, SentFrom = new DateTime(2021, 4, 10), SentTo = new DateTime(2021, 4, 10) };
         Assert.Equal([from], (await Repository.SearchAsync(session, 'A', bySent)).Select((r) => r.BordxNo));
         Assert.True((await Repository.SearchAsync(session, 'P', bySent)).Count > 1);
+    }
+
+    [Fact]
+    public async Task Returned_from_payor_lists_only_the_bordx_already_sent_to_accounts_and_the_period_filters_it_like_send_to_payor()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        await using var session = await TestDb.Sessions().BeginAsync();
+        var (payor, from, to) = await APayorWithBordxAsync(session);
+        Assert.Empty(await Repository.SearchAsync(session, 'R', new BordxDeliveryFilter { Payor = payor }));
+
+        await session.Connection.ExecuteAsync("UPDATE genisis.WS_Bordx SET BordxSendtoACStatus = 1, PAYToACPeriodMth = '3', PAYToACPeriodYR = '2021' WHERE BordxRefNo IN (@from, @to)", new { from, to }, session.Transaction);
+        var listed = await Repository.SearchAsync(session, 'R', new BordxDeliveryFilter { Payor = payor });
+        Assert.Equal(new[] { from, to }.Distinct().Order(StringComparer.Ordinal), listed.Select((r) => r.BordxNo));
+        Assert.All(listed, (r) => Assert.False(r.Sent));
+        Assert.Equal(listed.Count, (await Repository.SearchAsync(session, 'R', new BordxDeliveryFilter { Payor = payor, MonthFrom = "3", MonthTo = "3", YearFrom = "2021", YearTo = "2021" })).Count);
+        Assert.Empty(await Repository.SearchAsync(session, 'R', new BordxDeliveryFilter { Payor = payor, Status = "1" }));
+    }
+
+    [Fact]
+    public async Task Returning_a_bordx_sets_its_three_columns_and_approves_only_the_claims_that_were_not_approved_and_a_second_return_is_refused()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        await using var read = await TestDb.Sessions().OpenAsync();
+        var bordx = await read.Connection.QueryFirstAsync<string>("SELECT TOP (1) RTRIM(b.BordxRefNo) FROM genisis.WS_Bordx b WHERE EXISTS (SELECT 1 FROM genisis.WS_Claim c WHERE c.BordxRefNo = b.BordxRefNo) ORDER BY b.BordxRefNo", transaction: read.Transaction);
+        var before = await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxPAYDOCFRStatus, BordxPAYRecDocDate, BordxPAYRecDocBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120);
+        var claimsBefore = await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, ClaimVersion, CLMAppStatus)) FROM genisis.WS_Claim", transaction: read.Transaction, commandTimeout: 120);
+
+        await using (var write = await TestDb.Sessions().BeginAsync())
+        {
+            var claims = (await write.Connection.QueryAsync<(string Cas, int Version)>("SELECT RTRIM(CASNumber), ClaimVersion FROM genisis.WS_Claim WHERE BordxRefNo = @bordx ORDER BY CASNumber, ClaimVersion", new { bordx }, write.Transaction)).ToList();
+            Assert.True(claims.Count >= 1);
+            await write.Connection.ExecuteAsync("UPDATE genisis.WS_Claim SET CLMAppStatus = NULL WHERE BordxRefNo = @bordx AND CASNumber = @cas AND ClaimVersion = @version", new { bordx, cas = claims[0].Cas, version = claims[0].Version }, write.Transaction);
+            if (claims.Count > 1)
+                await write.Connection.ExecuteAsync("UPDATE genisis.WS_Claim SET CLMAppStatus = 'R' WHERE BordxRefNo = @bordx AND CASNumber = @cas AND ClaimVersion = @version", new { bordx, cas = claims[1].Cas, version = claims[1].Version }, write.Transaction);
+
+            var date = new DateTime(2026, 10, 5);
+            Assert.Equal(StoredProcedures.Ok, await Repository.SendAsync(write, 'R', bordx, date, "ZZTEST"));
+            var row = await write.Connection.QueryFirstAsync("SELECT BordxPAYDOCFRStatus, BordxPAYRecDocDate, BordxPAYRecDocBy, BordxPAYToStatus, BordxSendtoACStatus FROM genisis.WS_Bordx WHERE BordxRefNo = @bordx", new { bordx }, write.Transaction);
+            Assert.Equal(("1", date, "ZZTEST", "0", false), (((string)row.BordxPAYDOCFRStatus).Trim(), (DateTime)row.BordxPAYRecDocDate, ((string)row.BordxPAYRecDocBy).Trim(), ((string)row.BordxPAYToStatus).Trim(), (bool)row.BordxSendtoACStatus));
+
+            Assert.Equal("Y", (await write.Connection.ExecuteScalarAsync<string>("SELECT RTRIM(CLMAppStatus) FROM genisis.WS_Claim WHERE BordxRefNo = @bordx AND CASNumber = @cas AND ClaimVersion = @version", new { bordx, cas = claims[0].Cas, version = claims[0].Version }, write.Transaction)));
+            if (claims.Count > 1)
+                Assert.Equal("R", (await write.Connection.ExecuteScalarAsync<string>("SELECT RTRIM(CLMAppStatus) FROM genisis.WS_Claim WHERE BordxRefNo = @bordx AND CASNumber = @cas AND ClaimVersion = @version", new { bordx, cas = claims[1].Cas, version = claims[1].Version }, write.Transaction)));
+            Assert.Equal(StoredProcedures.Conflict, await Repository.SendAsync(write, 'R', bordx, date, "ZZTEST"));
+        }
+
+        Assert.Equal(before, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(BordxRefNo, BordxPAYDOCFRStatus, BordxPAYRecDocDate, BordxPAYRecDocBy)) FROM genisis.WS_Bordx", transaction: read.Transaction, commandTimeout: 120));
+        Assert.Equal(claimsBefore, await read.Connection.ExecuteScalarAsync<int>("SELECT CHECKSUM_AGG(CHECKSUM(CASNumber, ClaimVersion, CLMAppStatus)) FROM genisis.WS_Claim", transaction: read.Transaction, commandTimeout: 120));
     }
 
     [Fact]

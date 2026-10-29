@@ -5,7 +5,7 @@ using Genisis.Api.Worksheet;
 
 namespace Genisis.Api.ClaimBordx.Delivery;
 
-/// <summary>The two steps of the delivery chain this screen family covers: a bordx sent to its payor (<c>FrmSendtoPayor</c>) or sent to accounts (<c>FrmSendtoAC</c>).</summary>
+/// <summary>The steps of the delivery chain this screen family covers: a bordx sent to its payor (<c>FrmSendtoPayor</c>), sent to accounts (<c>FrmSendtoAC</c>) or returned by the payor (<c>FrmReturnPayor</c>).</summary>
 public static class BordxDeliveryKinds
 {
     /// <summary>The route name of "Send to Payor".</summary>
@@ -14,14 +14,17 @@ public static class BordxDeliveryKinds
     /// <summary>The route name of "Send to A/C".</summary>
     public const string ToAccounts = "to-accounts";
 
-    /// <summary>The route constraint both controllers use.</summary>
-    public const string RoutePattern = "{kind:regex(^(to-payor|to-accounts)$)}";
+    /// <summary>The route name of "Returned From Payor".</summary>
+    public const string FromPayor = "from-payor";
 
-    /// <summary>The code the SQL procedures take for a route name: <c>P</c> or <c>A</c>.</summary>
-    public static char Code(string kind) => kind == ToPayor ? 'P' : 'A';
+    /// <summary>The route constraint the controller uses.</summary>
+    public const string RoutePattern = "{kind:regex(^(to-payor|to-accounts|from-payor)$)}";
+
+    /// <summary>The code the SQL procedures take for a route name: <c>P</c>, <c>A</c> or <c>R</c>.</summary>
+    public static char Code(string kind) => kind switch { ToPayor => 'P', FromPayor => 'R', _ => 'A' };
 
     /// <summary>The name of the step in the messages.</summary>
-    public static string Label(string kind) => kind == ToPayor ? "to payor" : "to accounts";
+    public static string Label(string kind) => kind switch { ToPayor => "to payor", FromPayor => "as returned from the payor", _ => "to accounts" };
 }
 
 /// <summary>One bordx of the delivery list (a row of <c>lstBordxDelivery</c>).</summary>
@@ -42,7 +45,7 @@ public record BordxDeliveryRow
     /// <summary>Bordx status (C closed, R returned...).</summary>
     public string? BordxStatus { get; set; }
 
-    /// <summary>The screen's own step is done: sent to the payor, or sent to accounts.</summary>
+    /// <summary>The screen's own step is done: sent to the payor, sent to accounts or returned from the payor.</summary>
     public bool Sent { get; set; }
 
     /// <summary>The date of that step.</summary>
@@ -97,16 +100,16 @@ public class BordxDeliveryFilter
     /// <summary>Bordx amount to.</summary>
     public decimal? AmountTo { get; set; }
 
-    /// <summary>A/C month from (send to payor only; compared as text, as the desktop did).</summary>
+    /// <summary>A/C month from (the payor screens; compared as text, as the desktop did).</summary>
     public string? MonthFrom { get; set; }
 
-    /// <summary>A/C month to (send to payor only).</summary>
+    /// <summary>A/C month to (the payor screens).</summary>
     public string? MonthTo { get; set; }
 
-    /// <summary>A/C year from (send to payor only).</summary>
+    /// <summary>A/C year from (the payor screens).</summary>
     public string? YearFrom { get; set; }
 
-    /// <summary>A/C year to (send to payor only).</summary>
+    /// <summary>A/C year to (the payor screens).</summary>
     public string? YearTo { get; set; }
 
     /// <summary>Date sent to accounts from (send to A/C only).</summary>
@@ -115,7 +118,7 @@ public class BordxDeliveryFilter
     /// <summary>Date sent to accounts to (send to A/C only).</summary>
     public DateTime? SentTo { get; set; }
 
-    /// <summary>Status: <c>0</c> not sent, <c>1</c> sent, <c>2</c> both (the screen starts on not sent).</summary>
+    /// <summary>Status: <c>0</c> not sent (not returned), <c>1</c> sent (returned), <c>2</c> both (the screen starts on not sent).</summary>
     public string? Status { get; set; }
 }
 

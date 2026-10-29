@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Genisis.Api.Controllers;
 
-/// <summary>Claim Bordx > Bor Delivery > Send to Payor and Send to A/C (legacy FrmSendtoPayor and FrmSendtoAC): <c>kind</c> is <c>to-payor</c> or <c>to-accounts</c>.</summary>
+/// <summary>Claim Bordx > Bor Delivery > Send to Payor, Send to A/C and Returned From Payor (legacy FrmSendtoPayor, FrmSendtoAC and FrmReturnPayor): <c>kind</c> is <c>to-payor</c>, <c>to-accounts</c> or <c>from-payor</c>.</summary>
 [Route("api/claim-bordx/delivery/" + BordxDeliveryKinds.RoutePattern)]
 [RequireAccess(AccessRight.ClaimBordx)]
 public class ClaimBordxDeliveryController(BordxDeliveryService service) : ApiControllerBase
@@ -15,7 +15,7 @@ public class ClaimBordxDeliveryController(BordxDeliveryService service) : ApiCon
     [HttpGet("search")]
     public async Task<ActionResult<SearchResult<BordxDeliveryRow>>> Search(string kind, [FromQuery] BordxDeliveryFilter filter) => Ok(await service.SearchAsync(kind, filter));
 
-    /// <summary>CmdToPayor_Click / CmdToAC_Click: records the date on the ticked bordx.</summary>
+    /// <summary>CmdToPayor_Click / CmdToAC_Click: records the date on the ticked bordx (and, for a return, approves their open claims).</summary>
     [HttpPost("send")]
     public async Task<IActionResult> Send(string kind, BordxDeliveryRequest request) =>
         Ok(new { message = "Record updated...", updated = await service.SendAsync(kind, request, UserCode) });

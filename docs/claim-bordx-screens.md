@@ -8,6 +8,7 @@ Menu path: **Claim Bordx** (legacy `mdiMain.frm`, top menu `mnuFinance`'s siblin
 |---|---|---|---|---|
 | Claim Bordx > Worksheet > Insert Worksheet | `FrmWksBordx` ("Select Worksheets for Bordx") | `/claim-bordx/insert-worksheet` | `/api/case/listing` | The same form Case > Inpatient Case Listing opens (`mnuGenerateBordx_Click` and `mnuAppCase_Click` both show `FrmWksBordx`), migrated with the Case module; this entry is a second door to it behind position 15 |
 | Claim Bordx > Worksheet > Remove Worksheet | `FrmBordxRevise` ("Bordereaux Revise") | `/claim-bordx/remove-worksheet` | `/api/claim-bordx/revise` | Migrated (below) |
+| Claim Bordx > Monitoring > Bordx Control | `FrmBordxControl` ("Bordx Control") | `/claim-bordx/bordx-control` | `/api/claim-bordx/control` | Migrated (below) |
 | Claim Bordx > Storage > Document | `frmStorageDoc` ("Storage / Cartons") | `/claim-bordx/storage-document` | `/api/claim-bordx/storage-documents` | Migrated (below) |
 | Claim Bordx > Storage > Enquiry | `frmStorageEnq` ("Storage Enquiry") | `/claim-bordx/storage-enquiry` | `/api/claim-bordx/storage` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to Payor | `FrmSendtoPayor` ("Bordx Delivery") | `/claim-bordx/send-to-payor` | `/api/claim-bordx/delivery/to-payor` | Migrated |
@@ -89,6 +90,18 @@ Read only, in two tabs (`sql/main/450_claim_bordx_storage_enquiry.sql`, `ClaimBo
 - **Gate:** position 15, like the rest of Claim Bordx (the Storage controls have no click handler in the desktop).
 - **Tests:** every criterion is compared with a direct count on the tables in `StorageEnquiryTests.cs`; `e2e/claim-bordx-storage.mjs` (31 checks) covers the API, the two tabs, the scan rules and access. Nothing is written.
 
+## Bordx Control
+
+Read only (`sql/main/470_claim_bordx_control.sql`, `ClaimBordx/Control/BordxControl.cs`). Follows the bordereaux of one payor, of all the Sihat payors or of all the non-Sihat payors, from the day they were sent to the payor to the day the documents (DRP) and the money came back. The Payor drop-down holds the payors with two entries on top, **All Sihat** and **All Non-Sihat** (the desktop had them as two check boxes). The payor's `HLTCode` picks the layout, as in `cboPayor_Click`: N is the **non-Sihat** layout (Bordx No, Date, Claims, Amt, Status, DTP, DRP (Doc), days, DFPayor (Money), days), anything else the **Sihat** layout (the same, then DTMNRB, DFMNRB (Money), days, Total Days). The list has a Payor column first when it holds several payors.
+
+- **Criteria:** bordx number and date ranges; To Payor (Both, Sent, Not Yet Sent); From Payor (Doc) (Both, Received, Not Yet Received); for Sihat: To MNRB (Both, Sent, Not Yet Sent; starts on Both, which keeps only bordx that have a To MNRB status, as the desktop did) and From MNRB (Money) (Both, Paid, Partial Paid, Unpaid); for the others: From Payor (Money) (Both, Paid, Partial Paid, Unpaid). The status boxes that do not belong to the payor's layout are not shown.
+- **Messages:** `Please Enter Payor Code.` (no payor and no All), `No record found!`, `Report cannot be printed without any record.`; Print to File exports the list to CSV. Records and Total Amt count the rows listed.
+- **Days:** a same-day return is shown as 1 day and a missing date leaves the count blank, as the desktop showed; Total Days (Sihat) adds the two counts, a blank as 0.
+- **Rows come from the same two views** (`VIEW_Bordx_ControlS2` and `N2`). They group on the claim's bordx amount, so a bordx whose claims differ in amount is listed once per amount, each time with that amount (22,468 rows for 19,780 bordx in the development data), and the Bordx Amt is not the bordx total. The web shows it exactly as the desktop did; **business to confirm** whether a row per bordx with the summed amount is wanted.
+- **Data:** every payor in the development data is non-Sihat (`VIEW_Bordx_ControlS2` is empty), so the Sihat layout is checked by code and fake-repository tests only, not against saved rows; nothing has been sent, so the To Payor and To MNRB criteria find nothing.
+- **Gate:** position 15 like the rest of Claim Bordx (the menu item is hidden in the original and has no click handler).
+- **Tests:** `BordxControlTests.cs` compares every criterion with a direct count on the view; `e2e/claim-bordx-control.mjs` (24 checks).
+
 ## Storage Document
 
 Puts the accounts department's documents into cartons (`sql/main/460_claim_bordx_storage_document.sql`, `ClaimBordx/Storage/StorageDocument.cs`). Choose a **document type** (B - Bordx, P - Payment Voucher, R - Receipt), search by document number range, carton, file status (All, In, Out), request by and the exact date of request, delivery or return. The list shows each document with its storage row when it has one (`dbo.StorageDocument`; 5,013 rows, all payment vouchers). Tick the documents to store, press **Add**, fill in the document type, carton, file status and, when somebody requested it, the request dates, then **Save**.
@@ -116,14 +129,14 @@ The development database's 19,780 bordx are all in their first state (none sent 
 
 ## Tests
 
-- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests), `BordxReviseTests.cs` (13 the same way) and `BordxReturnCaseTests.cs` (7) and `StorageEnquiryTests.cs` (9) and `StorageDocumentTests.cs` (14). The whole API suite: **1,010 tests** passed in full (12 m 8 s) before the Storage Enquiry tests were added.
-- UI: `bordxDeliveryRules.test.ts` (14 tests), `bordxReviseRules.test.ts` (5) and `bordxReturnCaseRules.test.ts` (5) and `storageEnquiryRules.test.ts` (8) and `storageDocumentRules.test.ts` (6).
+- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests), `BordxReviseTests.cs` (13 the same way) and `BordxReturnCaseTests.cs` (7) and `StorageEnquiryTests.cs` (9) and `StorageDocumentTests.cs` (14) and `BordxControlTests.cs` (9). The whole API suite: **1,010 tests** passed in full (12 m 8 s) before the Storage Enquiry tests were added.
+- UI: `bordxDeliveryRules.test.ts` (14 tests), `bordxReviseRules.test.ts` (5) and `bordxReturnCaseRules.test.ts` (5) and `storageEnquiryRules.test.ts` (8) and `storageDocumentRules.test.ts` (6) and `bordxControlRules.test.ts` (7).
 - Browser: `e2e/claim-bordx-delivery.mjs` (91 checks: API, menu, the six pages, the update, removal and status POSTs (intercepted, nothing is written), scan code, access).
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql`, `420_claim_bordx_return_case.sql`, `450_claim_bordx_storage_enquiry.sql`, `460_claim_bordx_storage_document.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
-| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` and `ReturnCase/BordxReturnCase.cs` and `Storage/StorageEnquiry.cs` and `Storage/StorageDocument.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `ClaimBordxReturnCaseController.cs`, `ClaimBordxStorageController.cs`, `ClaimBordxStorageDocumentController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
-| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts`, `BordxReturnCasePage.tsx`, `bordxReturnCaseRules.ts`, `StorageEnquiryPage.tsx`, `storageEnquiryRules.ts`, `StorageDocumentPage.tsx`, `storageDocumentRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |
+| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql`, `420_claim_bordx_return_case.sql`, `450_claim_bordx_storage_enquiry.sql`, `460_claim_bordx_storage_document.sql`, `470_claim_bordx_control.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
+| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` and `ReturnCase/BordxReturnCase.cs` and `Storage/StorageEnquiry.cs` and `Storage/StorageDocument.cs` and `Control/BordxControl.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `ClaimBordxReturnCaseController.cs`, `ClaimBordxStorageController.cs`, `ClaimBordxStorageDocumentController.cs`, `ClaimBordxControlController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
+| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts`, `BordxReturnCasePage.tsx`, `bordxReturnCaseRules.ts`, `StorageEnquiryPage.tsx`, `storageEnquiryRules.ts`, `StorageDocumentPage.tsx`, `storageDocumentRules.ts`, `BordxControlPage.tsx`, `bordxControlRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |

@@ -24,6 +24,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<StorageDocumentService>();
         services.AddSingleton<IBordxControlRepository, BordxControlRepository>();
         services.AddScoped<BordxControlService>();
+        services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();
+        services.AddScoped<OutstandingBordxService>();
         return services;
     }
 }

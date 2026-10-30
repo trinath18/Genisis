@@ -90,7 +90,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimActual', @WorksheetDb, N'ClaimActual'), (N'WS_ClaimHos', @WorksheetDb, N'ClaimHos'), (N'WS_ClaimMember', @WorksheetDb, N'ClaimMember'),
     (N'WS_DRSeq', @WorksheetDb, N'DRSeq'), (N'WS_ExcessLetter', @WorksheetDb, N'CAS_Excess'),
     (N'WS_ClaimLimit', @WorksheetDb, N'ClaimLimit'), (N'WS_ClaimOthers', @WorksheetDb, N'ClaimOthers'), (N'WS_CASInvoice', @WorksheetDb, N'View_CAS_Invoice'),
-    (N'WS_BordxWSArchive', @WorksheetDb, N'BordxWSArchive'), (N'WS_Carton', @WorksheetDb, N'Carton'), (N'WS_Storage', @WorksheetDb, N'Storage'), (N'WS_StorageClaim', @WorksheetDb, N'VIEW_Storage_CLM'), (N'WS_StorageDocument', @WorksheetDb, N'StorageDocument'), (N'WS_BordxControlS', @WorksheetDb, N'VIEW_Bordx_ControlS2'), (N'WS_BordxControlN', @WorksheetDb, N'VIEW_Bordx_ControlN2'), (N'WS_StoragePVDoc', @WorksheetDb, N'VIEW_Storage_PVDoc'), (N'WS_StorageRecDoc', @WorksheetDb, N'VIEW_Storage_RecDoc'), (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
+    (N'WS_BordxWSArchive', @WorksheetDb, N'BordxWSArchive'), (N'WS_Carton', @WorksheetDb, N'Carton'), (N'WS_Storage', @WorksheetDb, N'Storage'), (N'WS_StorageClaim', @WorksheetDb, N'VIEW_Storage_CLM'), (N'WS_StorageDocument', @WorksheetDb, N'StorageDocument'), (N'WS_BordxControlS', @WorksheetDb, N'VIEW_Bordx_ControlS2'), (N'WS_BordxControlN', @WorksheetDb, N'VIEW_Bordx_ControlN2'), (N'WS_OutstandingBordx', @WorksheetDb, N'VIEW_OS_Bordx'), (N'WS_StoragePVDoc', @WorksheetDb, N'VIEW_Storage_PVDoc'), (N'WS_StorageRecDoc', @WorksheetDb, N'VIEW_Storage_RecDoc'), (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
     (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
@@ -9168,6 +9168,50 @@ BEGIN
       AND (@payTo IS NULL OR BordxPAYToStatus = @payTo) AND (@payDocFr IS NULL OR BordxPAYDOCFrStatus = @payDocFr)
       AND (@payFr IS NULL OR (@payFr = 'U' AND (BordxPAYFrStatus = '' OR BordxPAYFrStatus IS NULL)) OR BordxPAYFrStatus = @payFr)
     ORDER BY BordxPAYCode, BordxRefNo, BordxClaimAmt
+    OPTION (RECOMPILE);
+END
+GO
+
+-- ===== main/480_claim_bordx_outstanding.sql =====
+-- Claim Bordx > Monitoring > Outstanding Bordx (legacy FrmOSBordx, "Outstanding Bordx"): the bordereaux that were sent and have not come back, and for how long. Read only. The desktop called
+-- OSBordx with a case number (1 to 9) and a WHERE fragment; here there are two procedures with typed parameters over the same view (VIEW_OS_Bordx, one row per bordx):
+--   section 'payor'     Bordx with Payor      sent to the payor (BordxPAYToStatus = 1) and the documents not back (BordxPAYDOCFRStatus = 0)         [cases 1, 2, 3]
+--   section 'mnrb'      Not Paid by MNRB      sent to MNRB (BordxMNRBToStatus = 1) and no MNRB payment status yet (BordxMNRBFRStatus IS NULL)       [cases 4, 5, 6]
+--   section 'nonSihat'  Non-Sihat             sent to the payor and not fully paid (BordxPAYFRStatus is P or NULL)                                  [cases 7, 8, 9]
+-- @health is the payors' HLTCode the "All Sihat" (S) or "All Non-Sihat" (N) boxes and the summaries restrict to; a single payor listing has none. @payor NULL is every payor.
+
+-- The listing: one line per bordx with the date it was sent (to the payor, or to MNRB for 'mnrb'). The days outstanding are worked out from the "as at" date by the API.
+CREATE OR ALTER PROCEDURE genisis.OutstandingBordx_Detail
+    @section varchar(10), @payor nvarchar(4) = NULL, @health char(1) = NULL, @max int = 5001
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(BordxRefNo) AS BordxNo, RTRIM(PAYCode) AS PayorCode, BordxClaimAmt AS Amount,
+        CASE WHEN @section = 'mnrb' THEN BordxMNRBSentDate ELSE BordxPAYSentDate END AS SentDate
+    FROM genisis.WS_OutstandingBordx
+    WHERE (@payor IS NULL OR PAYCode = @payor) AND (@health IS NULL OR HLTCode = @health)
+      AND ((@section = 'payor' AND BordxPAYToStatus = 1 AND BordxPAYDOCFRStatus = 0)
+        OR (@section = 'mnrb' AND BordxMNRBToStatus = 1 AND BordxMNRBFRStatus IS NULL)
+        OR (@section = 'nonSihat' AND BordxPAYToStatus = 1 AND (BordxPAYFRStatus = 'P' OR BordxPAYFRStatus IS NULL)))
+    ORDER BY PAYCode, BordxRefNo
+    OPTION (RECOMPILE);
+END
+GO
+
+-- The general summary (OSBordxPAYSummary, OSBordxMNRBSummary, NONOSBordxPAYSummary): the number of claims and the amount outstanding for each payor.
+CREATE OR ALTER PROCEDURE genisis.OutstandingBordx_Summary
+    @section varchar(10), @payor nvarchar(4) = NULL, @health char(1) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT RTRIM(PAYCode) AS PayorCode, SUM(BordxNoClaims) AS Claims, SUM(BordxClaimAmt) AS Amount
+    FROM genisis.WS_OutstandingBordx
+    WHERE (@payor IS NULL OR PAYCode = @payor) AND (@health IS NULL OR HLTCode = @health)
+      AND ((@section = 'payor' AND BordxPAYToStatus = 1 AND BordxPAYDOCFRStatus = 0)
+        OR (@section = 'mnrb' AND BordxMNRBToStatus = 1 AND BordxMNRBFRStatus IS NULL)
+        OR (@section = 'nonSihat' AND BordxPAYToStatus = 1 AND (BordxPAYFRStatus = 'P' OR BordxPAYFRStatus IS NULL)))
+    GROUP BY PAYCode
+    ORDER BY PAYCode
     OPTION (RECOMPILE);
 END
 GO

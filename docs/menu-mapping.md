@@ -27,7 +27,7 @@ How to read the status column
 | Invoice | 9 | 5 | 5 | 0 | 8 |
 | Worksheet | 9 | 6 | 6 | 0 | 5 |
 | Authorize Claims | 18 | 2 | 0 | 2 | 14 |
-| Claim Bordx | 34 | 23 | 10 | 12 | 21 |
+| Claim Bordx | 34 | 23 | 11 | 11 | 21 |
 | Finance | 11 | 5 | 4 | 0 | 2 |
 | Reports | 4 | 0 | 0 | 0 | 0 |
 | Statistic | 2 | 0 | 0 | 0 | 1 |
@@ -37,9 +37,9 @@ How to read the status column
 | Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **63** | **45** | **134** |
+| **Total** | **236** | **113** | **64** | **44** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 63 and 45. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 64 and 44. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -81,6 +81,7 @@ How to read the status column
 | Finance > Suspend / Active | `Suspend` | frmPaymentMBMReissue (source missing; rebuilt on Payment2MBM) | `/finance/suspend-active` | 12 | `/api/finance/suspend-active` |
 | Finance > Electronic Banking | `mnuElectronicBank` | frmFileExportBankESP (source missing; configurable file layout) | `/finance/electronic-banking` | 10 | `/api/finance/electronic-banking` |
 | Finance > SUN Posting | `mnuInvoicePositve` | frmPostingInvoiceMBM | `/finance/sun-posting` | 13 | `/api/finance/sun-posting` |
+| Claim Bordx > Monitoring > Outstanding Bordx | `mnuOSBordx` | FrmOSBordx (no click handler; chosen by name) | `/claim-bordx/outstanding-bordx` | 15 * | `/api/claim-bordx/outstanding` |
 | Claim Bordx > Monitoring > Bordx Control | `mnuBordxCtrl` | FrmBordxControl (no click handler; chosen by name) | `/claim-bordx/bordx-control` | 15 * | `/api/claim-bordx/control` |
 | Claim Bordx > Storage > Document | `StoDocument` | frmStorageDoc (no click handler; chosen by name) | `/claim-bordx/storage-document` | 15 * | `/api/claim-bordx/storage-documents` |
 | Claim Bordx > Storage > Enquiry | `StorageEnquiry` | frmStorageEnq (no click handler; chosen by name) | `/claim-bordx/storage-enquiry` | 15 * | `/api/claim-bordx/storage` |
@@ -198,7 +199,7 @@ How to read the status column
 | 21 | Claim Bordx > Bor Acc Period | `BorAccPeriod` |  |  | Not required (hidden in the original) |  |
 | 22 | Claim Bordx > Monitoring | `mnsBordxTrack` |  |  | **Required, not built** (hidden in the original) |  |
 | 23 | Claim Bordx > Monitoring > Bordx Control | `mnuBordxCtrl` |  | FrmBordxControl | Migrated (hidden in the original) | /claim-bordx/bordx-control |
-| 24 | Claim Bordx > Monitoring > Outstanding Bordx | `mnuOSBordx` |  |  | **Required, not built** |  |
+| 24 | Claim Bordx > Monitoring > Outstanding Bordx | `mnuOSBordx` |  | FrmOSBordx | Migrated | /claim-bordx/outstanding-bordx |
 | 25 | Claim Bordx > Monitoring > Bordx & Worksheet | `mnuBordxTracking` |  |  | Not required (hidden in the original) |  |
 | 26 | Claim Bordx > Bordx Approval | `mnuApproval` |  | FrmBordxApproval | Migrated (hidden in the original) | /claim-bordx/approval |
 | 27 | Claim Bordx > Bor Tracking | `BordxTracking` |  |  | Not required (hidden in the original) |  |
@@ -214,7 +215,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-45 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+44 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
@@ -222,7 +223,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Authorize Claims** (2): DCU Tracking > Claim Report; Claim Pass to A/C
 
-**Claim Bordx** (12, four of them parent menus): Worksheet; Print Bordx; Print Recovery; Payment Advice; Payment Advice > Generate Bordx No; Payment Advice > Hospital Report; Update Bordx; Bor Delivery; Bor Delivery > Bordx Send Date; Monitoring; Monitoring > Outstanding Bordx; Storage > Claim files
+**Claim Bordx** (11, four of them parent menus): Worksheet; Print Bordx; Print Recovery; Payment Advice; Payment Advice > Generate Bordx No; Payment Advice > Hospital Report; Update Bordx; Bor Delivery; Bor Delivery > Bordx Send Date; Monitoring; Storage > Claim files
 
 **Payment** (14): To Hospital; To Member; To Member > Pay2MBM(Auto); To Member > Pay2MBM; To Member > Chq. Cancellation; To Member > Chq. Reissue; Payor; Others; Contra Allocation; Update Invoice; Payment Tracking; Enquiry > Payment To Hospital; Enquiry > Payment To Member; PV Update (Manual)
 

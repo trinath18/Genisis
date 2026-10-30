@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**64 of the 108 are built, 44 are not.** Nine of the 44 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 35 screens to build or to decide about.
+**65 of the 108 are built, 43 are not.** Nine of the 43 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 34 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 44, by menu
+## The 43, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -38,14 +38,13 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | DCU Tracking > Claim Report | `FrmDCUReport1` / `FrmDCUReport2` (by name; no handler) | 17,593 / 17,591 | the largest forms in the project; a reporting screen |
 | Claim Pass to A/C | no match found by name | | business to name the form |
 
-### Claim Bordx (11 left; 11 built)
+### Claim Bordx (10 left; 12 built)
 
 Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delivery, Monitoring.
 
 | Item | Form (by name unless noted) | Size | Notes |
 |---|---|---:|---|
 | Print Bordx | `FrmPrintBordx` (handler, position 17) | 1,656 | a report; `FrmPrintBordxEx`, `frmPrintBordxBSN` / `IBM` / `SPNB` are per-payor variants |
-| Print Recovery | `frmGenerateRecovery` ("Generate Recovery Listing") | 837 | |
 | Payment Advice > Generate Bordx No | `frmPayAdviceHosp` ("Payment Advice - Generate Bordx") | 2,455 | an AXA Affin copy exists (`PaymentAdviceBordxAXA`) |
 | Payment Advice > Hospital Report | `frmPayAdviceHosRpt` ("Payment Advice- By Hospital") | 3,700 | |
 | Update Bordx | `frmUpdateWS2Bordx` ("Update Bordx") | 1,711 | `VIEW_WS_PendingBordx` |

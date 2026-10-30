@@ -1,6 +1,7 @@
 using Genisis.Api.ClaimBordx.Delivery;
 using Genisis.Api.ClaimBordx.ReturnCase;
 using Genisis.Api.ClaimBordx.Control;
+using Genisis.Api.ClaimBordx.Recovery;
 using Genisis.Api.ClaimBordx.Revise;
 using Genisis.Api.ClaimBordx.Storage;
 
@@ -26,6 +27,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<BordxControlService>();
         services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();
         services.AddScoped<OutstandingBordxService>();
+        services.AddSingleton<IPrintRecoveryRepository, PrintRecoveryRepository>();
+        services.AddScoped<PrintRecoveryService>();
         return services;
     }
 }

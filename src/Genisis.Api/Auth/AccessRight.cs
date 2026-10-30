@@ -29,6 +29,9 @@ public static class AccessRight
     /// <summary>Maintenance > Member (MaintenanceOthers) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
     public const int MemberMaintenance = 1;
 
+    /// <summary>Receipt > Receipt Tracking (mnuReceiptTracking) has no click handler in the desktop; it is gated like Finance > Receipt Enquiry, the other screen that reads receipts, position 9 (a decision).</summary>
+    public const int ReceiptTracking = 9;
+
     /// <summary>Maintenance > Suspension: Suspension_Click checks position 27.</summary>
     public const int Suspension = 27;
 

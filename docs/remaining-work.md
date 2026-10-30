@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**65 of the 108 are built, 43 are not.** Nine of the 43 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 34 screens to build or to decide about.
+**66 of the 108 are built, 42 are not.** Nine of the 42 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 33 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 43, by menu
+## The 42, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -65,14 +65,13 @@ Nearly every form of the desktop's Payment menu is **missing from the source** (
 
 These can only be rebuilt from the `HISPayment` tables, as the Finance screens were. That is a design exercise with the Payment users, not a port.
 
-### Receipt (4; the top menu is a parent)
+### Receipt (3 left; Receipt Tracking is built: [receipt-screens.md](receipt-screens.md); the top menu is a parent)
 
 | Item | Form | Size |
 |---|---|---:|
 | From Member | `FrmReceiptMember` | 3,261 |
 | Payor | `FrmReceiptPayor` (and `FrmReceiptPayorManual`, 3,531) | 4,922 |
 | Others | `FrmReceiptHOS` ("Receipt (Others)") or `FrmReceiptMNRB` ("Receipt From MNRB", 4,082): ambiguous | 1,373 |
-| Receipt Tracking | `FrmReceiptTracking` | 3,498 |
 
 ### Posting (3)
 

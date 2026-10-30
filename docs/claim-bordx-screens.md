@@ -8,6 +8,7 @@ Menu path: **Claim Bordx** (legacy `mdiMain.frm`, top menu `mnuFinance`'s siblin
 |---|---|---|---|---|
 | Claim Bordx > Worksheet > Insert Worksheet | `FrmWksBordx` ("Select Worksheets for Bordx") | `/claim-bordx/insert-worksheet` | `/api/case/listing` | The same form Case > Inpatient Case Listing opens (`mnuGenerateBordx_Click` and `mnuAppCase_Click` both show `FrmWksBordx`), migrated with the Case module; this entry is a second door to it behind position 15 |
 | Claim Bordx > Worksheet > Remove Worksheet | `FrmBordxRevise` ("Bordereaux Revise") | `/claim-bordx/remove-worksheet` | `/api/claim-bordx/revise` | Migrated (below) |
+| Claim Bordx > Storage > Enquiry | `frmStorageEnq` ("Storage Enquiry") | `/claim-bordx/storage-enquiry` | `/api/claim-bordx/storage` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to Payor | `FrmSendtoPayor` ("Bordx Delivery") | `/claim-bordx/send-to-payor` | `/api/claim-bordx/delivery/to-payor` | Migrated |
 | Claim Bordx > Bor Delivery > Returned From Payor | `FrmReturnPayor` ("Bordx Delivery") | `/claim-bordx/returned-from-payor` | `/api/claim-bordx/delivery/from-payor` | Migrated (form chosen by name, see "Assumptions") |
 | Claim Bordx > Bor Delivery > Returned Fr Payor (Not App) | `FrmReturnPayorCase` ("Bordx Delivery") | `/claim-bordx/returned-not-approved` | `/api/claim-bordx/return-case` | Migrated (below) |
@@ -77,6 +78,16 @@ One worksheet at a time (`sql/main/420_claim_bordx_return_case.sql`, `BordxRetur
 - **Checks:** `Please Enter Claim No`, `Please Enter Approved Status`; the desktop crashed (`CInt('')`) when Update was pressed without a worksheet looked up; the web says `Please Enter Claim No`. The database also refuses a worksheet whose bordx has not been sent to the payor, and the API only accepts N or Y.
 - **Not carried over:** the autocomplete code of the Version combo and its `null` check (the browser's drop-down does this), the `CmdToPayor` name (it is the Update button).
 
+## Storage Enquiry
+
+Read only, in two tabs (`sql/main/450_claim_bordx_storage_enquiry.sql`, `ClaimBordx/Storage/StorageEnquiry.cs`). **Carton Details** searches `dbo.Carton` (5,866 cartons: 2,679 Medix, 3,186 Store, 1 Return) by carton number range, status (M - Medix, S - Store, R - Return) and the dates of sending, request, delivery, return and destroy. **Storage Details** searches the claim files kept in them (`VIEW_Storage_CLM`, 45,591 rows) by case number (a scan, or a range), carton range, file status (I - In, O - Out), request by (a user), the dates of request, delivery, return, registration and sending, and the payor range (the first two letters of the case number).
+
+- **Criteria as the desktop had them:** the first box of a date pair is "on or after" and the second "on or before"; a blank box is no criterion; only files that have a carton are listed. A scan adds the case to the list and clears the box (`Please Enter Case No`; `Data has been uploaded!` when it is already listed); a range search replaces the list; no match is `No record found!`.
+- **Print to File** exports the list to CSV (`Report cannot be printed without any record.` when empty). **Listing** writes the carton's **check sheet** (No, Case No-Version, Checking = file status) as CSV for the carton in the Carton No box (`Please select Carton No.`); the desktop filled the Excel template `StorageTracking.xlt` with the same three columns in blocks of 50.
+- **Differences:** the view repeats a claim once per invoice payee and the desktop listed every repeat; a file is one row here. Rows are ordered by case number and version (carton number for the cartons). The list is cut at 5,000 rows and says so (all cartons are more than that). The `Stop` button, `intExit` flag and the combo auto-complete code are not carried over.
+- **Gate:** position 15, like the rest of Claim Bordx (the Storage controls have no click handler in the desktop).
+- **Tests:** every criterion is compared with a direct count on the tables in `StorageEnquiryTests.cs`; `e2e/claim-bordx-storage.mjs` (31 checks) covers the API, the two tabs, the scan rules and access. Nothing is written.
+
 ## What `CLMAppStatus` means (to confirm with the business)
 
 Returned From Payor writes `CLMAppStatus = 'Y'` (on the bordx's claims that are `N`, blank or NULL) and Returned Fr Payor (Not App) writes `'N'` or `'Y'`. In the development data the column holds only `NULL` (64,910 worksheets), `A` (5,511), `P` (4) and `R` (2), so a `Y` or `N` written by either screen is a value nothing else in the data uses. The screens are ported as the desktop coded them; if the business means approved / pending / rejected (A, P, R), the two updates need changing, and so does the condition `(N, blank, NULL)` of Returned From Payor.
@@ -93,14 +104,14 @@ The development database's 19,780 bordx are all in their first state (none sent 
 
 ## Tests
 
-- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests), `BordxReviseTests.cs` (13 the same way) and `BordxReturnCaseTests.cs` (7). The whole API suite: **996 tests** (989 before this screen, run in full at 12 m 59 s).
-- UI: `bordxDeliveryRules.test.ts` (14 tests), `bordxReviseRules.test.ts` (5) and `bordxReturnCaseRules.test.ts` (5).
+- API: `BordxDeliveryTests.cs` (28 tests with the architecture tests: validators, service against a fake repository, and the rolled-back database tests), `BordxReviseTests.cs` (13 the same way) and `BordxReturnCaseTests.cs` (7) and `StorageEnquiryTests.cs` (9). The whole API suite: **1,010 tests** passed in full (12 m 8 s) before the Storage Enquiry tests were added.
+- UI: `bordxDeliveryRules.test.ts` (14 tests), `bordxReviseRules.test.ts` (5) and `bordxReturnCaseRules.test.ts` (5) and `storageEnquiryRules.test.ts` (8).
 - Browser: `e2e/claim-bordx-delivery.mjs` (91 checks: API, menu, the six pages, the update, removal and status POSTs (intercepted, nothing is written), scan code, access).
 
 ## Code map
 
 | Layer | Files |
 |---|---|
-| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql`, `420_claim_bordx_return_case.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
-| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` and `ReturnCase/BordxReturnCase.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `ClaimBordxReturnCaseController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
-| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts`, `BordxReturnCasePage.tsx`, `bordxReturnCaseRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |
+| SQL | `sql/main/400_claim_bordx_delivery.sql`, `410_claim_bordx_revise.sql`, `420_claim_bordx_return_case.sql`, `450_claim_bordx_storage_enquiry.sql` (and `sql/genisis-main.sql`); reads `genisis.WS_Bordx` (`HISWorkSheet.dbo.Bordx`) and updates `genisis.WS_Claim` for the return |
+| API | `Genisis.Api/ClaimBordx/Delivery/BordxDelivery.cs` and `Revise/BordxRevise.cs` and `ReturnCase/BordxReturnCase.cs` and `Storage/StorageEnquiry.cs` (models, validators, repository, service), `ClaimBordx/ClaimBordxServiceCollectionExtensions.cs`, `Controllers/ClaimBordxDeliveryController.cs`, `ClaimBordxReviseController.cs`, `ClaimBordxReturnCaseController.cs`, `ClaimBordxStorageController.cs`, `Auth/AccessRight.cs` (`ClaimBordx`) |
+| UI | `GenisisUI/src/pages/claimBordx/` (`BordxDeliveryPage.tsx`, `bordxDeliveryRules.ts`, `BordxRevisePage.tsx`, `bordxReviseRules.ts`, `BordxReturnCasePage.tsx`, `bordxReturnCaseRules.ts`, `StorageEnquiryPage.tsx`, `storageEnquiryRules.ts` and their tests), the routes in `App.tsx`, the section in `components/AppLayout.tsx`, `auth/access.ts` |

@@ -56,7 +56,7 @@ FROM (VALUES
     (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
     (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
     (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType'),
-    (N'Maint_USR', N'USR'), (N'Maint_GRP', N'GRP'), (N'Maint_AccPeriod', N'AccPeriod'), (N'Maint_TimeMain', N'TimeMain')) v (s, t);
+    (N'Maint_USR', N'USR'), (N'Maint_GRP', N'GRP'), (N'Maint_AccPeriod', N'AccPeriod'), (N'Maint_TimeMain', N'TimeMain'), (N'Maint_DPT', N'DPT')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -83,7 +83,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimActual', @WorksheetDb, N'ClaimActual'), (N'WS_ClaimHos', @WorksheetDb, N'ClaimHos'), (N'WS_ClaimMember', @WorksheetDb, N'ClaimMember'),
     (N'WS_DRSeq', @WorksheetDb, N'DRSeq'), (N'WS_ExcessLetter', @WorksheetDb, N'CAS_Excess'),
     (N'WS_ClaimLimit', @WorksheetDb, N'ClaimLimit'), (N'WS_ClaimOthers', @WorksheetDb, N'ClaimOthers'), (N'WS_CASInvoice', @WorksheetDb, N'View_CAS_Invoice'),
-    (N'WS_BordxWSArchive', @WorksheetDb, N'BordxWSArchive'), (N'WS_Carton', @WorksheetDb, N'Carton'), (N'WS_Storage', @WorksheetDb, N'Storage'), (N'WS_StorageClaim', @WorksheetDb, N'VIEW_Storage_CLM'), (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
+    (N'WS_BordxWSArchive', @WorksheetDb, N'BordxWSArchive'), (N'WS_Carton', @WorksheetDb, N'Carton'), (N'WS_Storage', @WorksheetDb, N'Storage'), (N'WS_StorageClaim', @WorksheetDb, N'VIEW_Storage_CLM'), (N'WS_StorageDocument', @WorksheetDb, N'StorageDocument'), (N'WS_StoragePVDoc', @WorksheetDb, N'VIEW_Storage_PVDoc'), (N'WS_StorageRecDoc', @WorksheetDb, N'VIEW_Storage_RecDoc'), (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
     (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),

@@ -19,6 +19,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<BordxReturnCaseService>();
         services.AddSingleton<IStorageEnquiryRepository, StorageEnquiryRepository>();
         services.AddScoped<StorageEnquiryService>();
+        services.AddSingleton<IStorageDocumentRepository, StorageDocumentRepository>();
+        services.AddScoped<StorageDocumentService>();
         return services;
     }
 }

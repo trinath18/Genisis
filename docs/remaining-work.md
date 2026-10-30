@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**61 of the 108 are built, 47 are not.** Nine of the 47 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 38 screens to build or to decide about.
+**62 of the 108 are built, 46 are not.** Nine of the 46 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 37 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 47, by menu
+## The 46, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -38,7 +38,7 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | DCU Tracking > Claim Report | `FrmDCUReport1` / `FrmDCUReport2` (by name; no handler) | 17,593 / 17,591 | the largest forms in the project; a reporting screen |
 | Claim Pass to A/C | no match found by name | | business to name the form |
 
-### Claim Bordx (14 left; 8 built)
+### Claim Bordx (13 left; 9 built)
 
 Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delivery, Monitoring.
 
@@ -53,7 +53,6 @@ Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delive
 | Monitoring > Bordx Control | `FrmBordxControl` | 2,307 | `VIEW_Bordx_ControlS2` / `N2`, `BordxControl` |
 | Monitoring > Outstanding Bordx | `FrmOSBordx` | 2,606 | `VIEW_OS_Bordx`, `OSBordx` |
 | Storage > Claim files | `frmStorageEntry` ("STORAGE") | 3,538 | |
-| Storage > Document | `frmStorageDoc` | 2,069 | |
 
 ### Payment (14; the top menu is a parent)
 

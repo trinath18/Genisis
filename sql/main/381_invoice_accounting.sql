@@ -49,6 +49,8 @@ GO
 
 -- SearchRecord + InvoiceAccountListing of FrmInvoiceHOSAC: the invoices paid to a hospital. @reprint = 0: not printed yet; 1: printed. Every "from"/"to" pair
 -- is inclusive and ignored when NULL.
+-- OPTION (RECOMPILE): every criterion is optional, so one cached plan cannot suit them all. After a redeployment the plan of the first call (a selective hospital) was reused for the unfiltered search
+-- and took 22 seconds instead of 1.5 (and 2 minutes instead of a few seconds for the member search).
 CREATE OR ALTER PROCEDURE genisis.InvoiceHospitalAccounting_Search
     @reprint bit, @invFrom datetime = NULL, @invTo datetime = NULL, @regFrom datetime = NULL, @regTo datetime = NULL, @hospital nvarchar(100) = NULL,
     @batchDateFrom date = NULL, @batchDateTo date = NULL, @batchNoFrom int = NULL, @batchNoTo int = NULL, @max int = 5001
@@ -68,7 +70,8 @@ BEGIN
       AND (@batchDateFrom IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) >= @batchDateFrom)
       AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
       AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)
-    ORDER BY INVPayee, InvDate, InvNo, CASNumber, INVWSversion;
+    ORDER BY INVPayee, InvDate, InvNo, CASNumber, INVWSversion
+    OPTION (RECOMPILE);
 END
 GO
 
@@ -118,7 +121,8 @@ BEGIN
       AND (@batchDateTo IS NULL OR genisis.InvoiceBatchDay(INVBatchDate) <= @batchDateTo)
       AND (@batchNoFrom IS NULL OR INVBatchNo >= @batchNoFrom) AND (@batchNoTo IS NULL OR INVBatchNo <= @batchNoTo)
       AND (@bordxFrom IS NULL OR BordxDate >= @bordxFrom) AND (@bordxTo IS NULL OR BordxDate < DATEADD(DAY, 1, @bordxTo))
-    ORDER BY CASNumber, INVWSversion;
+    ORDER BY CASNumber, INVWSversion
+    OPTION (RECOMPILE);
 END
 GO
 

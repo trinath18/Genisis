@@ -54,7 +54,8 @@ public class PrintRecoveryRulesTests
     }
 }
 
-/// <summary>Print Recovery against the database (read only).</summary>
+/// <summary>Print Recovery against the database (read only). It reads the heavy claim report view, so it runs with the write tests (one at a time) instead of next to them.</summary>
+[Collection(DatabaseWriteCollection.Name)]
 public class PrintRecoveryDatabaseTests
 {
     private static PrintRecoveryRepository Repository => new();
@@ -71,7 +72,7 @@ public class PrintRecoveryDatabaseTests
         Assert.Equal(await Count(session, "SELECT COUNT(*) FROM dbo.CompanyGrp WHERE BTBGClient = 'Y'"), companies.Count);
         Assert.Contains(companies, c => c.ReportType == "2");
 
-        var company = await session.Connection.QueryFirstAsync<string>("SELECT TOP (1) RTRIM(g.CoGRPName) FROM dbo.CompanyGrp g WHERE g.BTBGClient = 'Y' ORDER BY (SELECT COUNT(*) FROM genisis.WS_ClaimReport v WHERE v.CLMPayableByMedix2M < 0 AND v.MBMGroupCompany = g.CoGRPName) DESC", transaction: session.Transaction);
+        var company = await session.Connection.QueryFirstAsync<string>("SELECT TOP (1) RTRIM(v.MBMGroupCompany) FROM genisis.WS_ClaimReport v WHERE v.CLMPayableByMedix2M < 0 AND v.MBMGroupCompany IN (SELECT g.CoGRPName FROM dbo.CompanyGrp g WHERE g.BTBGClient = 'Y') GROUP BY v.MBMGroupCompany ORDER BY COUNT(*) DESC", transaction: session.Transaction);
         var rows = await Repository.SearchAsync(session, new RecoveryFilter { Company = company });
         Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_ClaimReport WHERE CLMPayableByMedix2M < 0 AND MBMGroupCompany = @company", new { company }), rows.Count);
         Assert.NotEmpty(rows);

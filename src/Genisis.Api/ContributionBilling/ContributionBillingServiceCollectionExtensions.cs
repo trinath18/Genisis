@@ -1,3 +1,4 @@
+using Genisis.Api.ContributionBilling.McoReinstatement;
 using Genisis.Api.ContributionBilling.RefundListing;
 
 namespace Genisis.Api.ContributionBilling;
@@ -10,6 +11,8 @@ public static class ContributionBillingServiceCollectionExtensions
     {
         services.AddSingleton<IRefundListingRepository, RefundListingRepository>();
         services.AddScoped<RefundListingService>();
+        services.AddSingleton<IMcoReinstatementRepository, McoReinstatementRepository>();
+        services.AddScoped<McoReinstatementService>();
         return services;
     }
 }

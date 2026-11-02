@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**68 of the 108 are built, 40 are not.** Nine of the 40 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 31 screens to build or to decide about.
+**69 of the 108 are built, 39 are not.** Nine of the 39 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 30 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 40, by menu
+## The 39, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -21,13 +21,12 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | Logout | `frmLogin` (handler) | **Covered**: the top bar's Log out button ends the session and returns to the login page |
 | Close Connection | no form (`CloseConnection` handler only closes the connection) | No web meaning (the API holds no connection for a user); business to confirm it can be dropped |
 
-### Contribution Billing (3 left; Refund Listing is built: [contribution-billing-screens.md](contribution-billing-screens.md); Receipt MCO/Others is covered)
+### Contribution Billing (2 left; Refund Listing and MCO Reinstatement are built: [contribution-billing-screens.md](contribution-billing-screens.md); Receipt MCO/Others is covered)
 
 | Item | Form | Size | Notes |
 |---|---|---:|---|
 | Generate Invoice | `frmMCOFeesListingNew` (handler, position 8) | 1,855 | |
 | Generate Invoice (Endorsement) | `frmMCOFeesListingEndt` (handler, position 8) | **source missing** | rebuild from tables |
-| MCO Reinstatement | `frmMCOInvoiceReinstatement` (by name; no handler) | 1,497 | |
 | Receipt MCO/Others | `FrmRecMCO` (handler, position 19) | | **Covered**: the Finance > Invoice Receipt (Outstanding) screen is this form |
 
 ### Authorize Claims (2)

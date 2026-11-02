@@ -53,7 +53,7 @@ public record UpdateBordxRow
     /// <summary>Claim status.</summary>
     public string? ClaimStatus { get; set; }
 
-    /// <summary>Bordx number the worksheet is in already (empty when it is in none).</summary>
+    /// <summary>Bordx number: empty when the worksheet is in none, VOID when the worksheet is void.</summary>
     public string? BordxNo { get; set; }
 }
 
@@ -177,7 +177,7 @@ public interface IUpdateBordxRepository
     /// <summary>The worksheets that match (at most <see cref="WorksheetLimits.FetchRows"/>).</summary>
     Task<List<UpdateBordxRow>> SearchAsync(IDbSession session, UpdateBordxFilter filter);
 
-    /// <summary>Puts one worksheet into the bordx; returns 0 done, 1 no such worksheet, 2 in a bordx already, with its payor and approved amount.</summary>
+    /// <summary>Puts one worksheet into the bordx; returns 0 done, 1 no such worksheet, 2 in a bordx already, 3 void, with its payor and approved amount.</summary>
     Task<(int Result, string? Payor, decimal Approved)> ApplyAsync(IDbSession session, UpdateBordxClaim claim, string bordxNo);
 
     /// <summary>Creates or updates the bordx; returns 0 saved, 1 it belongs to another payor.</summary>
@@ -242,7 +242,7 @@ public class UpdateBordxService(IDbSessions sessions, IUpdateBordxRepository rep
 
     /// <summary>
     /// cmdBordx_Click: every checked worksheet goes into the bordx, then the bordx is saved and the MNRB receipt written, in one transaction. A worksheet that is not there is a
-    /// <see cref="NotFoundException"/>, one that is in a bordx already a <see cref="ConflictException"/>; worksheets of different payors, or of another payor than the bordx, are refused; nothing is saved then.
+    /// <see cref="NotFoundException"/>, one that is in a bordx already a <see cref="ConflictException"/>, a void one a <see cref="BusinessRuleException"/>; worksheets of different payors, or of another payor than the bordx, are refused; nothing is saved then.
     /// </summary>
     public async Task<UpdateBordxResult> UpdateAsync(UpdateBordxRequest request, string userCode)
     {
@@ -255,6 +255,7 @@ public class UpdateBordxService(IDbSessions sessions, IUpdateBordxRepository rep
             var (result, payor, approved) = await repository.ApplyAsync(session, claim, bordxNo);
             if (result == 1) throw new NotFoundException($"Worksheet {claim.CaseNo}-{claim.Version} not found");
             if (result == 2) throw new ConflictException($"Worksheet {claim.CaseNo}-{claim.Version} is in a bordx already");
+            if (result == 3) throw new BusinessRuleException($"Worksheet {claim.CaseNo}-{claim.Version} is void");
             total += approved;
             if (!string.IsNullOrWhiteSpace(payor)) payors.Add(payor.Trim());
         }

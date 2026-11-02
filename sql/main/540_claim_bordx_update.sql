@@ -2,7 +2,8 @@
 -- it was sent to and received from the payor and MNRB, and optionally the MNRB receipt. The desktop searched VIEW_WS_PendingBordx with a WHERE fragment and wrote through open recordsets and text SQL,
 -- worksheet by worksheet; here every step is a procedure with typed parameters, run in one transaction.
 
--- WorksheetTrackingListing: the worksheets the criteria find. @amount 'le' (approved up to 2000), 'gt' (above 2000) or NULL; @unbordxedOnly 1 keeps the worksheets that are in no bordx (the desktop's
+-- WorksheetTrackingListing: the worksheets the criteria find, from VIEW_WS_PendingBordx: the worksheets that are in no bordx (empty reference) and the ones whose bordx reference is VOID (void worksheets). Inpatient Case
+-- Listing reads another view of the same name with a 2 (closed and not bordxed). @amount 'le' (approved up to 2000), 'gt' (above 2000) or NULL; @unbordxedOnly 1 keeps the worksheets that are in no bordx (the desktop's
 -- "Bordx Status" box). Dates compare with the stored datetime, case and bordx numbers as text ranges.
 CREATE OR ALTER PROCEDURE genisis.UpdateBordx_Search
     @payor nvarchar(8) = NULL, @amount char(2) = NULL, @unbordxedOnly bit = 0, @doaFrom datetime = NULL, @doaTo datetime = NULL, @dodFrom datetime = NULL, @dodTo datetime = NULL,
@@ -14,7 +15,7 @@ BEGIN
         CLMPayableByMedix2M AS PayableToMember, CASDateAdmitted AS DateAdmitted, CASDischargeDate AS DateDischarged,
         RTRIM(CASE WHEN MBMPatientCovID = N'00' THEN MBMName ELSE MBMCName END) AS PatientName, RTRIM(HOSName) AS Hospital, RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(PLNCode) AS PlanCode,
         RTRIM(ICDCode1) AS IcdCode, RTRIM(ClaimStatus) AS ClaimStatus, RTRIM(BordxRefNo) AS BordxNo
-    FROM genisis.WS_PendingBordx
+    FROM genisis.WS_PendingBordxAll
     WHERE (@payor IS NULL OR PAYCode = @payor)
       AND (@amount IS NULL OR (@amount = 'le' AND CLMTotalApproved <= 2000) OR (@amount = 'gt' AND CLMTotalApproved > 2000))
       AND (@unbordxedOnly = 0 OR BordxRefNo IS NULL OR BordxRefNo = N'')
@@ -29,7 +30,7 @@ GO
 
 -- UpdateRecord: one worksheet goes into the bordx (BordxRefNo, ClaimStatus C, ClaimBordxStatus 1) and its invoices are bordxed (or one empty invoice row is added when it has none), as the desktop wrote them
 -- (it did not set CLMBordxDate or the case's pending flag, which Inpatient Case Listing does). A worksheet that is in a bordx already is refused, so one cannot be moved from a bordx whose totals would stay.
--- Result: 0 done, 1 there is no such worksheet, 2 it is in a bordx already. The payor and the approved amount of the worksheet come back for the bordx's checks and total.
+-- Result: 0 done, 1 there is no such worksheet, 2 it is in a bordx already, 3 it is void (its bordx reference is VOID). The payor and the approved amount of the worksheet come back for the bordx's checks and total.
 CREATE OR ALTER PROCEDURE genisis.UpdateBordx_Apply
     @cas nvarchar(30), @version int, @bordxNo nvarchar(40)
 AS
@@ -42,12 +43,17 @@ BEGIN
         SELECT 1 AS Result, CAST(NULL AS nvarchar(8)) AS PayorCode, CAST(0 AS money) AS Approved;
         RETURN;
     END
+    IF @existing = N'VOID'
+    BEGIN
+        SELECT 3 AS Result, CAST(NULL AS nvarchar(8)) AS PayorCode, CAST(0 AS money) AS Approved;
+        RETURN;
+    END
     IF ISNULL(@existing, N'') <> N''
     BEGIN
         SELECT 2 AS Result, CAST(NULL AS nvarchar(8)) AS PayorCode, CAST(0 AS money) AS Approved;
         RETURN;
     END
-    SELECT TOP (1) @payor = RTRIM(PAYCode) FROM genisis.WS_PendingBordx WHERE CASNumber = @cas AND ClaimVersion = @version;
+    SELECT TOP (1) @payor = RTRIM(PAYCode) FROM genisis.WS_PendingBordxAll WHERE CASNumber = @cas AND ClaimVersion = @version;
     UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, ClaimStatus = 'C', ClaimBordxStatus = 1 WHERE CASNumber = @cas AND ClaimVersion = @version;
     IF EXISTS (SELECT 1 FROM genisis.WS_ClaimInvoice WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4)))
         UPDATE genisis.WS_ClaimInvoice SET INVBordxRefNo = @bordxNo, INVBordxed = 1 WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));

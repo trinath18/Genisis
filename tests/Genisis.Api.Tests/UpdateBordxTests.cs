@@ -105,6 +105,7 @@ public class UpdateBordxRulesTests
         {
             (r => r.Applies["A2-2"] = (1, null, 0m), typeof(NotFoundException), "Worksheet A2-2 not found"),
             (r => r.Applies["A2-2"] = (2, null, 0m), typeof(ConflictException), "Worksheet A2-2 is in a bordx already"),
+            (r => r.Applies["A2-2"] = (3, null, 0m), typeof(BusinessRuleException), "Worksheet A2-2 is void"),
             (r => r.Applies["A2-2"] = (0, "CD", 5m), typeof(BusinessRuleException), "All the worksheets of a bordx must be of the same payor"),
             (r => r.SaveResult = 1, typeof(ConflictException), "Bordx B1 belongs to another payor"),
             (r => { r.Applies["A1-1"] = (0, null, 1m); r.Applies["A2-2"] = (0, null, 1m); }, typeof(BusinessRuleException), "The payor of the worksheets was not found"),
@@ -143,20 +144,21 @@ public class UpdateBordxDatabaseTests
         await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
         await using var session = await TestDb.Sessions().OpenAsync();
         var unbordxed = await Repository.SearchAsync(session, new UpdateBordxFilter { Payor = "ta - x" });
-        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordx WHERE PAYCode = 'TA' AND (BordxRefNo IS NULL OR BordxRefNo = '')"), unbordxed.Count);
+        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordxAll WHERE PAYCode = 'TA' AND (BordxRefNo IS NULL OR BordxRefNo = '')"), unbordxed.Count);
         Assert.All(unbordxed, r => Assert.True(string.IsNullOrEmpty(r.BordxNo) && r.PayorCode == "TA"));
         var all = await Repository.SearchAsync(session, new UpdateBordxFilter { Payor = "TA", UnbordxedOnly = false });
-        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordx WHERE PAYCode = 'TA'"), all.Count);
+        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordxAll WHERE PAYCode = 'TA'"), all.Count);
         Assert.True(all.Count > unbordxed.Count);
         var small = await Repository.SearchAsync(session, new UpdateBordxFilter { Payor = "TA", Amount = "le" });
         var big = await Repository.SearchAsync(session, new UpdateBordxFilter { Payor = "TA", Amount = "gt" });
-        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordx WHERE PAYCode = 'TA' AND (BordxRefNo IS NULL OR BordxRefNo = '') AND CLMTotalApproved <= 2000"), small.Count);
+        Assert.Equal(await Count(session, "SELECT COUNT(*) FROM genisis.WS_PendingBordxAll WHERE PAYCode = 'TA' AND (BordxRefNo IS NULL OR BordxRefNo = '') AND CLMTotalApproved <= 2000"), small.Count);
         Assert.Equal(unbordxed.Count, small.Count + big.Count + unbordxed.Count(r => r.TotalApproved is null));
         var one = unbordxed[0];
         Assert.All(await Repository.SearchAsync(session, new UpdateBordxFilter { CaseFrom = one.CaseNo.ToLowerInvariant(), CaseTo = one.CaseNo }), r => Assert.Equal(one.CaseNo, r.CaseNo));
         Assert.Empty(await Repository.SearchAsync(session, new UpdateBordxFilter { Payor = "TA", DoaFrom = new DateTime(2099, 1, 1) }));
-        var inBordx = all.First(r => !string.IsNullOrEmpty(r.BordxNo));
-        Assert.All(await Repository.SearchAsync(session, new UpdateBordxFilter { UnbordxedOnly = false, BordxFrom = inBordx.BordxNo, BordxTo = inBordx.BordxNo }), r => Assert.Equal(inBordx.BordxNo, r.BordxNo));
+        var voidRows = await Repository.SearchAsync(session, new UpdateBordxFilter { UnbordxedOnly = false, BordxFrom = "VOID", BordxTo = "VOID" });
+        Assert.NotEmpty(voidRows);
+        Assert.All(voidRows, r => Assert.Equal("VOID", r.BordxNo));
     }
 
     [Fact]
@@ -168,7 +170,8 @@ public class UpdateBordxDatabaseTests
         var (claims, bordxes, receipts) = (await Count(read, Checksum), await Count(read, BordxChecksum), await Count(read, ReceiptChecksum));
         var pending = (await Repository.SearchAsync(read, new UpdateBordxFilter { Payor = "TA", UnbordxedOnly = true })).Where(r => r.TotalApproved > 0).Take(3).ToList();
         Assert.Equal(3, pending.Count);
-        var bordxed = (await Repository.SearchAsync(read, new UpdateBordxFilter { Payor = "TA", UnbordxedOnly = false })).First(r => !string.IsNullOrEmpty(r.BordxNo));
+        var voided = (await Repository.SearchAsync(read, new UpdateBordxFilter { Payor = "TA", UnbordxedOnly = false })).First(r => r.BordxNo == "VOID");
+        var bordxed = await read.Connection.QueryFirstAsync<(string Case, int Version)>("SELECT TOP (1) RTRIM(CASNumber), ClaimVersion FROM genisis.WS_Claim WHERE BordxRefNo <> '' AND BordxRefNo <> 'VOID' ORDER BY CASNumber DESC", transaction: read.Transaction);
         var day = new DateTime(2026, 10, 30, 9, 0, 0);
         await using (var write = await TestDb.Sessions().BeginAsync())
         {
@@ -178,7 +181,8 @@ public class UpdateBordxDatabaseTests
             Assert.Equal((0, "TA", pending[0].TotalApproved), (r1, payor1, approved1));
             Assert.Equal(0, (await Repository.ApplyAsync(write, two, "ZZ-E2E-UPD1")).Result);
             Assert.Equal(2, (await Repository.ApplyAsync(write, one, "ZZ-E2E-UPD2")).Result);
-            Assert.Equal(2, (await Repository.ApplyAsync(write, new UpdateBordxClaim(bordxed.CaseNo, bordxed.ClaimVersion), "ZZ-E2E-UPD2")).Result);
+            Assert.Equal(2, (await Repository.ApplyAsync(write, new UpdateBordxClaim(bordxed.Case, bordxed.Version), "ZZ-E2E-UPD2")).Result);
+            Assert.Equal(3, (await Repository.ApplyAsync(write, new UpdateBordxClaim(voided.CaseNo, voided.ClaimVersion), "ZZ-E2E-UPD2")).Result);
             Assert.Equal(1, (await Repository.ApplyAsync(write, new UpdateBordxClaim("ZZ-NO-CASE", 1), "ZZ-E2E-UPD2")).Result);
 
             var claim = await write.Connection.QuerySingleAsync("SELECT RTRIM(BordxRefNo) AS BordxNo, RTRIM(ClaimStatus) AS Status, ClaimBordxStatus AS Bordxed FROM genisis.WS_Claim WHERE CASNumber = @c AND ClaimVersion = @v", new { c = one.CaseNo, v = one.Version }, write.Transaction);

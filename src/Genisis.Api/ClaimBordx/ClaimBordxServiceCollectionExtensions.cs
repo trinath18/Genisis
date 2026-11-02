@@ -1,6 +1,7 @@
 using Genisis.Api.ClaimBordx.Delivery;
 using Genisis.Api.ClaimBordx.ReturnCase;
 using Genisis.Api.ClaimBordx.Control;
+using Genisis.Api.ClaimBordx.PaymentAdvice;
 using Genisis.Api.ClaimBordx.Print;
 using Genisis.Api.ClaimBordx.Recovery;
 using Genisis.Api.ClaimBordx.Revise;
@@ -31,6 +32,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<UpdateBordxService>();
         services.AddSingleton<IPrintBordxRepository, PrintBordxRepository>();
         services.AddScoped<PrintBordxService>();
+        services.AddSingleton<IPayAdviceRepository, PayAdviceRepository>();
+        services.AddScoped<PayAdviceBordxService>();
         services.AddSingleton<IBordxControlRepository, BordxControlRepository>();
         services.AddScoped<BordxControlService>();
         services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();

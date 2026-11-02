@@ -119,7 +119,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'Pay_PVMedicaSeq2013', @PaymentDb, N'PVMedicaSeq2013'), (N'Pay_PVMedicaMXSeq', @PaymentDb, N'PVMedicaMXSeq'),
     (N'Pay_ReceiptSummary', @PaymentDb, N'ReceiptSummary'), (N'Pay_TrackMember', @PaymentDb, N'VIEW_ReceiptfrMBMTracking'), (N'Pay_TrackMember2', @PaymentDb, N'VIEW_ReceiptfrMBMTracking2'),
     (N'Pay_TrackPayor', @PaymentDb, N'VIEW_ReceiptfrPayorTracking'), (N'Pay_TrackPayor2', @PaymentDb, N'VIEW_ReceiptfrPayorTracking2'), (N'Pay_TrackMnrb', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking'),
-    (N'Pay_TrackMnrb2', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking2'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_ReceiptfrMNRB', @PaymentDb, N'ReceiptfrMNRB'), (N'WS_PendingBordxAll', @WorksheetDb, N'VIEW_WS_PendingBordx'), (N'WS_PrintBordx', @WorksheetDb, N'View_PrintBordx'), (N'WS_PrintClaimBordx', @WorksheetDb, N'VIEW_PrintClaimBordx_06'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
+    (N'Pay_TrackMnrb2', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking2'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_ReceiptfrMNRB', @PaymentDb, N'ReceiptfrMNRB'), (N'WS_PendingBordxAll', @WorksheetDb, N'VIEW_WS_PendingBordx'), (N'WS_MasPaymentAdvice', @WorksheetDb, N'View_MAS_PaymentAdvice'), (N'WS_PrintBordx', @WorksheetDb, N'View_PrintBordx'), (N'WS_PrintClaimBordx', @WorksheetDb, N'VIEW_PrintClaimBordx_06'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
@@ -5548,18 +5548,18 @@ BEGIN
 END
 GO
 
--- UpdateRecord: mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
+-- UpdateRecord (also frmPayAdviceHosp's, which passes @payAdvice, the payment advice number the claim gets): mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
 -- case remarks. The remark goes into the first remarks page that has room, following the desktop's page order
 -- (CASRemarks.CASORemarks, CASORemarksTwo, CASRemarksTwo.CASORemarks, CASORemarksTwo, CASRemarkThree.CASRemarks, CASRemarksFive);
 -- the lengths decide the page exactly as UpdateRecord did.
 CREATE OR ALTER PROCEDURE genisis.CaseListing_Apply
-    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15)
+    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15), @payAdvice nvarchar(10) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
 
-    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N'
+    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N', CLMPayAdvice = ISNULL(@payAdvice, CLMPayAdvice)
     WHERE CASNumber = @cas AND ClaimVersion = @version;
     UPDATE genisis.WS_ClaimInvoice SET INVBordxRefNo = @bordxNo, INVBordxed = 1
     WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));
@@ -9823,6 +9823,54 @@ BEGIN
     UPDATE genisis.WS_ClaimInvoice SET CLMInvPending = 'B' WHERE INVBordxRefNo >= @bordxFrom AND INVBordxRefNo <= @bordxTo;
     SET @invoices = @@ROWCOUNT;
     SELECT @bordx AS Bordx, @claims AS Claims, @invoices AS Invoices;
+END
+GO
+
+-- ===== main/560_claim_bordx_payment_advice.sql =====
+-- Claim Bordx > Payment Advice > Generate Bordx No (legacy frmPayAdviceHosp, "Payment Advice - Generate Bordx"): the Inpatient Case Listing of the MH payor's worksheets flagged for a payment advice
+-- (View_MAS_PaymentAdvice: closed, not bordxed, case open, payor MH, CLMMHBordx Y). It searched with a WHERE fragment through Claim_MAS_PaymentAdvice and wrote through text SQL; here the search and the
+-- worksheet are procedures with typed parameters, and the bordx number, the bordx row and the marking of each worksheet are the ones Inpatient Case Listing uses (genisis.CaseListing_NextBordxNo,
+-- _SaveBordx and _Apply, which now also sets the payment advice number).
+
+-- SearchRecord + WorksheetTrackingListing(2). @scan = 1: one worksheet (case number, optionally a version); 0: a case number range. Dates are inclusive; @doaEmpty / @dodEmpty keep only worksheets with no
+-- admission / discharge date; @cashType H or M (INVPayTo); @hospital is the hospital's name.
+CREATE OR ALTER PROCEDURE genisis.PayAdvice_Search
+    @scan bit, @wksFrom nvarchar(30) = NULL, @wksTo nvarchar(30) = NULL, @version int = NULL,
+    @doaFrom datetime = NULL, @doaTo datetime = NULL, @doaEmpty bit = 0, @dodFrom datetime = NULL, @dodTo datetime = NULL, @dodEmpty bit = 0,
+    @cashType char(1) = NULL, @hospital nvarchar(100) = NULL, @max int = 5000
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(PAYCode) AS Payor, CLMTotalApproved AS AppAmt, CASDateAdmitted AS Doa, CASDischargeDate AS Dod, RTRIM(INVPayTo) AS CashType,
+        RTRIM(MBMPatientCovID) AS CoverId, RTRIM(MBMCName) AS CoveredName, RTRIM(HOSName) AS Hospital, CLMPayableByMedix2H AS HosAmt, RTRIM(MBMName) AS MemberName, RTRIM(MBMGroupCompany) AS GroupCompany,
+        RTRIM(PLNCode) AS PlanCode, RTRIM(ICDCode1) AS IcdCode, RTRIM(MBMBTBG) AS Btbg, RTRIM(INSCode) AS InsuredType, RTRIM(CASClaimability) AS Claimability, RTRIM(MBMCostCenter) AS CostCenter,
+        RTRIM(MBMGroupCategory) AS GroupCategory, RTRIM(HOSState) AS HospitalState
+    FROM genisis.WS_MasPaymentAdvice
+    WHERE (@scan = 0 OR @wksFrom IS NULL OR CASNumber = @wksFrom)
+      AND (@scan = 0 OR @version IS NULL OR ClaimVersion = @version)
+      AND (@scan = 1 OR @wksFrom IS NULL OR CASNumber >= @wksFrom)
+      AND (@scan = 1 OR @wksTo IS NULL OR CASNumber <= @wksTo)
+      AND (@doaFrom IS NULL OR CASDateAdmitted >= @doaFrom) AND (@doaTo IS NULL OR CASDateAdmitted <= @doaTo)
+      AND (@dodFrom IS NULL OR CASDischargeDate >= @dodFrom) AND (@dodTo IS NULL OR CASDischargeDate <= @dodTo)
+      AND (@doaEmpty = 0 OR CASDateAdmitted IS NULL) AND (@dodEmpty = 0 OR CASDischargeDate IS NULL)
+      AND (@cashType IS NULL OR INVPayTo = @cashType) AND (@hospital IS NULL OR HOSName = @hospital)
+    ORDER BY CASNumber, ClaimVersion
+    OPTION (RECOMPILE);
+END
+GO
+
+-- One pending worksheet as the bordx needs it: the values the selection rules check, who is paid (INVPayTo, BTBG) and the three amounts a bordx can sum. No row when it is not (or no longer) in the list.
+CREATE OR ALTER PROCEDURE genisis.PayAdvice_Item
+    @cas nvarchar(30), @version int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP (1) RTRIM(p.CASNumber) AS CaseNo, p.ClaimVersion, RTRIM(p.PAYCode) AS Payor, p.CASDischargeDate AS Dod, RTRIM(p.HOSName) AS Hospital, RTRIM(p.ICDCode1) AS IcdCode,
+        RTRIM(p.MBMGroupCompany) AS GroupCompany, RTRIM(p.INSCode) AS InsuredType, RTRIM(p.CASClaimability) AS Claimability, RTRIM(p.MBMCostCenter) AS CostCenter, RTRIM(p.MBMGroupCategory) AS GroupCategory,
+        RTRIM(p.MBMBTBG) AS Btbg, RTRIM(p.INVPayTo) AS CashType, c.CLMPayableByMedix2H AS Payable2H, c.CLMPayableByMedix2M AS Payable2M, c.CLMTotalApproved AS TotalApproved, ISNULL(c.CLMCaseMgmtFees, 0) AS CaseMgmtFees
+    FROM genisis.WS_MasPaymentAdvice p
+    INNER JOIN genisis.WS_Claim c ON c.CASNumber = p.CASNumber AND c.ClaimVersion = p.ClaimVersion
+    WHERE p.CASNumber = @cas AND p.ClaimVersion = @version;
 END
 GO
 

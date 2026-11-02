@@ -43,22 +43,24 @@ BEGIN
 END
 GO
 
--- StorageSearchRecord + StorageListing: the files that are in a carton (the desktop only listed rows with a carton number). @scan = 1: one case number; 0: a range. @fileStatus is the first
+-- StorageSearchRecord + StorageListing: the files that are in a carton (the Enquiry only lists rows with a carton number; @includeUnstored = 1 is the Storage Entry list, which also shows the claims that are not stored yet, and @bordxFrom/To filter the bordx date). @scan = 1: one case number; 0: a range. @fileStatus is the first
 -- letter of "I - In" / "O - Out". @registerFrom/To filter the date the file was registered (LastUpdateDate), @sentFrom/To the date the carton was sent; the payor range compares the first two
 -- letters of the case number. The view repeats a claim once per invoice payee; the desktop listed every repeat, here a file is one row. Duration = days from delivery to return.
 CREATE OR ALTER PROCEDURE genisis.StorageEnquiry_StorageSearch
     @scan bit, @caseFrom nvarchar(30) = NULL, @caseTo nvarchar(30) = NULL, @cartonFrom nvarchar(40) = NULL, @cartonTo nvarchar(40) = NULL, @fileStatus char(1) = NULL,
     @requestBy nvarchar(100) = NULL, @requestFrom datetime = NULL, @requestTo datetime = NULL, @deliveryFrom datetime = NULL, @deliveryTo datetime = NULL,
     @returnFrom datetime = NULL, @returnTo datetime = NULL, @registerFrom datetime = NULL, @registerTo datetime = NULL, @sentFrom datetime = NULL, @sentTo datetime = NULL,
-    @payorFrom nvarchar(4) = NULL, @payorTo nvarchar(4) = NULL, @max int = 5001
+    @payorFrom nvarchar(4) = NULL, @payorTo nvarchar(4) = NULL, @max int = 5001, @includeUnstored bit = 0, @bordxFrom datetime = NULL, @bordxTo datetime = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     SELECT TOP (@max) RTRIM(CASNumber) AS CaseNo, ClaimVersion, RTRIM(STRCartonNo) AS CartonNo, RTRIM(CRTCartonStatus) AS CartonStatus, RTRIM(STRFileStatus) AS FileStatus,
         MAX(CLMTotalActual) AS BillAmount, DOSend AS SendDate, LastUpdateDate AS RegisterDate, RTRIM(STRRequestBy) AS RequestBy, DORequest AS RequestDate, DODelivery AS DeliveryDate,
-        DOReturn AS ReturnDate, CASE WHEN DOReturn IS NOT NULL AND DODelivery IS NOT NULL THEN DATEDIFF(day, DODelivery, DOReturn) END AS Duration, RTRIM(STRRemarks) AS Remarks
+        DOReturn AS ReturnDate, CASE WHEN DOReturn IS NOT NULL AND DODelivery IS NOT NULL THEN DATEDIFF(day, DODelivery, DOReturn) END AS Duration, RTRIM(STRRemarks) AS Remarks,
+        CLMBordxDate AS BordxDate, RTRIM(CLMCashType) AS CashType
     FROM genisis.WS_StorageClaim
-    WHERE STRCartonNo IS NOT NULL
+    WHERE (@includeUnstored = 1 OR STRCartonNo IS NOT NULL)
+      AND (@bordxFrom IS NULL OR CLMBordxDate >= @bordxFrom) AND (@bordxTo IS NULL OR CLMBordxDate <= @bordxTo)
       AND (@caseFrom IS NULL OR (@scan = 1 AND CASNumber = @caseFrom) OR (@scan = 0 AND CASNumber >= @caseFrom))
       AND (@scan = 1 OR @caseTo IS NULL OR CASNumber <= @caseTo)
       AND (@cartonFrom IS NULL OR STRCartonNo >= @cartonFrom) AND (@cartonTo IS NULL OR STRCartonNo <= @cartonTo)
@@ -69,7 +71,7 @@ BEGIN
       AND (@registerFrom IS NULL OR LastUpdateDate >= @registerFrom) AND (@registerTo IS NULL OR LastUpdateDate <= @registerTo)
       AND (@sentFrom IS NULL OR DOSend >= @sentFrom) AND (@sentTo IS NULL OR DOSend <= @sentTo)
       AND (@payorFrom IS NULL OR SUBSTRING(CASNumber, 1, 2) >= @payorFrom) AND (@payorTo IS NULL OR SUBSTRING(CASNumber, 1, 2) <= @payorTo)
-    GROUP BY CASNumber, ClaimVersion, STRCartonNo, CRTCartonStatus, STRFileStatus, STRRequestBy, DORequest, DODelivery, DOReturn, STRRemarks, LastUpdateDate, DOSend
+    GROUP BY CASNumber, ClaimVersion, STRCartonNo, CRTCartonStatus, STRFileStatus, STRRequestBy, DORequest, DODelivery, DOReturn, STRRemarks, LastUpdateDate, DOSend, CLMBordxDate, CLMCashType
     ORDER BY CASNumber, ClaimVersion;
 END
 GO

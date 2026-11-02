@@ -80,6 +80,12 @@ public record StorageFileRow
 
     /// <summary>Remarks.</summary>
     public string? Remarks { get; set; }
+
+    /// <summary>Bordx date of the claim.</summary>
+    public DateTime? BordxDate { get; set; }
+
+    /// <summary>Cash type of the claim.</summary>
+    public string? CashType { get; set; }
 }
 
 /// <summary>One line of a carton's check sheet.</summary>
@@ -144,6 +150,15 @@ public class StorageCartonFilter
 /// <summary>The criteria of the Storage Details tab.</summary>
 public class StorageFileFilter
 {
+    /// <summary>The Storage Entry list: also the claims that are not stored yet (the Enquiry lists only files in a carton).</summary>
+    public bool IncludeUnstored { get; set; }
+
+    /// <summary>Bordx date from (the Storage Entry list).</summary>
+    public DateTime? BordxFrom { get; set; }
+
+    /// <summary>Bordx date to (the Storage Entry list).</summary>
+    public DateTime? BordxTo { get; set; }
+
     /// <summary>"Use Scan": one case number instead of a range.</summary>
     public bool UseScan { get; set; }
 
@@ -268,6 +283,7 @@ public sealed class StorageEnquiryRepository : IStorageEnquiryRepository
             deliveryFrom = WorksheetLimits.Day(f.DeliveryFrom), deliveryTo = WorksheetLimits.Day(f.DeliveryTo), returnFrom = WorksheetLimits.Day(f.ReturnFrom), returnTo = WorksheetLimits.Day(f.ReturnTo),
             registerFrom = WorksheetLimits.Day(f.RegisterFrom), registerTo = WorksheetLimits.Day(f.RegisterTo), sentFrom = WorksheetLimits.Day(f.SentFrom), sentTo = WorksheetLimits.Day(f.SentTo),
             payorFrom = Upper(f.PayorFrom) is { Length: > 1 } pf ? pf[..2] : Upper(f.PayorFrom), payorTo = Upper(f.PayorTo) is { Length: > 1 } pt ? pt[..2] : Upper(f.PayorTo), max = WorksheetLimits.FetchRows,
+            includeUnstored = f.IncludeUnstored, bordxFrom = WorksheetLimits.Day(f.BordxFrom), bordxTo = WorksheetLimits.Day(f.BordxTo),
         }, session.Transaction);
 
     /// <inheritdoc />

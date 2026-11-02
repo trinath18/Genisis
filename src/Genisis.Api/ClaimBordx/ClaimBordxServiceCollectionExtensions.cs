@@ -23,6 +23,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<StorageEnquiryService>();
         services.AddSingleton<IStorageDocumentRepository, StorageDocumentRepository>();
         services.AddScoped<StorageDocumentService>();
+        services.AddSingleton<IStorageEntryRepository, StorageEntryRepository>();
+        services.AddScoped<StorageEntryService>();
         services.AddSingleton<IBordxControlRepository, BordxControlRepository>();
         services.AddScoped<BordxControlService>();
         services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();

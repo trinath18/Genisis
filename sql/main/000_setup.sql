@@ -112,7 +112,7 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'Pay_PVMedicaSeq2013', @PaymentDb, N'PVMedicaSeq2013'), (N'Pay_PVMedicaMXSeq', @PaymentDb, N'PVMedicaMXSeq'),
     (N'Pay_ReceiptSummary', @PaymentDb, N'ReceiptSummary'), (N'Pay_TrackMember', @PaymentDb, N'VIEW_ReceiptfrMBMTracking'), (N'Pay_TrackMember2', @PaymentDb, N'VIEW_ReceiptfrMBMTracking2'),
     (N'Pay_TrackPayor', @PaymentDb, N'VIEW_ReceiptfrPayorTracking'), (N'Pay_TrackPayor2', @PaymentDb, N'VIEW_ReceiptfrPayorTracking2'), (N'Pay_TrackMnrb', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking'),
-    (N'Pay_TrackMnrb2', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking2'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
+    (N'Pay_TrackMnrb2', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking2'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_ReceiptfrMNRB', @PaymentDb, N'ReceiptfrMNRB'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
     (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);

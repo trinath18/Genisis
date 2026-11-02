@@ -4,6 +4,7 @@ using Genisis.Api.ClaimBordx.Control;
 using Genisis.Api.ClaimBordx.Recovery;
 using Genisis.Api.ClaimBordx.Revise;
 using Genisis.Api.ClaimBordx.Storage;
+using Genisis.Api.ClaimBordx.Update;
 
 namespace Genisis.Api.ClaimBordx;
 
@@ -25,6 +26,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<StorageDocumentService>();
         services.AddSingleton<IStorageEntryRepository, StorageEntryRepository>();
         services.AddScoped<StorageEntryService>();
+        services.AddSingleton<IUpdateBordxRepository, UpdateBordxRepository>();
+        services.AddScoped<UpdateBordxService>();
         services.AddSingleton<IBordxControlRepository, BordxControlRepository>();
         services.AddScoped<BordxControlService>();
         services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();

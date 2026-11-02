@@ -32,6 +32,9 @@ public static class AccessRight
     /// <summary>Contribution Billing > Refund Listing (mnuMCORefundListing, CheckAccess(21)).</summary>
     public const int ContributionRefundListing = 21;
 
+    /// <summary>Claim Bordx > Print Bordx (mnuPrintBordx, CheckAccess(17)).</summary>
+    public const int ClaimBordxPrint = 17;
+
     /// <summary>Contribution Billing > MCO Reinstatement (no click handler in the desktop): gated like Generate Invoice, the other screen that makes MCO invoices, position 8 (a decision).</summary>
     public const int ContributionInvoicing = 8;
 

@@ -1,4 +1,5 @@
 using Genisis.Api.Receipt.Member;
+using Genisis.Api.Receipt.Payor;
 using Genisis.Api.Receipt.Tracking;
 
 namespace Genisis.Api.Receipt;
@@ -13,6 +14,8 @@ public static class ReceiptServiceCollectionExtensions
         services.AddScoped<ReceiptTrackingService>();
         services.AddSingleton<IReceiptMemberRepository, ReceiptMemberRepository>();
         services.AddScoped<ReceiptMemberService>();
+        services.AddSingleton<IReceiptPayorRepository, ReceiptPayorRepository>();
+        services.AddScoped<ReceiptPayorService>();
         return services;
     }
 }

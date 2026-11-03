@@ -44,6 +44,9 @@ public static class AccessRight
     /// <summary>Receipt > From Member (mnuReceiptMember) has no click handler in the desktop; it is gated like Receipt Tracking and Finance > Receipt Enquiry, position 9 (a decision).</summary>
     public const int ReceiptMember = 9;
 
+    /// <summary>Receipt > Payor (mnuReceiptPayor) has no click handler in the desktop; it is gated like Receipt From Member, position 9 (a decision).</summary>
+    public const int ReceiptPayor = 9;
+
     /// <summary>Maintenance > Suspension: Suspension_Click checks position 27.</summary>
     public const int Suspension = 27;
 

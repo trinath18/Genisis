@@ -32,14 +32,14 @@ How to read the status column
 | Reports | 4 | 0 | 0 | 0 | 0 |
 | Statistic | 2 | 0 | 0 | 0 | 1 |
 | Payment | 27 | 15 | 0 | 14 | 4 |
-| Receipt | 6 | 5 | 1 | 3 | 1 |
+| Receipt | 6 | 5 | 2 | 2 | 1 |
 | Posting | 4 | 3 | 0 | 3 | 1 |
 | Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **74** | **34** | **134** |
+| **Total** | **236** | **113** | **75** | **33** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 74 and 34. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 75 and 33. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -89,6 +89,7 @@ How to read the status column
 | Contribution Billing > MCO Reinstatement | `mnuMCOReinstatement` | frmMCOInvoiceReinstatement (no click handler; chosen by name) | `/contribution-billing/mco-reinstatement` | 8 * | `/api/contribution-billing/mco-reinstatement` |
 | Contribution Billing > Refund Listing | `mnuMCORefundListing` | frmMCORefundListing2 | `/contribution-billing/refund-listing` | 21 | `/api/contribution-billing/refund-listing` |
 | Claim Bordx > Storage > Claim files | `StorageEntry` | frmStorageEntry (no click handler; chosen by name) | `/claim-bordx/storage-claim-files` | 15 * | `/api/claim-bordx/storage-entry` |
+| Receipt > From Member | `mnuReceiptMember` | FrmReceiptMember (no click handler; chosen by name) | `/receipt/from-member` | 9 * | `/api/receipt/from-member` |
 | Receipt > Receipt Tracking | `mnuReceiptTracking` | FrmReceiptTracking (no click handler; chosen by name) | `/receipt/tracking` | 9 * | `/api/receipt/tracking` |
 | Claim Bordx > Print Recovery | `mnuPrintRecovery` | frmGenerateRecovery (no click handler; chosen by name) | `/claim-bordx/print-recovery` | 15 * | `/api/claim-bordx/recovery` |
 | Claim Bordx > Monitoring > Outstanding Bordx | `mnuOSBordx` | FrmOSBordx (no click handler; chosen by name) | `/claim-bordx/outstanding-bordx` | 15 * | `/api/claim-bordx/outstanding` |
@@ -225,7 +226,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-34 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+33 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
@@ -237,7 +238,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Payment** (14): To Hospital; To Member; To Member > Pay2MBM(Auto); To Member > Pay2MBM; To Member > Chq. Cancellation; To Member > Chq. Reissue; Payor; Others; Contra Allocation; Update Invoice; Payment Tracking; Enquiry > Payment To Hospital; Enquiry > Payment To Member; PV Update (Manual)
 
-**Receipt** (3): From Member; Others; Payor. Receipt Tracking is built ([receipt-screens.md](receipt-screens.md)).
+**Receipt** (2): Others; Payor. Receipt Tracking and From Member are built ([receipt-screens.md](receipt-screens.md)).
 
 **Posting** (3): Invoice; Invoice > Hospital; Invoice > Member (Finance > SUN Posting is this form, built)
 

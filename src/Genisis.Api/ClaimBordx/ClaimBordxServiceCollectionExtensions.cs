@@ -34,6 +34,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<PrintBordxService>();
         services.AddSingleton<IPayAdviceRepository, PayAdviceRepository>();
         services.AddScoped<PayAdviceBordxService>();
+        services.AddSingleton<IHospitalReportRepository, HospitalReportRepository>();
+        services.AddScoped<HospitalReportService>();
         services.AddSingleton<IBordxControlRepository, BordxControlRepository>();
         services.AddScoped<BordxControlService>();
         services.AddSingleton<IOutstandingBordxRepository, OutstandingBordxRepository>();

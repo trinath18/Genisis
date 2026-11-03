@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**77 of the 108 are built, 31 are not.** Nine of the 31 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 22 screens to build or to decide about.
+**78 of the 108 are built, 30 are not.** Nine of the 30 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 21 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 31, by menu
+## The 30, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -28,11 +28,10 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | Generate Invoice (Endorsement) | `frmMCOFeesListingEndt` (handler, position 8) | **source missing** | rebuild from tables |
 | Receipt MCO/Others | `FrmRecMCO` (handler, position 19) | | **Covered**: the Finance > Invoice Receipt (Outstanding) screen is this form |
 
-### Authorize Claims (2)
+### Authorize Claims (1 left; DCU Tracking > Claim Report is built: [authorize-screens.md](authorize-screens.md))
 
 | Item | Form | Size | Notes |
 |---|---|---:|---|
-| DCU Tracking > Claim Report | `FrmDCUReport1` ("DCU Reports") / `FrmDCUReport2` ("DCU Reports (Jupiter)", the same form for the Jupiter database; by name, no handler) | 17,593 / 17,591 | **Not started, sized:** one criteria panel (about 45 filters over `VIEW_CLMReportDCU`, built as text for the legacy `DCUReport` procedure, which has 120 cases and 1,900 lines), Claim or Case, 10 report types with 3 to 6 selections each, **55 report routines** that each fill a list of their own (about 23 column layouts, some with a query per row: `DurationStay` alone is 540 lines, the efficiency reports count five age bands per row) and an Excel export of the list. Each report needs its case numbers, columns and per-row rules read from the source and a test; it is a staged build (the Claim and Case general listing first, then the aggregates), not one screen |
 | Claim Pass to A/C | no match found by name | | business to name the form |
 
 ### Claim Bordx (5 left; 17 built)

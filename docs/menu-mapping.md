@@ -26,7 +26,7 @@ How to read the status column
 | Case | 36 | 12 | 12 | 0 | 29 |
 | Invoice | 9 | 5 | 5 | 0 | 8 |
 | Worksheet | 9 | 6 | 6 | 0 | 5 |
-| Authorize Claims | 18 | 2 | 0 | 2 | 14 |
+| Authorize Claims | 18 | 2 | 1 | 1 | 14 |
 | Claim Bordx | 34 | 23 | 17 | 5 | 21 |
 | Finance | 11 | 5 | 4 | 0 | 2 |
 | Reports | 4 | 0 | 0 | 0 | 0 |
@@ -37,9 +37,9 @@ How to read the status column
 | Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **77** | **31** | **134** |
+| **Total** | **236** | **113** | **78** | **30** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 77 and 31. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 78 and 30. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -80,6 +80,7 @@ How to read the status column
 | Finance > Notification / Suspension | `mnuRecMCOOthMan` | frmRecMCOManual (manual receipt number; rebuilt on ReceiptSummary) | `/finance/receipt-manual` | 12 | `/api/finance/invoice-receipt` |
 | Finance > Suspend / Active | `Suspend` | frmPaymentMBMReissue (source missing; rebuilt on Payment2MBM) | `/finance/suspend-active` | 12 | `/api/finance/suspend-active` |
 | Finance > Electronic Banking | `mnuElectronicBank` | frmFileExportBankESP (source missing; configurable file layout) | `/finance/electronic-banking` | 10 | `/api/finance/electronic-banking` |
+| Authorize Claims > DCU Tracking > Claim Report | `mnuReport1` | FrmDCUReport1 (no click handler; chosen by name; `mnuReport2` "Claim Report (Jup.)" is FrmDCUReport2, the same form, not Required) | `/authorize/dcu-report` | 16 * | `/api/authorize/dcu-report` |
 | Posting > Invoice > Hospital | `mnuPostInvHosp` | frmPostingInvoiceHosp (no click handler; chosen by name) | `/posting/invoice-hospital` | 13 * | `/api/posting/invoice-hospital` |
 | Finance > SUN Posting | `mnuInvoicePositve` | frmPostingInvoiceMBM | `/finance/sun-posting` | 13 | `/api/finance/sun-posting` |
 | Claim Bordx > Payment Advice > Hospital Report | `mnuPayAdviceHosRpt` | frmPayAdviceHosRpt (no click handler; chosen by name) | `/claim-bordx/hospital-report` | 15 * | `/api/claim-bordx/hospital-report` |
@@ -228,13 +229,13 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-31 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+30 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
 **Contribution Billing** (1): Generate Invoice (Endorsement). Generate Invoice, MCO Reinstatement and Refund Listing are built ([contribution-billing-screens.md](contribution-billing-screens.md)) (Receipt MCO/Others is the Finance > Invoice Receipt (Outstanding) form, built)
 
-**Authorize Claims** (2): DCU Tracking > Claim Report; Claim Pass to A/C
+**Authorize Claims** (1): Claim Pass to A/C. DCU Tracking > Claim Report is built ([authorize-screens.md](authorize-screens.md)).
 
 **Claim Bordx** (5, four of them parent menus): Worksheet; Payment Advice; Bor Delivery; Bor Delivery > Bordx Send Date; Monitoring; Storage > Claim files
 

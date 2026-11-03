@@ -134,6 +134,9 @@ public static class AccessRight
     /// <summary>Posting > Invoice > Hospital (mnuPostInvHosp) has no click handler in the desktop; it is gated like Finance > SUN Posting (position 13), the same family of forms (a decision).</summary>
     public const int PostingInvoiceHospital = 13;
 
+    /// <summary>Authorize Claims > DCU Tracking > Claim Report (mnuReport1) has no click handler in the desktop; it is gated like Claim Tracking, the other claim report (CheckAccess(16)): a decision.</summary>
+    public const int AuthorizeDcuReport = 16;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

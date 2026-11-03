@@ -1,0 +1,5287 @@
+[
+ {
+  "id": "claim:0:0",
+  "mode": "claim",
+  "typeIndex": 0,
+  "type": "General Listing",
+  "selectionIndex": 0,
+  "selection": "Without Remarks",
+  "routine": "ResultListing",
+  "case": 1,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Claim No",
+    "kind": "claimNo"
+   },
+   {
+    "header": "BordxNo",
+    "kind": "text",
+    "field": "BordxRefNo"
+   },
+   {
+    "header": "Bordx Date",
+    "kind": "date",
+    "field": "BordxDate"
+   },
+   {
+    "header": "Member No",
+    "kind": "text",
+    "field": "MBMNumber"
+   },
+   {
+    "header": "Policy No",
+    "kind": "text",
+    "field": "MBMPolicyNo",
+    "trim": true
+   },
+   {
+    "header": "Covered ID",
+    "kind": "text",
+    "field": "MBMPatientCovID"
+   },
+   {
+    "header": "Prin. Name",
+    "kind": "text",
+    "field": "MBMName",
+    "trim": true
+   },
+   {
+    "header": "Patient Name",
+    "kind": "text",
+    "field": "PatientName",
+    "trim": true
+   },
+   {
+    "header": "Prin. IC No",
+    "kind": "text",
+    "field": "MBMIcBcPp"
+   },
+   {
+    "header": "Prin. Sex",
+    "kind": "text",
+    "field": "MBMSex"
+   },
+   {
+    "header": "Prin. Ageband",
+    "kind": "text",
+    "field": "AgeCode"
+   },
+   {
+    "header": "Prin. DOB",
+    "kind": "date",
+    "field": "MBMDOB"
+   },
+   {
+    "header": "Patient IC No",
+    "kind": "text",
+    "field": "ICNo"
+   },
+   {
+    "header": "Patient Sex",
+    "kind": "text",
+    "field": "Sex"
+   },
+   {
+    "header": "Patient Ageband",
+    "kind": "text",
+    "field": "AgeBand"
+   },
+   {
+    "header": "Patient DOB",
+    "kind": "date",
+    "field": "DOB"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode"
+   },
+   {
+    "header": "Plan Code",
+    "kind": "text",
+    "field": "PLNCode"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true
+   },
+   {
+    "header": "First Diag.",
+    "kind": "text",
+    "field": "FirstDiag"
+   },
+   {
+    "header": "Description",
+    "kind": "icd",
+    "field": "FirstDiag"
+   },
+   {
+    "header": "Final Diag.",
+    "kind": "text",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Description",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalActual",
+    "format": "paren"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalApproved",
+    "format": "paren"
+   },
+   {
+    "header": "Reserve Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CASReserveAmount",
+    "format": "paren"
+   },
+   {
+    "header": "Recovery Amt",
+    "right": true,
+    "kind": "money",
+    "field": "RecoveryAmt",
+    "format": "paren",
+    "zero": "0.00",
+    "negativeOnly": true
+   },
+   {
+    "header": "Premium Amt",
+    "right": true,
+    "kind": "money",
+    "field": "MBMPremium",
+    "format": "paren"
+   },
+   {
+    "header": "Case Status",
+    "kind": "text",
+    "field": "CASStatus"
+   },
+   {
+    "header": "Claimability",
+    "kind": "text",
+    "field": "CASClaimability"
+   },
+   {
+    "header": "Policy Status",
+    "kind": "text",
+    "field": "MBMStatus"
+   },
+   {
+    "header": "DOA",
+    "kind": "date",
+    "field": "CASDateAdmitted"
+   },
+   {
+    "header": "DOD",
+    "kind": "date",
+    "field": "CASDischargeDate"
+   },
+   {
+    "header": "DOR - C",
+    "kind": "date",
+    "field": "CaseRegDate"
+   },
+   {
+    "header": "Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "DOR - W",
+    "kind": "date",
+    "field": "ClaimOpendate"
+   },
+   {
+    "header": "Payor Eff. Date",
+    "kind": "date",
+    "field": "MBMPayorEffDate"
+   },
+   {
+    "header": "Payor Exp. Date",
+    "kind": "date",
+    "field": "MBMPayorEXPDate"
+   },
+   {
+    "header": "CPT Code 1",
+    "kind": "text",
+    "field": "CASCptCode1",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired1",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 2",
+    "kind": "text",
+    "field": "CASCptCode2",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired2",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 3",
+    "kind": "text",
+    "field": "CASCptCode3",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired3",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 4",
+    "kind": "text",
+    "field": "CASCptCode4",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired4",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 5",
+    "kind": "text",
+    "field": "CASCptCode5",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired5",
+    "trim": true
+   }
+  ]
+ },
+ {
+  "id": "case:0:0",
+  "mode": "case",
+  "typeIndex": 0,
+  "type": "General Listing",
+  "selectionIndex": 0,
+  "selection": "Without Remarks",
+  "routine": "ResultListing",
+  "case": 2,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Case No",
+    "kind": "text",
+    "field": "CasNumber"
+   },
+   {
+    "header": "Member No",
+    "kind": "text",
+    "field": "MBMNumber"
+   },
+   {
+    "header": "Policy No",
+    "kind": "text",
+    "field": "MBMPolicyNo",
+    "trim": true
+   },
+   {
+    "header": "Covered ID",
+    "kind": "text",
+    "field": "MBMPatientCovID"
+   },
+   {
+    "header": "Prin. Name",
+    "kind": "text",
+    "field": "MBMName",
+    "trim": true
+   },
+   {
+    "header": "Patient Name",
+    "kind": "text",
+    "field": "PatientName",
+    "trim": true
+   },
+   {
+    "header": "Prin. IC No",
+    "kind": "text",
+    "field": "MBMIcBcPp"
+   },
+   {
+    "header": "Prin. Sex",
+    "kind": "text",
+    "field": "MBMSex"
+   },
+   {
+    "header": "Prin. Ageband",
+    "kind": "text",
+    "field": "AgeCode"
+   },
+   {
+    "header": "Prin. DOB",
+    "kind": "date",
+    "field": "MBMDOB"
+   },
+   {
+    "header": "Patient IC No",
+    "kind": "text",
+    "field": "ICNo"
+   },
+   {
+    "header": "Patient Sex",
+    "kind": "text",
+    "field": "Sex"
+   },
+   {
+    "header": "Patient Ageband",
+    "kind": "text",
+    "field": "AgeBand"
+   },
+   {
+    "header": "Patient DOB",
+    "kind": "date",
+    "field": "DOB"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode"
+   },
+   {
+    "header": "Plan Code",
+    "kind": "text",
+    "field": "PLNCode"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true
+   },
+   {
+    "header": "First Diag.",
+    "kind": "text",
+    "field": "FirstDiag"
+   },
+   {
+    "header": "Description",
+    "kind": "icd",
+    "field": "FirstDiag"
+   },
+   {
+    "header": "Final Diag.",
+    "kind": "text",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Description",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalActual",
+    "format": "paren"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalApproved",
+    "format": "paren"
+   },
+   {
+    "header": "Not Yet Bordx",
+    "right": true,
+    "kind": "notYetBordx"
+   },
+   {
+    "header": "Bordx",
+    "right": true,
+    "kind": "bordxed"
+   },
+   {
+    "header": "Reserve Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CASReserveAmount",
+    "format": "paren"
+   },
+   {
+    "header": "Recovery Amt",
+    "right": true,
+    "kind": "money",
+    "field": "RecoveryAmt",
+    "format": "paren"
+   },
+   {
+    "header": "Premium Amt",
+    "right": true,
+    "kind": "money",
+    "field": "MBMPremium",
+    "format": "paren"
+   },
+   {
+    "header": "Case Status",
+    "kind": "text",
+    "field": "CASStatus"
+   },
+   {
+    "header": "Claimability",
+    "kind": "text",
+    "field": "CASClaimability"
+   },
+   {
+    "header": "Policy Status",
+    "kind": "text",
+    "field": "MBMStatus"
+   },
+   {
+    "header": "DOA",
+    "kind": "date",
+    "field": "CASDateAdmitted"
+   },
+   {
+    "header": "DOD",
+    "kind": "date",
+    "field": "CASDischargeDate"
+   },
+   {
+    "header": "DOR - C",
+    "kind": "date",
+    "field": "CaseRegDate"
+   },
+   {
+    "header": "Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Payor Eff. Date",
+    "kind": "date",
+    "field": "MBMPayorEffDate"
+   },
+   {
+    "header": "Payor Exp. Date",
+    "kind": "date",
+    "field": "MBMPayorEXPDate"
+   },
+   {
+    "header": "CPT Code 1",
+    "kind": "text",
+    "field": "CASCptCode1",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired1",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 2",
+    "kind": "text",
+    "field": "CASCptCode2",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired2",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 3",
+    "kind": "text",
+    "field": "CASCptCode3",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired3",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 4",
+    "kind": "text",
+    "field": "CASCptCode4",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired4",
+    "trim": true
+   },
+   {
+    "header": "CPT Code 5",
+    "kind": "text",
+    "field": "CASCptCode5",
+    "trim": true
+   },
+   {
+    "header": "Procedures Desc.",
+    "kind": "text",
+    "field": "CASOPROCRequired5",
+    "trim": true
+   }
+  ]
+ },
+ {
+  "id": "claim:1:0",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 0,
+  "selection": "Summary",
+  "routine": "AgeGroupListing",
+  "case": 37,
+  "columns": [
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:1:1",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 1,
+  "selection": "By Gender",
+  "routine": "AgeGenderListing",
+  "case": 40,
+  "columns": [
+   {
+    "header": "Gender",
+    "kind": "text",
+    "field": "Sex",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:1:2",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 2,
+  "selection": "By Insured Type",
+  "routine": "AgeInsuredListing",
+  "case": 10,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:1:3",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 3,
+  "selection": "By Race",
+  "routine": "AgeRaceListing",
+  "case": 43,
+  "columns": [
+   {
+    "header": "Race Code",
+    "kind": "text",
+    "field": "RACCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:1:4",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 4,
+  "selection": "By Plan No",
+  "routine": "AgePlanListing",
+  "case": 46,
+  "columns": [
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Code",
+    "kind": "text",
+    "field": "PLNCode"
+   },
+   {
+    "header": "Age Band",
+    "kind": "text",
+    "field": "AgeBand"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:1:5",
+  "mode": "claim",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 5,
+  "selection": "By Bordx Month",
+  "routine": "AgeIllnessListing",
+  "case": 49,
+  "columns": [
+   {
+    "header": "Nature of Claim",
+    "kind": "text",
+    "field": "ClaimNatureCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Age Band",
+    "kind": "text",
+    "field": "AgeBand"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:1:0",
+  "mode": "case",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 0,
+  "selection": "Summary",
+  "routine": "AgeGroupListing",
+  "case": 38,
+  "durationCase": 39,
+  "durationKeys": [
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:1:1",
+  "mode": "case",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 1,
+  "selection": "By Gender",
+  "routine": "AgeGenderListing",
+  "case": 41,
+  "durationCase": 42,
+  "durationKeys": [
+   "Sex",
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Gender",
+    "kind": "text",
+    "field": "Sex",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:1:2",
+  "mode": "case",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 2,
+  "selection": "By Insured Type",
+  "routine": "AgeInsuredListing",
+  "case": 11,
+  "durationCase": 12,
+  "durationKeys": [
+   "PAYCode",
+   "INSCode",
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:1:3",
+  "mode": "case",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 3,
+  "selection": "By Race",
+  "routine": "AgeRaceListing",
+  "case": 44,
+  "durationCase": 45,
+  "durationKeys": [
+   "RACCode",
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Race Code",
+    "kind": "text",
+    "field": "RACCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:1:4",
+  "mode": "case",
+  "typeIndex": 1,
+  "type": "Age Band",
+  "selectionIndex": 4,
+  "selection": "By Plan No",
+  "routine": "AgePlanListing",
+  "case": 47,
+  "durationCase": 48,
+  "durationKeys": [
+   "INSCode",
+   "PLNCode",
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Code",
+    "kind": "text",
+    "field": "PLNCode"
+   },
+   {
+    "header": "Age Band",
+    "kind": "text",
+    "field": "AgeBand"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:2:0",
+  "mode": "claim",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 0,
+  "selection": "Top 20 by Claims/Cases",
+  "routine": "FinalDiagListing",
+  "case": 71,
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:2:1",
+  "mode": "claim",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 1,
+  "selection": "Top 20 by Amount",
+  "routine": "FinalDiagListing",
+  "case": 73,
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:2:2",
+  "mode": "claim",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 2,
+  "selection": "General Summary",
+  "routine": "FinalDiagListing",
+  "case": 75,
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:2:3",
+  "mode": "claim",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 3,
+  "selection": "By Hospital",
+  "routine": "FinalDiagbyHos",
+  "case": 78,
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:2:0",
+  "mode": "case",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 0,
+  "selection": "Top 20 by Claims/Cases",
+  "routine": "FinalDiagListing",
+  "case": 72,
+  "durationCase": 77,
+  "durationKeys": [
+   "FinalDiag"
+  ],
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:2:1",
+  "mode": "case",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 1,
+  "selection": "Top 20 by Amount",
+  "routine": "FinalDiagListing",
+  "case": 74,
+  "durationCase": 77,
+  "durationKeys": [
+   "FinalDiag"
+  ],
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:2:2",
+  "mode": "case",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 2,
+  "selection": "General Summary",
+  "routine": "FinalDiagListing",
+  "case": 76,
+  "durationCase": 77,
+  "durationKeys": [
+   "FinalDiag"
+  ],
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:2:3",
+  "mode": "case",
+  "typeIndex": 2,
+  "type": "Diagnosis",
+  "selectionIndex": 3,
+  "selection": "By Hospital",
+  "routine": "FinalDiagbyHos",
+  "case": 79,
+  "durationCase": 80,
+  "durationKeys": [
+   "FinalDiag",
+   "HOSName"
+  ],
+  "columns": [
+   {
+    "header": "Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Diag. Desc",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:0",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 0,
+  "selection": "Detail Listing",
+  "routine": "HOSDetailListing",
+  "case": 66,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Claim No",
+    "kind": "claimNo"
+   },
+   {
+    "header": "Member No",
+    "kind": "text",
+    "field": "MBMNumber"
+   },
+   {
+    "header": "Covered ID",
+    "kind": "text",
+    "field": "MBMPatientCovID"
+   },
+   {
+    "header": "Patient Name",
+    "kind": "text",
+    "field": "PatientName",
+    "trim": true
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Member Amt",
+    "right": true,
+    "kind": "money",
+    "field": "RecoveryAmt",
+    "format": "plain"
+   },
+   {
+    "header": "DOA",
+    "kind": "date",
+    "field": "CASDateAdmitted"
+   },
+   {
+    "header": "DOD",
+    "kind": "date",
+    "field": "CASDischargeDate"
+   },
+   {
+    "header": "Case Status",
+    "kind": "text",
+    "field": "CASStatus"
+   },
+   {
+    "header": "Claimability",
+    "kind": "text",
+    "field": "CASClaimability"
+   },
+   {
+    "header": "Final Diag.",
+    "kind": "text",
+    "field": "FinalDiag"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:1",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 1,
+  "selection": "General Summary (By Payor)",
+  "routine": "HOSSumListing",
+  "case": 60,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:2",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 2,
+  "selection": "General Summary (All)",
+  "routine": "HOSSumListing2",
+  "case": 63,
+  "columns": [
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:3",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 3,
+  "selection": "Top 20 by Claims/Cases",
+  "routine": "HOSTop20",
+  "case": 55,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:4",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 4,
+  "selection": "Top 20 by Amount (By Payor)",
+  "routine": "HOSTop20",
+  "case": 55,
+  "orderBy": "TotalApproved",
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:5",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 5,
+  "selection": "Top 20 by Amount (All Payor)",
+  "routine": "HOSTop202",
+  "case": 57,
+  "orderBy": "TotalApproved",
+  "columns": [
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:3:6",
+  "mode": "claim",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 6,
+  "selection": "By Bordx Month",
+  "routine": "HOSByDiag",
+  "case": 68,
+  "columns": [
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Final Diag.",
+    "kind": "text",
+    "field": "FinalDiag",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Description",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:3:0",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 0,
+  "selection": "Detail Listing",
+  "routine": "HOSDetailListing",
+  "case": 67,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Case No",
+    "kind": "text",
+    "field": "CasNumber"
+   },
+   {
+    "header": "Member No",
+    "kind": "text",
+    "field": "MBMNumber"
+   },
+   {
+    "header": "Covered ID",
+    "kind": "text",
+    "field": "MBMPatientCovID"
+   },
+   {
+    "header": "Patient Name",
+    "kind": "text",
+    "field": "PatientName",
+    "trim": true
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "CLMTotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Member Amt",
+    "right": true,
+    "kind": "money",
+    "field": "RecoveryAmt",
+    "format": "plain"
+   },
+   {
+    "header": "DOA",
+    "kind": "date",
+    "field": "CASDateAdmitted"
+   },
+   {
+    "header": "DOD",
+    "kind": "date",
+    "field": "CASDischargeDate"
+   },
+   {
+    "header": "Case Status",
+    "kind": "text",
+    "field": "CASStatus"
+   },
+   {
+    "header": "Claimability",
+    "kind": "text",
+    "field": "CASClaimability"
+   },
+   {
+    "header": "Final Diag.",
+    "kind": "text",
+    "field": "FinalDiag"
+   }
+  ]
+ },
+ {
+  "id": "case:3:1",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 1,
+  "selection": "General Summary (By Payor)",
+  "routine": "HOSSumListing",
+  "case": 61,
+  "durationCase": 62,
+  "durationKeys": [
+   "PAYCode",
+   "HOSName"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "case:3:2",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 2,
+  "selection": "General Summary (All)",
+  "routine": "HOSSumListing2",
+  "case": 64,
+  "durationCase": 65,
+  "durationKeys": [
+   "HOSName"
+  ],
+  "columns": [
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "case:3:3",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 3,
+  "selection": "Top 20 by Claims/Cases",
+  "routine": "HOSTop20",
+  "case": 56,
+  "durationCase": 62,
+  "durationKeys": [
+   "PAYCode",
+   "HOSName"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "case:3:4",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 4,
+  "selection": "Top 20 by Amount (By Payor)",
+  "routine": "HOSTop20",
+  "case": 56,
+  "durationCase": 62,
+  "durationKeys": [
+   "PAYCode",
+   "HOSName"
+  ],
+  "orderBy": "TotalApproved",
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "case:3:5",
+  "mode": "case",
+  "typeIndex": 3,
+  "type": "Hospital",
+  "selectionIndex": 5,
+  "selection": "Top 20 by Amount (All Payor)",
+  "routine": "HOSTop202",
+  "case": 58,
+  "durationCase": 59,
+  "durationKeys": [
+   "HOSName"
+  ],
+  "orderBy": "TotalApproved",
+  "columns": [
+   {
+    "header": "Hospital",
+    "kind": "text",
+    "field": "HOSName",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "Total"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Bill Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Average Bill",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalActual",
+    "den": "Total"
+   },
+   {
+    "header": "Average Approved",
+    "right": true,
+    "kind": "ratio",
+    "num": "TotalApproved",
+    "den": "Total"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:0",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 0,
+  "selection": "By Reg Month",
+  "routine": "RegMonthAllPayor",
+  "case": 84,
+  "columns": [
+   {
+    "header": "Reg. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:1",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 1,
+  "selection": "By Eff Month",
+  "routine": "EffMonthAllPayor",
+  "case": 90,
+  "columns": [
+   {
+    "header": "Eff. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:2",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 2,
+  "selection": "By Exp Month",
+  "routine": "ExpMonthAllPayor",
+  "case": 96,
+  "columns": [
+   {
+    "header": "Exp. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:3",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 3,
+  "selection": "By DOA Month",
+  "routine": "DOAMonthAllPayor",
+  "case": 102,
+  "columns": [
+   {
+    "header": "DOA Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:4",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 4,
+  "selection": "By DOD Month",
+  "routine": "DODMonthAllPayor",
+  "case": 108,
+  "columns": [
+   {
+    "header": "DOD Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:5",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 5,
+  "selection": "By Bordx Month",
+  "routine": "BordxMonthAllPayor",
+  "case": 114,
+  "columns": [
+   {
+    "header": "Bordx Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:6",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 6,
+  "selection": "By Reg Month (Payor)",
+  "routine": "RegMonthPayor",
+  "case": 87,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Reg. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:7",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 7,
+  "selection": "By Eff Month (Payor)",
+  "routine": "EffMonthPayor",
+  "case": 93,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Eff. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:8",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 8,
+  "selection": "By Exp Month (Payor)",
+  "routine": "ExpMonthPayor",
+  "case": 99,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Exp. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:9",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 9,
+  "selection": "By DOA Month (Payor)",
+  "routine": "DOAMonthPayor",
+  "case": 105,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "DOA Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:10",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 10,
+  "selection": "By DOD Month (Payor)",
+  "routine": "DODMonthPayor",
+  "case": 111,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "DOD Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:4:11",
+  "mode": "claim",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 11,
+  "selection": "By Bordx Month (Payor)",
+  "routine": "BordxMonthPayor",
+  "case": 115,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Bordx Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:0",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 0,
+  "selection": "By Reg Month",
+  "routine": "RegMonthAllPayor",
+  "case": 85,
+  "durationCase": 86,
+  "durationKeys": [
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Reg. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:1",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 1,
+  "selection": "By Eff Month",
+  "routine": "EffMonthAllPayor",
+  "case": 91,
+  "durationCase": 92,
+  "durationKeys": [
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Eff. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:2",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 2,
+  "selection": "By Exp Month",
+  "routine": "ExpMonthAllPayor",
+  "case": 97,
+  "durationCase": 98,
+  "durationKeys": [
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Exp. Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:3",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 3,
+  "selection": "By DOA Month",
+  "routine": "DOAMonthAllPayor",
+  "case": 103,
+  "durationCase": 104,
+  "durationKeys": [
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "DOA Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:4",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 4,
+  "selection": "By DOD Month",
+  "routine": "DODMonthAllPayor",
+  "case": 109,
+  "durationCase": 110,
+  "durationKeys": [
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "DOD Month",
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:5",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 5,
+  "selection": "By Reg Month (Payor)",
+  "routine": "RegMonthPayor",
+  "case": 88,
+  "durationCase": 89,
+  "durationKeys": [
+   "PAYCode",
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Reg. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:6",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 6,
+  "selection": "By Eff Month (Payor)",
+  "routine": "EffMonthPayor",
+  "case": 94,
+  "durationCase": 95,
+  "durationKeys": [
+   "PAYCode",
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Eff. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:7",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 7,
+  "selection": "By Exp Month (Payor)",
+  "routine": "ExpMonthPayor",
+  "case": 100,
+  "durationCase": 101,
+  "durationKeys": [
+   "PAYCode",
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Exp. Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:8",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 8,
+  "selection": "By DOA Month (Payor)",
+  "routine": "DOAMonthPayor",
+  "case": 106,
+  "durationCase": 107,
+  "durationKeys": [
+   "PAYCode",
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "DOA Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "case:4:9",
+  "mode": "case",
+  "typeIndex": 4,
+  "type": "Month",
+  "selectionIndex": 9,
+  "selection": "By DOD Month (Payor)",
+  "routine": "DODMonthPayor",
+  "case": 112,
+  "durationCase": 113,
+  "durationKeys": [
+   "PAYCode",
+   "MONTH",
+   "YEAR"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "DOD Month",
+    "right": true,
+    "kind": "yearMonth"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain",
+    "zero": "0.00"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain",
+    "zero": "0.00"
+   }
+  ]
+ },
+ {
+  "id": "claim:5:0",
+  "mode": "claim",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 0,
+  "selection": "Summary",
+  "routine": "INSListing",
+  "case": 4,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ins Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:5:1",
+  "mode": "claim",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 1,
+  "selection": "By Plan No",
+  "routine": "PlanInsuredListing",
+  "case": 7,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:5:2",
+  "mode": "claim",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 2,
+  "selection": "By Ageband",
+  "routine": "AgeInsuredListing",
+  "case": 10,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:5:3",
+  "mode": "claim",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 3,
+  "selection": "By Gender",
+  "routine": "SexInsuredListing",
+  "case": 13,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Gender",
+    "kind": "text",
+    "field": "Sex",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:5:4",
+  "mode": "claim",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 4,
+  "selection": "By Race",
+  "routine": "RaceInsuredListing",
+  "case": 16,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Race Code",
+    "kind": "text",
+    "field": "RACCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:5:0",
+  "mode": "case",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 0,
+  "selection": "Summary",
+  "routine": "INSListing",
+  "case": 5,
+  "durationCase": 6,
+  "durationKeys": [
+   "PAYCode",
+   "INSCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ins Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:5:1",
+  "mode": "case",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 1,
+  "selection": "By Plan No",
+  "routine": "PlanInsuredListing",
+  "case": 8,
+  "durationCase": 9,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode",
+   "INSCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:5:2",
+  "mode": "case",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 2,
+  "selection": "By Ageband",
+  "routine": "AgeInsuredListing",
+  "case": 11,
+  "durationCase": 12,
+  "durationKeys": [
+   "PAYCode",
+   "INSCode",
+   "Ageband"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:5:3",
+  "mode": "case",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 3,
+  "selection": "By Gender",
+  "routine": "SexInsuredListing",
+  "case": 14,
+  "durationCase": 15,
+  "durationKeys": [
+   "PAYCode",
+   "INSCode",
+   "Sex"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Gender",
+    "kind": "text",
+    "field": "Sex",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:5:4",
+  "mode": "case",
+  "typeIndex": 5,
+  "type": "Insured Type",
+  "selectionIndex": 4,
+  "selection": "By Race",
+  "routine": "RaceInsuredListing",
+  "case": 17,
+  "durationCase": 18,
+  "durationKeys": [
+   "PAYCode",
+   "INSCode",
+   "RACCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Race Code",
+    "kind": "text",
+    "field": "RACCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:6:0",
+  "mode": "claim",
+  "typeIndex": 6,
+  "type": "Payor",
+  "selectionIndex": null,
+  "selection": null,
+  "routine": "PayorListing",
+  "case": 52,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:6:0",
+  "mode": "case",
+  "typeIndex": 6,
+  "type": "Payor",
+  "selectionIndex": null,
+  "selection": null,
+  "routine": "PayorListing",
+  "case": 53,
+  "durationCase": 54,
+  "durationKeys": [
+   "PAYCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:0",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 0,
+  "selection": "General Summary",
+  "routine": "PlanListing",
+  "case": 22,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:1",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 1,
+  "selection": "Top 10 Hospitals",
+  "routine": "PlanTopHosListing",
+  "case": 25,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital Name",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:2",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 2,
+  "selection": "Top 10 Diagnosis",
+  "routine": "PlanTopDiagListing",
+  "case": 28,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Final Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Descriptions",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:3",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 3,
+  "selection": "By Ageband",
+  "routine": "PlanAgebandListing",
+  "case": 31,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:4",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 4,
+  "selection": "By Insured Type",
+  "routine": "PlanInsuredListing",
+  "case": 7,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:5",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 5,
+  "selection": "General Summary with Premium",
+  "routine": "PlanPremiumListing",
+  "case": 19,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Gross Premium",
+    "right": true,
+    "kind": "money",
+    "field": "BasicPremium",
+    "format": "plain"
+   },
+   {
+    "header": "Net Premium",
+    "right": true,
+    "kind": "money",
+    "field": "Premium",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:7:6",
+  "mode": "claim",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 6,
+  "selection": "By Bordx Month",
+  "routine": "PlanInsuredListing2",
+  "case": 34,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:0",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 0,
+  "selection": "General Summary",
+  "routine": "PlanListing",
+  "case": 23,
+  "durationCase": 24,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:1",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 1,
+  "selection": "Top 10 Hospitals",
+  "routine": "PlanTopHosListing",
+  "case": 26,
+  "durationCase": 27,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode",
+   "HOSName"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Hospital Name",
+    "kind": "text",
+    "field": "HOSName",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:2",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 2,
+  "selection": "Top 10 Diagnosis",
+  "routine": "PlanTopDiagListing",
+  "case": 29,
+  "durationCase": 30,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode",
+   "FinalDiag"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Final Diag. Code",
+    "kind": "text",
+    "field": "FinalDiag",
+    "empty": "Empty"
+   },
+   {
+    "header": "Descriptions",
+    "kind": "icd",
+    "field": "FinalDiag"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:3",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 3,
+  "selection": "By Ageband",
+  "routine": "PlanAgebandListing",
+  "case": 32,
+  "durationCase": 33,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode",
+   "AGEBand"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Ageband",
+    "kind": "text",
+    "field": "AgeBand",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:4",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 4,
+  "selection": "By Insured Type",
+  "routine": "PlanInsuredListing",
+  "case": 8,
+  "durationCase": 9,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode",
+   "INSCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Insured Type",
+    "kind": "text",
+    "field": "INSCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "No of Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration ",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActualAmt",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApprovedAmt",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:7:5",
+  "mode": "case",
+  "typeIndex": 7,
+  "type": "Plan No",
+  "selectionIndex": 5,
+  "selection": "General Summary with Premium",
+  "routine": "PlanPremiumListing",
+  "case": 20,
+  "durationCase": 21,
+  "durationKeys": [
+   "PAYCode",
+   "PLNCode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Plan Type",
+    "kind": "text",
+    "field": "PLNCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   },
+   {
+    "header": "Gross Premium",
+    "right": true,
+    "kind": "money",
+    "field": "BasicPremium",
+    "format": "plain"
+   },
+   {
+    "header": "Net Premium",
+    "right": true,
+    "kind": "money",
+    "field": "Premium",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:8:0",
+  "mode": "claim",
+  "typeIndex": 8,
+  "type": "State",
+  "selectionIndex": null,
+  "selection": null,
+  "routine": "StateListing",
+  "case": 81,
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "State",
+    "kind": "text",
+    "field": "STACode",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Claims",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "case:8:0",
+  "mode": "case",
+  "typeIndex": 8,
+  "type": "State",
+  "selectionIndex": null,
+  "selection": null,
+  "routine": "StateListing",
+  "case": 82,
+  "durationCase": 83,
+  "durationKeys": [
+   "PAYCode",
+   "STACode"
+  ],
+  "columns": [
+   {
+    "header": "Payor",
+    "kind": "text",
+    "field": "PAYCode",
+    "empty": "Empty"
+   },
+   {
+    "header": "State",
+    "kind": "text",
+    "field": "STACode",
+    "trim": true,
+    "empty": "Empty"
+   },
+   {
+    "header": "Total Cases",
+    "right": true,
+    "kind": "text",
+    "field": "TotalCases"
+   },
+   {
+    "header": "Total Duration",
+    "right": true,
+    "kind": "duration"
+   },
+   {
+    "header": "Total Actual Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalActual",
+    "format": "plain"
+   },
+   {
+    "header": "Total Approved Amt",
+    "right": true,
+    "kind": "money",
+    "field": "TotalApproved",
+    "format": "plain"
+   }
+  ]
+ },
+ {
+  "id": "claim:9:0",
+  "mode": "claim",
+  "typeIndex": 9,
+  "type": "Efficiency",
+  "selectionIndex": 0,
+  "selection": "Registration",
+  "routine": "DIREfficiencyRpt",
+  "case": 116,
+  "efficiency": "DIR",
+  "columns": [
+   {
+    "header": "DIR Month",
+    "kind": "efficiency"
+   },
+   {
+    "header": "Total",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "0-15",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "15-30",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "31-60",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "61-90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": ">90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "O/S",
+    "right": true,
+    "kind": "efficiency"
+   }
+  ]
+ },
+ {
+  "id": "claim:9:1",
+  "mode": "claim",
+  "typeIndex": 9,
+  "type": "Efficiency",
+  "selectionIndex": 1,
+  "selection": "Bordereaux (Claim)",
+  "routine": "BordxEfficiencyRpt",
+  "case": 117,
+  "efficiency": "BORDX",
+  "columns": [
+   {
+    "header": "DOR Month",
+    "kind": "efficiency"
+   },
+   {
+    "header": "Total",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "0-15",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "15-30",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "31-60",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "61-90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": ">90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "O/S",
+    "right": true,
+    "kind": "efficiency"
+   }
+  ]
+ },
+ {
+  "id": "claim:9:2",
+  "mode": "claim",
+  "typeIndex": 9,
+  "type": "Efficiency",
+  "selectionIndex": 2,
+  "selection": "Invoice",
+  "routine": "InvEfficiencyRpt",
+  "case": 118,
+  "efficiency": "INV",
+  "columns": [
+   {
+    "header": "Invoice Date Month",
+    "kind": "efficiency"
+   },
+   {
+    "header": "Total",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "0-15",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "15-30",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "31-60",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "61-90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": ">90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "O/S",
+    "right": true,
+    "kind": "efficiency"
+   }
+  ]
+ },
+ {
+  "id": "claim:9:3",
+  "mode": "claim",
+  "typeIndex": 9,
+  "type": "Efficiency",
+  "selectionIndex": 3,
+  "selection": "Bordereaux (Inv.)",
+  "routine": "BordxInvEfficiencyRpt",
+  "case": 119,
+  "efficiency": "BORDXINV",
+  "columns": [
+   {
+    "header": "Invoice Date Month",
+    "kind": "efficiency"
+   },
+   {
+    "header": "Total",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "0-15",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "15-30",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "31-60",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "61-90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": ">90",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "O/S",
+    "right": true,
+    "kind": "efficiency"
+   }
+  ]
+ },
+ {
+  "id": "claim:9:4",
+  "mode": "claim",
+  "typeIndex": 9,
+  "type": "Efficiency",
+  "selectionIndex": 4,
+  "selection": "O/S Bordereaux",
+  "routine": "OSBordxEfficiencyRpt",
+  "case": 120,
+  "efficiency": "OS",
+  "columns": [
+   {
+    "header": "Reg. Month",
+    "kind": "efficiency"
+   },
+   {
+    "header": "B/F",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "Registered",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "Bordx",
+    "right": true,
+    "kind": "efficiency"
+   },
+   {
+    "header": "O/S",
+    "right": true,
+    "kind": "efficiency"
+   }
+  ]
+ }
+]

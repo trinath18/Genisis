@@ -22,7 +22,7 @@ How to read the status column
 |---|---:|---:|---:|---:|---:|
 | File | 6 | 3 | 0 | 2 | 2 |
 | Membership | 28 | 13 | 13 | 0 | 23 |
-| Contribution Billing | 12 | 5 | 3 | 2 | 9 |
+| Contribution Billing | 12 | 5 | 4 | 1 | 9 |
 | Case | 36 | 12 | 12 | 0 | 29 |
 | Invoice | 9 | 5 | 5 | 0 | 8 |
 | Worksheet | 9 | 6 | 6 | 0 | 5 |
@@ -37,9 +37,9 @@ How to read the status column
 | Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **73** | **35** | **134** |
+| **Total** | **236** | **113** | **74** | **34** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 73 and 35. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 74 and 34. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -85,6 +85,7 @@ How to read the status column
 | Claim Bordx > Payment Advice > Generate Bordx No | `mnuPayAdviceBordx` | frmPayAdviceHosp (no click handler; chosen by name) | `/claim-bordx/payment-advice-bordx` | 15 * | `/api/claim-bordx/payment-advice-bordx` |
 | Claim Bordx > Print Bordx | `mnuPrintBordx` | FrmPrintBordx | `/claim-bordx/print-bordx` | 17 | `/api/claim-bordx/print-bordx` |
 | Claim Bordx > Update Bordx | `UpdateBordx` | frmUpdateWS2Bordx (no click handler; chosen by name) | `/claim-bordx/update-bordx` | 15 * | `/api/claim-bordx/update-bordx` |
+| Contribution Billing > Generate Invoice | `mnuMCOInvoice` | frmMCOFeesListingNew | `/contribution-billing/generate-invoice` | 8 | `/api/contribution-billing/generate-invoice` |
 | Contribution Billing > MCO Reinstatement | `mnuMCOReinstatement` | frmMCOInvoiceReinstatement (no click handler; chosen by name) | `/contribution-billing/mco-reinstatement` | 8 * | `/api/contribution-billing/mco-reinstatement` |
 | Contribution Billing > Refund Listing | `mnuMCORefundListing` | frmMCORefundListing2 | `/contribution-billing/refund-listing` | 21 | `/api/contribution-billing/refund-listing` |
 | Claim Bordx > Storage > Claim files | `StorageEntry` | frmStorageEntry (no click handler; chosen by name) | `/claim-bordx/storage-claim-files` | 15 * | `/api/claim-bordx/storage-entry` |
@@ -224,11 +225,11 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-35 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+34 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
-**Contribution Billing** (2): Generate Invoice; Generate Invoice (Endorsement). MCO Reinstatement and Refund Listing are built ([contribution-billing-screens.md](contribution-billing-screens.md)) (Receipt MCO/Others is the Finance > Invoice Receipt (Outstanding) form, built)
+**Contribution Billing** (1): Generate Invoice (Endorsement). Generate Invoice, MCO Reinstatement and Refund Listing are built ([contribution-billing-screens.md](contribution-billing-screens.md)) (Receipt MCO/Others is the Finance > Invoice Receipt (Outstanding) form, built)
 
 **Authorize Claims** (2): DCU Tracking > Claim Report; Claim Pass to A/C
 

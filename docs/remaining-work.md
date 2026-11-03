@@ -32,7 +32,7 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 
 | Item | Form | Size | Notes |
 |---|---|---:|---|
-| DCU Tracking > Claim Report | `FrmDCUReport1` / `FrmDCUReport2` (by name; no handler) | 17,593 / 17,591 | the largest forms in the project; a reporting screen |
+| DCU Tracking > Claim Report | `FrmDCUReport1` ("DCU Reports") / `FrmDCUReport2` ("DCU Reports (Jupiter)", the same form for the Jupiter database; by name, no handler) | 17,593 / 17,591 | **Not started, sized:** one criteria panel (about 45 filters over `VIEW_CLMReportDCU`, built as text for the legacy `DCUReport` procedure, which has 120 cases and 1,900 lines), Claim or Case, 10 report types with 3 to 6 selections each, **55 report routines** that each fill a list of their own (about 23 column layouts, some with a query per row: `DurationStay` alone is 540 lines, the efficiency reports count five age bands per row) and an Excel export of the list. Each report needs its case numbers, columns and per-row rules read from the source and a test; it is a staged build (the Claim and Case general listing first, then the aggregates), not one screen |
 | Claim Pass to A/C | no match found by name | | business to name the form |
 
 ### Claim Bordx (5 left; 17 built)

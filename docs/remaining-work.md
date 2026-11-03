@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**76 of the 108 are built, 32 are not.** Nine of the 32 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 23 screens to build or to decide about.
+**77 of the 108 are built, 31 are not.** Nine of the 31 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 22 screens to build or to decide about.
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 32, by menu
+## The 31, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -63,12 +63,11 @@ These can only be rebuilt from the `HISPayment` tables, as the Finance screens w
 |---|---|---:|
 | Others | `FrmReceiptHOS` ("Receipt (Others)") or `FrmReceiptMNRB` ("Receipt From MNRB", 4,082): ambiguous | 1,373 |
 
-### Posting (3)
+### Posting (2 left, both covered; Invoice > Hospital is built: [posting-screens.md](posting-screens.md))
 
 | Item | Form | Size | Notes |
 |---|---|---:|---|
 | Invoice (parent), Invoice > Member | `frmPostingInvoiceMBM` | 1,851 | **Covered**: Finance > SUN Posting is this form (handlers `mnuInvoicePositve` and `mnuSUNPosting`); the Posting menu entry is another door to it |
-| Invoice > Hospital | `frmPostingInvoiceHosp` ("Posting - HospInv") | 1,901 | the same family as SUN Posting but over the hospital invoices: its search, list and posting differ in about 900 lines |
 
 ### Maintenance (4 left; Member and Suspension are built: [maintenance-screens.md](maintenance-screens.md))
 

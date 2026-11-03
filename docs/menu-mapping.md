@@ -33,13 +33,13 @@ How to read the status column
 | Statistic | 2 | 0 | 0 | 0 | 1 |
 | Payment | 27 | 15 | 0 | 14 | 4 |
 | Receipt | 6 | 5 | 3 | 1 | 1 |
-| Posting | 4 | 3 | 0 | 3 | 1 |
+| Posting | 4 | 3 | 1 | 2 | 1 |
 | Maintenance | 24 | 16 | 12 | 4 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **76** | **32** | **134** |
+| **Total** | **236** | **113** | **77** | **31** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 76 and 32. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 77 and 31. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -80,6 +80,7 @@ How to read the status column
 | Finance > Notification / Suspension | `mnuRecMCOOthMan` | frmRecMCOManual (manual receipt number; rebuilt on ReceiptSummary) | `/finance/receipt-manual` | 12 | `/api/finance/invoice-receipt` |
 | Finance > Suspend / Active | `Suspend` | frmPaymentMBMReissue (source missing; rebuilt on Payment2MBM) | `/finance/suspend-active` | 12 | `/api/finance/suspend-active` |
 | Finance > Electronic Banking | `mnuElectronicBank` | frmFileExportBankESP (source missing; configurable file layout) | `/finance/electronic-banking` | 10 | `/api/finance/electronic-banking` |
+| Posting > Invoice > Hospital | `mnuPostInvHosp` | frmPostingInvoiceHosp (no click handler; chosen by name) | `/posting/invoice-hospital` | 13 * | `/api/posting/invoice-hospital` |
 | Finance > SUN Posting | `mnuInvoicePositve` | frmPostingInvoiceMBM | `/finance/sun-posting` | 13 | `/api/finance/sun-posting` |
 | Claim Bordx > Payment Advice > Hospital Report | `mnuPayAdviceHosRpt` | frmPayAdviceHosRpt (no click handler; chosen by name) | `/claim-bordx/hospital-report` | 15 * | `/api/claim-bordx/hospital-report` |
 | Claim Bordx > Payment Advice > Generate Bordx No | `mnuPayAdviceBordx` | frmPayAdviceHosp (no click handler; chosen by name) | `/claim-bordx/payment-advice-bordx` | 15 * | `/api/claim-bordx/payment-advice-bordx` |
@@ -227,7 +228,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-32 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+31 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
 **File** (2): Logout (covered by the top bar's Log out button); Close Connection
 
@@ -241,7 +242,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Receipt** (1): Others. Receipt Tracking, From Member and Payor are built ([receipt-screens.md](receipt-screens.md)).
 
-**Posting** (3): Invoice; Invoice > Hospital; Invoice > Member (Finance > SUN Posting is this form, built)
+**Posting** (2): Invoice (a parent menu); Invoice > Member (Finance > SUN Posting is this form, built). Invoice > Hospital is built ([posting-screens.md](posting-screens.md)).
 
 **Maintenance** (4): Panel Hospital Maintenance; Company Info; Surgical Schedule; Security (its three children are built). Member and Suspension are built ([maintenance-screens.md](maintenance-screens.md)).
 

@@ -111,6 +111,10 @@ CI (`.github/workflows/ci.yml` in each repository) runs build with warnings as e
   `sp_configure 'nested triggers', 0` was set because the vendor's encrypt triggers update their own table and recurse until SQL Server's 32-level limit otherwise. The `*_AES` ciphertext columns
   are write-only audit copies (nothing reads them); rows written before the rebuild keep their old, unreadable ciphertext. `nested triggers = 0` is **server-wide**: tell the DBA before moving
   databases.
+- **The hosted login cannot write members.** `MBM` and `MBMCoveredPersons` have AFTER INSERT, UPDATE triggers (`trgICEncrypt`, `trgCICEncrypt`) that `OPEN SYMMETRIC KEY SQLSymmetricKey_256 DECRYPTION BY CERTIFICATE SelfSignedCertificate`; the Windows
+  login of the development machine can, `apiuser` cannot (`Cannot find the symmetric key ... or you do not have permission`, checked 2026-10-31 with `EXECUTE AS LOGIN`), so every update of a member or covered person
+  through the Railway deployment fails and is rolled back (the Membership screens, Generate Invoice's stamping of covered persons). The fix needs the DBA: `GRANT VIEW DEFINITION ON SYMMETRIC KEY::SQLSymmetricKey_256`
+  and `GRANT CONTROL ON CERTIFICATE::SelfSignedCertificate` to the login, or `WITH EXECUTE AS OWNER` on the five encrypt triggers. It was not changed because it touches the encryption keys.
 - **A running API locks `Genisis.Api.exe`**; stop it before building or testing.
 - **`CASLG.LGNo` is `numeric` in the database** while the API models use `int`: procedures cast it (`CAST(LGNo AS int)`); do the same for any new numeric key that maps to an `int`.
 - **Date strings:** the UI shows and types `dd/mm/yyyy`; the API takes and returns ISO dates; a few desktop columns store dates as text (for example the audit visit date as `mm/dd/yyyy`) and the procedures

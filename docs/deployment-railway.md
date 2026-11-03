@@ -20,7 +20,7 @@ SQL login `apiuser`, `Encrypt=True;TrustServerCertificate=True`), `Ascii__ClaimF
 its network on port 1433: the service and the development databases are the same data. Every change of the SQL scripts that the app needs is therefore live as soon as it is applied to the development
 databases; apply it before the deployment that needs it.
 
-**To update the deployment** (done on 2026-10-26 for Genisis `dd64c98` and GenisisUI `9f8256c`):
+**To update the deployment** (done on 2026-10-26 for Genisis `dd64c98` and GenisisUI `9f8256c`, and on 2026-10-31 for Genisis `73a3f0b` and GenisisUI `e04aafd`, `vb2web` `3ed84a4`; the second time `git rm -r Genisis GenisisUI` and `git archive HEAD | tar -x` with `--anchored --exclude=Dockerfile --exclude=railway.json --exclude=.dockerignore` replaced the trees, and the grant script was run again):
 
 1. Commit and push the work in `Genisis` and `GenisisUI` (the tree to deploy must be committed: the copy is made from `git archive HEAD`, so nothing uncommitted or untracked travels).
 2. Replace `Genisis/` and `GenisisUI/` of the `vb2web` clone with the exported trees (delete the old folders first so removed files go; do not copy the API repository's own `Dockerfile`, `.dockerignore` and `railway.json` into it:

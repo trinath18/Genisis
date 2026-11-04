@@ -55,3 +55,18 @@ Two tabs. **Suspension Category** keeps `dbo.SuspensionCat` (01 MEMBERSHIP, 02 A
 | SQL | `sql/main/430_maintenance_member_dates.sql`, `440_maintenance_suspension.sql` (and `sql/genisis-main.sql`); they use `dbo.MBMValidDateRange`, `dbo.SuspensionCat`, `dbo.SuspensionDetail`, `dbo.PAY` of the main database |
 | API | `Genisis.Api/Maintenance/MemberDates/MemberDates.cs`, `Maintenance/Suspension/Suspension.cs`, `Maintenance/MaintenanceScreensServiceCollectionExtensions.cs`, `Controllers/MaintenanceMemberDatesController.cs`, `MaintenanceSuspensionController.cs`, `Auth/AccessRight.cs` |
 | UI | `GenisisUI/src/features/maintenance/memberDates/` and `suspension/` (rules, rules tests, `pages/*Screen.tsx`), the routes in `App.tsx`, the Maintenance section of `components/AppLayout.tsx`, `auth/access.ts` |
+
+## Maintenance > Company Info
+
+`sql/main/630_maintenance_company_info.sql`, `Maintenance/CompanyInfo/CompanyInfo.cs`, `pages/maintenance/CompanyInfoPage.tsx`. Legacy `FrmMaintenanceComInfo` ("Company Information"); `mnuComInfo` has no click handler and is disabled in the desktop; gated at position 1 like its siblings (a decision). The one row of `Company`: code, name, address, phone, fax, e-mail, homepage and current year. Update asks for the code, the name and the current year in that order, confirms ("Do you want to save the record?") and updates the first row, or adds it when the table is empty ("Record Saved..."); the phone and fax take what the desktop's number boxes took (digits, "-" and "."), the current year is four digits.
+
+- **`dbo.Company` is not in any of the development databases**, so the procedures answer "The Company table is not in this database." instead of failing, and the screen shows it; the writes were tested on a copy of the table made inside a rolled-back session (the column types are those the form implies: text, and a number for the current year). Check the screen against the real table before relying on it.
+- **Tests:** `CompanyInfoTests.cs`, `companyInfoRules.test.ts`, `e2e/maintenance-company-info.mjs` (the row and the PUT are intercepted).
+
+## Maintenance > Panel Hospital Maintenance
+
+`sql/main/640_maintenance_panel_hospitals.sql`, `Maintenance/PanelHospitals/PanelHospitalMaintenance.cs`, `pages/maintenance/PanelHospitalMaintenancePage.tsx`. `HOSPanelMaintenance` has no click handler and two forms carry its caption: `FrmMaintenancePanelHos` (a hospital panel code and its hospitals, 664 lines) and `frmPanelHospMaintenance` (payor, plan and hospital, 590 lines, the older design that `frmMBMClinics` still refers to). The first is built: it works on the panel codes Case > Panel Hospitals lists and on the same `PanelHospitals` rows. Gated at position 1 (a decision).
+
+Choosing a panel code lists its hospitals, all ticked; unticking one and **Update** takes it out. **Add** lists the hospitals that are not in the panel; ticking and **Update** puts them in (the user and day are stamped; a hospital already in the panel is stamped again, as the desktop did). Both ask "Do you want to update the record?", change the panel in one transaction (an unknown hospital or panel code refuses the whole update) and say "Record updated !". Differences: one hospital at a time with typed parameters instead of DELETE statements built from the list rows; a hospital cannot be added and removed in one update. The other form, `frmPanelHospMaintenance`, is not migrated (see the redundancy report); ask the business whether it is still used.
+
+- **Tests:** `PanelHospitalMaintenanceTests.cs` (validators, service, database: remove and put back, the stamps, the refusals, rollback), `panelHospitalMaintenanceRules.test.ts`, `e2e/maintenance-panel-hospitals.mjs` (the PUT is intercepted).

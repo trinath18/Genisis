@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**78 of the 108 are built, 30 are not.** Nine of the 30 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member), which leaves 21 screens to build or to decide about.
+**84 of the 108 are built, 24 are not.** Eleven of the 24 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member, Payment > Update Invoice, Payment > To Member > Chq. Reissue), which leaves 13 screens that are not built. **None of the 13 can be built from what is in the source tree**: five have no form to build from (Close Connection, Generate Invoice (Endorsement), Claim Pass to A/C, Surgical Schedule, and Bordx Send Date, whose only form has no code), and eight are Payment items whose forms are missing from the folder or unnamed; each needs the business or the Payment users (below).
 
 ## What the inventory found
 
@@ -10,7 +10,7 @@ Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 10
 2. **Most forms exist in the source tree**, but about a dozen do not (most of Payment, the Endorsement invoice listing). Like the five Finance screens with no source, those can only be rebuilt from the tables ([finance-screens.md](finance-screens.md)), and the rebuilt behaviour needs the Finance users' review.
 3. **The development database lacks some tables the forms use**: `Company` (Maintenance > Company Info) is in none of the five databases, so that screen cannot be checked against data here.
 
-## The 30, by menu
+## The 24, by menu
 
 Size is the form's line count (comments and blank lines included). "Handler" = the desktop menu opens it.
 
@@ -42,25 +42,23 @@ Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delive
 |---|---|---:|---|
 | Bor Delivery > Bordx Send Date | **ambiguous**: `frmUploadBordxSentDate` has no code; `FrmBordxDelivery` ("Set Bordx Delivery/Account Date", 1,370) is an older all-in-one form that also sets the MNRB steps with other columns (`BordxPAYFrStatus`, `BordxPAYRecDate`) | | business to say which |
 
-### Payment (14; the top menu is a parent)
+### Payment (11 left; Contra Allocation and both Enquiry screens are built: [payment-screens.md](payment-screens.md); the top menu is a parent)
 
-Nearly every form of the desktop's Payment menu is **missing from the source** (there is no `FrmPaymentHospital`, `FrmPaymentMBM`, `FrmPay2MBM`, `FrmPaymentPayor`, ...). The forms that exist are posting and enquiry forms:
+Of the ten forms the desktop's Payment menu opens, **none of eight is in the source tree**: `medixhis1.vbp` lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and the folder has none of them. They write payment vouchers, cheques and accounts; they can only be rebuilt from the `HISPayment` tables with the Payment users (the PV numbering, the cheque rules and the gain / loss rules cannot be guessed).
 
-| Item | Form found | Size |
-|---|---|---:|
-| To Hospital, To Member (Pay2MBM (Auto), Pay2MBM), Payor, Others, Update Invoice, Payment Tracking, PV Update (Manual) | none by name (`frmPVSunHISFlag` "SunHISPVChecking", 663, may be PV Update) | |
-| To Member > Chq. Cancellation / Chq. Reissue | `frmPaymentMBMReissue` is the Finance > Suspend / Active screen (already built); the cancellation form is missing | |
-| Contra Allocation | `frmContraAllocation` | 968 |
-| Enquiry > Payment To Hospital | `FrmEnquiryPaymentHospital` | 1,767 |
-| Enquiry > Payment To Member | `FrmEnquiryPayMember` | 2,454 |
+| Item | Form | Status |
+|---|---|---|
+| To Hospital | `FrmPaymentHospital` | **source missing** |
+| To Member (parent) | | covered by its children |
+| To Member > Pay2MBM(Auto), Pay2MBM | `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentManual` | **source missing** |
+| To Member > Chq. Cancellation | `FrmPaymentMBMReverse` | **source missing** |
+| To Member > Chq. Reissue | `frmPaymentMBMReissue` | **Covered**: Finance > Suspend / Active (rebuilt on Payment2MBM) is this form |
+| Payor, Others | `FrmPaymentPayor`, `FrmPaymentOthers` | **source missing** |
+| Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **Covered**: Invoice > Original Invoice Update is this form |
+| Payment Tracking | `FrmPaymentTracking` | **source missing** |
+| PV Update (Manual) | none by name (`frmPVSunHISFlag` is "SunHIS PV Check", `mnuSunHISPVCheck`) | business to name the form |
 
-These can only be rebuilt from the `HISPayment` tables, as the Finance screens were. That is a design exercise with the Payment users, not a port.
-
-### Receipt (1 left; Receipt Tracking, From Member and Payor are built: [receipt-screens.md](receipt-screens.md); the top menu is a parent)
-
-| Item | Form | Size |
-|---|---|---:|
-| Others | `FrmReceiptHOS` ("Receipt (Others)") or `FrmReceiptMNRB` ("Receipt From MNRB", 4,082): ambiguous | 1,373 |
+### Receipt (all built; Others is built: [receipt-screens.md](receipt-screens.md); the top menu is a parent)
 
 ### Posting (2 left, both covered; Invoice > Hospital is built: [posting-screens.md](posting-screens.md))
 
@@ -68,14 +66,12 @@ These can only be rebuilt from the `HISPayment` tables, as the Finance screens w
 |---|---|---:|---|
 | Invoice (parent), Invoice > Member | `frmPostingInvoiceMBM` | 1,851 | **Covered**: Finance > SUN Posting is this form (handlers `mnuInvoicePositve` and `mnuSUNPosting`); the Posting menu entry is another door to it |
 
-### Maintenance (4 left; Member and Suspension are built: [maintenance-screens.md](maintenance-screens.md))
+### Maintenance (2 left; Member, Suspension, Company Info and Panel Hospital Maintenance are built: [maintenance-screens.md](maintenance-screens.md))
 
-| Item | Form | Size | Notes |
-|---|---|---:|---|
-| Panel Hospital Maintenance | `frmPanelHospMaintenance` (591) or `FrmMaintenancePanelHos` (665): ambiguous | | |
-| Company Info | `FrmMaintenanceComInfo` | 495 | the `Company` table is not in the development databases: the screen can be built from the form's code (one row; code, name, address, phone, fax, e-mail, homepage, current year) but not checked against data |
-| Surgical Schedule | no match found by name (`frmMMASchedule` "MMA Schedule of Fees" is Account Transaction) | | business to name the form |
-| Security (parent) | | | covered by its three children (Department, Role Management, User Permission) |
+| Item | Form | Notes |
+|---|---|---|
+| Surgical Schedule | no match found by name (`mnuSurgicalOperation`; `frmMMASchedule` "MMA Schedule of Fees" is Account Transaction) | business to name the form |
+| Security (parent) | | covered by its three children (Department, Role Management, User Permission) |
 
 ## Gaps inside screens that are built
 
@@ -86,8 +82,9 @@ These can only be rebuilt from the `HISPayment` tables, as the Finance screens w
 
 ## Needs the business
 
-1. Which form each ambiguous item opens (Bordx Send Date, Returned From Payor (the larger `frmReturnFrPayor`?), Receipt Others, Panel Hospital Maintenance, Surgical Schedule, Claim Pass to A/C).
-2. Position 15 for the Claim Bordx items without a click handler.
-3. Whether Close Connection can be dropped.
-4. How a lifetime plan's annual limit should change, and the debit / credit note numbering rule.
-5. The Payment menu: the source of its forms is missing, so the rules have to come from its users.
+1. Which form each remaining item opens: Bordx Send Date (`frmUploadBordxSentDate`, "Upload Bordx Sent Date", has the controls of an upload from a file and no code at all; `FrmBordxDelivery` is the older all-in-one form), Claim Pass to A/C, Surgical Schedule, PV Update (Manual); and whether the older `frmPanelHospMaintenance` (payor, plan and hospital) is still used.
+2. The source of the eight missing Payment forms, or the Payment users, to rebuild them from the `HISPayment` tables; and the source of `frmMCOFeesListingEndt` (Generate Invoice (Endorsement); there is no stored procedure for it either, only `SP_MCOASCII_Endorsmnt`).
+3. Positions: 15 for the Claim Bordx items without a click handler, 12 for the Payment screens, 16 for the DCU report, 9 for Receipt Others, 1 for Company Info and Panel Hospital Maintenance (all decisions: none has a click handler).
+4. Whether Close Connection can be dropped.
+5. How a lifetime plan's annual limit should change, and the debit / credit note numbering rule.
+6. The real `Company` table (not in the development databases): check Company Info against it.

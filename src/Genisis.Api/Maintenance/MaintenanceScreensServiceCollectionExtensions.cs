@@ -1,6 +1,8 @@
 using Genisis.Api.Maintenance.AccountTransaction;
+using Genisis.Api.Maintenance.CompanyInfo;
 using Genisis.Api.Maintenance.MemberDates;
 using Genisis.Api.Maintenance.MmaEntry;
+using Genisis.Api.Maintenance.PanelHospitals;
 using Genisis.Api.Maintenance.Security;
 using Genisis.Api.Maintenance.Suspension;
 
@@ -20,6 +22,10 @@ public static class MaintenanceScreensServiceCollectionExtensions
         services.AddScoped<SecurityUserService>();
         services.AddSingleton<IMmaEntryRepository, MmaEntryRepository>();
         services.AddScoped<MmaEntryService>();
+        services.AddSingleton<IPanelHospitalMaintenanceRepository, PanelHospitalMaintenanceRepository>();
+        services.AddScoped<PanelHospitalMaintenanceService>();
+        services.AddSingleton<ICompanyInfoRepository, CompanyInfoRepository>();
+        services.AddScoped<CompanyInfoService>();
         services.AddSingleton<IMemberDatesRepository, MemberDatesRepository>();
         services.AddScoped<MemberDatesService>();
         services.AddSingleton<ISuspensionRepository, SuspensionRepository>();

@@ -29,6 +29,12 @@ public static class AccessRight
     /// <summary>Maintenance > Member (MaintenanceOthers) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
     public const int MemberMaintenance = 1;
 
+    /// <summary>Maintenance > Company Info (mnuComInfo) has no click handler and is disabled in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int CompanyInfo = 1;
+
+    /// <summary>Maintenance > Panel Hospital Maintenance (HOSPanelMaintenance) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int PanelHospitalMaintenance = 1;
+
     /// <summary>Contribution Billing > Refund Listing (mnuMCORefundListing, CheckAccess(21)).</summary>
     public const int ContributionRefundListing = 21;
 
@@ -136,6 +142,15 @@ public static class AccessRight
 
     /// <summary>Authorize Claims > DCU Tracking > Claim Report (mnuReport1) has no click handler in the desktop; it is gated like Claim Tracking, the other claim report (CheckAccess(16)): a decision.</summary>
     public const int AuthorizeDcuReport = 16;
+
+    /// <summary>Receipt > Others (mnuOthers) has no click handler in the desktop; it is gated like Receipt Tracking and the other Receipt screens, position 9 (a decision).</summary>
+    public const int ReceiptOthers = 9;
+
+    /// <summary>Payment > Contra Allocation (ContraAllocation) has no click handler in the desktop; the Payment screens are gated like Finance > Suspend / Active, the one payment screen the desktop checks (position 12): a decision.</summary>
+    public const int PaymentContraAllocation = 12;
+
+    /// <summary>Payment > Enquiry > Payment To Hospital and To Member (PaymentToHospital, PaymentToMember) have no click handler in the desktop; like the other Payment screens they are gated at position 12 (a decision).</summary>
+    public const int PaymentEnquiry = 12;
 
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';

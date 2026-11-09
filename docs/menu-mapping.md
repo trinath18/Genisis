@@ -31,15 +31,15 @@ How to read the status column
 | Finance | 11 | 5 | 4 | 0 | 2 |
 | Reports | 4 | 0 | 0 | 0 | 0 |
 | Statistic | 2 | 0 | 0 | 0 | 1 |
-| Payment | 27 | 15 | 3 | 11 | 4 |
+| Payment | 27 | 15 | 10 | 4 | 4 |
 | Receipt | 6 | 5 | 4 | 0 | 1 |
 | Posting | 4 | 3 | 1 | 2 | 1 |
 | Maintenance | 24 | 16 | 14 | 2 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **84** | **24** | **134** |
+| **Total** | **236** | **113** | **91** | **17** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 84 and 24. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 91 and 17. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -87,6 +87,13 @@ How to read the status column
 | Payment > Contra Allocation | `ContraAllocation` | frmContraAllocation (no click handler; chosen by name) | `/payment/contra-allocation` | 12 * | `/api/payment/contra-allocation` |
 | Payment > Enquiry > Payment To Hospital | `PaymentToHospital` | FrmEnquiryPaymentHospital (no click handler; chosen by name) | `/payment/enquiry-hospital` | 12 * | `/api/payment/enquiry-hospital` |
 | Payment > Enquiry > Payment To Member | `PaymentToMember` | FrmEnquiryPayMember (no click handler; chosen by name) | `/payment/enquiry-member` | 12 * | `/api/payment/enquiry-member` |
+| Payment > To Hospital | (no click handler) | FrmPaymentHospital (source missing; rebuilt) | `/payment/to-hospital` | 12 * | `/api/payment/to-hospital` |
+| Payment > To Member > Pay2MBM | (no click handler) | FrmPayMember (source missing; rebuilt) | `/payment/to-member` | 12 * | `/api/payment/to-member` |
+| Payment > To Member > Pay2MBM(Auto) | (no click handler) | frmPayMemberJul08 (source missing; rebuilt) | `/payment/to-member-auto` | 12 * | `/api/payment/to-member` |
+| Payment > Payor | (no click handler) | FrmPaymentPayor (source missing; rebuilt) | `/payment/to-payor` | 12 * | `/api/payment/to-payor` |
+| Payment > Others | (no click handler) | FrmPaymentOthers (source missing; rebuilt) | `/payment/others` | 12 * | `/api/payment/others` |
+| Payment > Payment Tracking | (no click handler) | FrmPaymentTracking (source missing; rebuilt) | `/payment/tracking` | 12 * | `/api/payment/tracking` |
+| Payment > PV Update (Manual) | (no click handler) | FrmPaymentManual (source missing; rebuilt) | `/payment/pv-update` | 12 * | `/api/payment/pv-update` |
 | Posting > Invoice > Hospital | `mnuPostInvHosp` | frmPostingInvoiceHosp (no click handler; chosen by name) | `/posting/invoice-hospital` | 13 * | `/api/posting/invoice-hospital` |
 | Finance > SUN Posting | `mnuInvoicePositve` | frmPostingInvoiceMBM | `/finance/sun-posting` | 13 | `/api/finance/sun-posting` |
 | Claim Bordx > Payment Advice > Hospital Report | `mnuPayAdviceHosRpt` | frmPayAdviceHosRpt (no click handler; chosen by name) | `/claim-bordx/hospital-report` | 15 * | `/api/claim-bordx/hospital-report` |
@@ -245,7 +252,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Claim Bordx** (5, four of them parent menus): Worksheet; Payment Advice; Bor Delivery; Bor Delivery > Bordx Send Date; Monitoring; Storage > Claim files
 
-**Payment** (11 after Contra Allocation and the two Enquiry screens; Update Invoice and Chq. Reissue are covered; [payment-screens.md](payment-screens.md); was 14): To Hospital; To Member; To Member > Pay2MBM(Auto); To Member > Pay2MBM; To Member > Chq. Cancellation; To Member > Chq. Reissue; Payor; Others; Contra Allocation; Update Invoice; Payment Tracking; Enquiry > Payment To Hospital; Enquiry > Payment To Member; PV Update (Manual)
+**Payment** (4, none of them a screen to build: To Member is a parent menu; Update Invoice, Chq. Reissue and Chq. Cancellation open built screens under another path. The other ten are built, seven of them rebuilt without their source: [payment-screens.md](payment-screens.md); was 11): To Member; Update Invoice; To Member > Chq. Reissue; To Member > Chq. Cancellation
 
 **Receipt** (0): Others is built too ([receipt-screens.md](receipt-screens.md)).
 

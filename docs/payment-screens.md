@@ -7,6 +7,7 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 | Payment > Contra Allocation | `frmContraAllocation` | `/payment/contra-allocation` | `/api/payment/contra-allocation` | 12 * |
 | Payment > Enquiry > Payment To Hospital | `FrmEnquiryPaymentHospital` | `/payment/enquiry-hospital` | `/api/payment/enquiry-hospital` | 12 * |
 | Payment > Enquiry > Payment To Member | `FrmEnquiryPayMember` | `/payment/enquiry-member` | `/api/payment/enquiry-member` | 12 * |
+| Payment > Payment Tracking | `FrmPaymentTracking` (**source missing**; rebuilt on the `PaymentTracking` procedure it called) | `/payment/tracking` | `/api/payment/tracking` | 12 * |
 | Payment > Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **another door** to Invoice > Original Invoice Update, `/invoice/original-update` | `/api/invoice/original-update` | 22 (that screen's) |
 | Payment > To Member > Chq. Reissue | `frmPaymentMBMReissue` (source missing) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` | `/api/finance/suspend-active` | 12 (that screen's) |
 
@@ -32,6 +33,22 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 - **Differences:** (1) the desktop asked for PV No both as a range and as equal to the "from" box, which left one number, and its A/C period year "from" test looked at the "to" box; both are plain ranges, and the period (kept as text) is compared as a number. (2) The desktop's text-built search named columns that several of its nine joined tables have (`CASNumber`, `PVNo`), which SQL Server rejects as ambiguous, so its search could not have run on this database; the select is trimmed to the five tables it needs and every column is qualified. (3) The Reissue list's patient name and pay-to columns were never filled (the select had no `PVPayTo`); the member's name and the payment's payee are shown. (4) The receipts of a claim already in the Receipts list are not added again (`ReceiptNoCheck`), as before.
 - **Tests:** `PaymentEnquiryMemberTests.cs`, `paymentEnquiryMemberRules.test.ts`, `e2e/payment-enquiry-member.mjs`.
 
+## Payment Tracking (rebuilt: no source)
+
+`sql/main/690_payment_tracking.sql`, `Payment/Tracking/PaymentTracking.cs`, `pages/payment/PaymentTrackingPage.tsx`. Read only. `FrmPaymentTracking` is listed in `medixhis1.vbp` but its `.frm` is not in the source tree; what it did is known from what it called: `HISPayment.dbo.PaymentTracking` with a case number from 1 to 17 and a text WHERE fragment, over two views. One procedure with typed parameters replaces it.
+
+| Payment | View (synonym) | Report types (desktop cases) |
+|---|---|---|
+| **To Hospital** (the screen opens on it) | `VIEW_PaymentHos_Tracking` (`genisis.Pay_TrackHospital`, on `Payment2HOS`) | By Claim 1, By Bordx 2, By Claim (Total) 3, By Hospital & PV Date 4, By Member 5, By Payor & PV Date 6, By PV No 7, By Hospital 8 |
+| **To Member** | `VIEW_Payment_Tracking` (`genisis.Pay_TrackPaymentMember`, on `Payment2MBM`) | the same eight, cases 9 to 16 |
+
+- **Criteria** (the columns the views have, since the form's boxes are not known): health type, payor, payment status (F full / P part, the values in the data), member number and name (contains), hospital (contains), claim, bordx and PV number ranges, PV date range, accounting period month and year ranges, and, for member payments, the debit note range. Every criterion applies to every report type, as the desktop appended the same fragment to all of them.
+- **Counting:** a summary counts the grouping column (`COUNT(BordxRefNo)` and so on), as the procedure did, so a line with no key counts 0 cases. **Records** and **Total Amt** add up the lines listed; **Print to File** writes the list as CSV; the list is cut at 5,000 rows and says so.
+- **Not reproduced:** case 17 (the invoices of a hospital payment) selected `INVBordxRefNo`, `InvNo` and `InvAmount`, which `VIEW_PaymentHos_Tracking` does not have, so it could not run.
+- **Assumptions for the Payment users to confirm:** the captions of the report types and of the criteria (the form is missing); access position 12 like the other Payment screens.
+- **Data here:** 24,600 hospital and 7,211 member payments (2021-02 to 2021-08). Most of them do not join a claim in this development copy of HISWorkSheet, so the member, hospital, payor and bordx columns are often empty.
+- **Tests:** `PaymentTrackingTests.cs` (validator, service, database: a PV range and payor against direct counts, the hospital and PV summaries against direct counts and sums), `paymentTrackingRules.test.ts`.
+
 ## What is not built, and why
 
-The forms of **Payment > To Hospital, To Member > Pay2MBM(Auto), Pay2MBM, Chq. Cancellation, Payor, Others, Payment Tracking and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.
+The forms of **Payment > To Hospital, To Member > Pay2MBM(Auto), Pay2MBM, Chq. Cancellation, Payor, Others and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.

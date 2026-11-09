@@ -152,6 +152,27 @@ public static class AccessRight
     /// <summary>Payment > Enquiry > Payment To Hospital and To Member (PaymentToHospital, PaymentToMember) have no click handler in the desktop; like the other Payment screens they are gated at position 12 (a decision).</summary>
     public const int PaymentEnquiry = 12;
 
+    /// <summary>
+    /// Payment > To Hospital, To Member (Pay2MBM(Auto), Pay2MBM, Chq. Cancellation), Payor, Others, Payment Tracking and PV Update (Manual): none has a click handler in the desktop and
+    /// their forms are not in the source tree; like the other Payment screens they are gated at position 12 (a decision for the business to confirm).
+    /// </summary>
+    public const int PaymentTracking = 12;
+
+    /// <summary>Payment > To Hospital (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentToHospital = 12;
+
+    /// <summary>Payment > To Member > Pay2MBM(Auto), Pay2MBM and Chq. Cancellation (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentToMember = 12;
+
+    /// <summary>Payment > Payor (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentPayor = 12;
+
+    /// <summary>Payment > Others (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentOthers = 12;
+
+    /// <summary>Payment > PV Update (Manual) (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentPvUpdate = 12;
+
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';
 

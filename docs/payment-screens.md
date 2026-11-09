@@ -1,6 +1,6 @@
 # Payment screens
 
-Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items seven are built; two more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
+Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items nine are built; two more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|
@@ -11,6 +11,8 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 | Payment > To Hospital | `FrmPaymentHospital` (**source missing**; rebuilt on `VIEW_Payment2HOSNew` and the rows of `Payment2HOS`) | `/payment/to-hospital` | `/api/payment/to-hospital` | 12 * |
 | Payment > Payor | `FrmPaymentPayor` (**source missing**; rebuilt on `VIEW_Payment_Payor` and the rows of `Payment2PAY`) | `/payment/to-payor` | `/api/payment/to-payor` | 12 * |
 | Payment > Others | `FrmPaymentOthers` (**source missing**; rebuilt on the `PaymentOthers` table, which has no row) | `/payment/others` | `/api/payment/others` | 12 * |
+| Payment > To Member > Pay2MBM | `FrmPayMember` (**source missing**; rebuilt on `VIEW_Payment2MBMNew` and the rows of `Payment2MBM`) | `/payment/to-member` | `/api/payment/to-member` (source `dn`) | 12 * |
+| Payment > To Member > Pay2MBM(Auto) | `frmPayMemberJul08` (**source missing**; rebuilt on `VIEW_Payment2MBMJul08`) | `/payment/to-member-auto` | `/api/payment/to-member` (source `auto`) | 12 * |
 | Payment > Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **another door** to Invoice > Original Invoice Update, `/invoice/original-update` | `/api/invoice/original-update` | 22 (that screen's) |
 | Payment > To Member > Chq. Reissue | `frmPaymentMBMReissue` (source missing) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` | `/api/finance/suspend-active` | 12 (that screen's) |
 
@@ -120,6 +122,36 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
   - `PaymentOthersTests.cs`: the validator, the service, and, on the database, a voucher written and found again (rolled back).
   - `paymentOthersRules.test.ts`.
 
+## To Member > Pay2MBM and Pay2MBM(Auto) (rebuilt: no source)
+
+`sql/main/730_payment_to_member.sql`, `Payment/ToMember/PaymentToMember.cs`, `pages/payment/PaymentToMemberPage.tsx` (one page, two routes). `FrmPayMember` and `frmPayMemberJul08` are missing. What they read is known, and what they wrote is read from the 7,211 rows of `Payment2MBM`.
+
+| Screen | List (view) | Claims |
+|---|---|---|
+| **Pay2MBM** | `VIEW_Payment2MBMNew` (SP_Payment 'Pay2MBM') | The claims with a debit/credit note. Payors MH and AX are left out unless the plan pays members (`PLNPymtInd` Y). Claims with nothing payable are listed too. |
+| **Pay2MBM(Auto)** | `VIEW_Payment2MBMJul08` | The claims with an amount payable to the member (`CLMPayableByMedix2M` not 0). The list adds the payor's receipt and the claim's pay mode. |
+
+Both list only the claims with no `Payment2MBM` row. The criteria are payor, member number and name, case number, D/N number and close date. A claim clicked shows its payee, bank and account (`CLMPayTo` or the member's name, `CLMBank`, `CLMAccountNo`), which can be changed before the PV is written.
+
+- **Generate PV:** one PV per claim; 618 of the 631 PVs in the data have one row.
+  - `PVChequeAmt` = `MBMPaidAmt` = the amount payable.
+  - The prefix is the payor's `PAY.PVInd` (634 of 636), numbered by `genisis.Payment_NextPv`.
+  - `PVChequeDate` is the PV date. The accounting period is its month (two digits) and year.
+  - `PVPayMBMStatus` is F and `PVStatus` is A. The charges, gain/loss, discount, difference and Medix payment are 0.
+  - **ONLINE**: the cheque number is the PV date as ddMMyyyy and `PVChequeStatus` is Y. **CHEQUE**: the first cheque number is typed and counted up.
+  - The amount in words is the same routine as To Hospital.
+  - A claim with nothing payable, held, of a payor with no prefix, with no payee, or done meanwhile stops the run, and nothing is written.
+- **Void:** closes the claims ticked without paying the member, as the desktop's 6,542 VOID rows do. `PVNo` and `PVChequeNo` are VOID, `MBMPaidAmt` is 0, there is no status, and the month is not padded (as in the data). The remark is optional (CASE DECLINED, CONTRA WITH NEGATIVE BORDX ... in the data). Any claim of the list can be voided; 5,551 of the VOID rows are of claims with an amount payable.
+- **Assumptions for the Payment users to confirm:**
+  1. Pay2MBM and Pay2MBM(Auto) differ only by their list. The desktop's other differences are not known: the Auto form's e-mail and SMS columns (`MBMEmail`, `ZUStatus`) are not used.
+  2. There is one PV per claim, even for one member's several claims.
+  3. Void is offered on both screens.
+  4. The SUN posting of member PVs (`frmPostingPay2MBM`) and printing are not part of these screens.
+  5. Access position 12.
+- **Tests:**
+  - `PaymentToMemberTests.cs`: validators, payee changes, cheque numbering, refusals and Void with a fake repository, and, on the database, both lists and a PV and a VOID written (rolled back).
+  - `paymentToMemberRules.test.ts`.
+
 ## What is not built, and why
 
-The forms of **Payment > To Member > Pay2MBM(Auto), Pay2MBM, Chq. Cancellation and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.
+The forms of **Payment > To Member > Chq. Cancellation and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.

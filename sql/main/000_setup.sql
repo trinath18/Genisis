@@ -118,7 +118,8 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'Pay_TrackHospital', @PaymentDb, N'VIEW_PaymentHos_Tracking'), (N'Pay_TrackPaymentMember', @PaymentDb, N'VIEW_Payment_Tracking'),
     (N'Pay_Payment2PAY', @PaymentDb, N'Payment2PAY'), (N'Pay_PaymentOthers', @PaymentDb, N'PaymentOthers'), (N'Pay_PVAccNo', @PaymentDb, N'PVAccNo'),
     (N'Pay_ChequeType', @PaymentDb, N'ChequeType'), (N'Pay_PaymentMBMReverse', @PaymentDb, N'PaymentMBMReverse'),
-    (N'Pay_Payment2HOSNew', @PaymentDb, N'VIEW_Payment2HOSNew'), (N'Pay_ViewPaymentPayor', @PaymentDb, N'VIEW_Payment_Payor')) v (s, d, t)
+    (N'Pay_Payment2HOSNew', @PaymentDb, N'VIEW_Payment2HOSNew'), (N'Pay_ViewPaymentPayor', @PaymentDb, N'VIEW_Payment_Payor'),
+    (N'Pay_ViewPayment2MBMNew', @PaymentDb, N'VIEW_Payment2MBMNew'), (N'Pay_ViewPayment2MBMAuto', @PaymentDb, N'VIEW_Payment2MBMJul08')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + CASE WHEN DB_ID(@CisDb) IS NULL THEN N'none' ELSE @CisDb END

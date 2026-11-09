@@ -2,6 +2,7 @@ using Genisis.Api.Payment.ContraAllocation;
 using Genisis.Api.Payment.EnquiryHospital;
 using Genisis.Api.Payment.EnquiryMember;
 using Genisis.Api.Payment.Others;
+using Genisis.Api.Payment.PvUpdate;
 using Genisis.Api.Payment.ToHospital;
 using Genisis.Api.Payment.ToMember;
 using Genisis.Api.Payment.ToPayor;
@@ -31,6 +32,8 @@ public static class PaymentServiceCollectionExtensions
         services.AddScoped<PaymentOthersService>();
         services.AddSingleton<IPaymentToMemberRepository, PaymentToMemberRepository>();
         services.AddScoped<PaymentToMemberService>();
+        services.AddSingleton<IPvUpdateRepository, PvUpdateRepository>();
+        services.AddScoped<PvUpdateService>();
         return services;
     }
 }

@@ -1,6 +1,6 @@
 # Payment screens
 
-Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items nine are built; three more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
+Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items ten are built (six of them rebuilt without their source, on the data they read and wrote; each section lists the assumptions for the Payment users to confirm), three more are another door to a built screen, and To Member is a menu parent. None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|
@@ -13,6 +13,7 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 | Payment > Others | `FrmPaymentOthers` (**source missing**; rebuilt on the `PaymentOthers` table, which has no row) | `/payment/others` | `/api/payment/others` | 12 * |
 | Payment > To Member > Pay2MBM | `FrmPayMember` (**source missing**; rebuilt on `VIEW_Payment2MBMNew` and the rows of `Payment2MBM`) | `/payment/to-member` | `/api/payment/to-member` (source `dn`) | 12 * |
 | Payment > To Member > Pay2MBM(Auto) | `frmPayMemberJul08` (**source missing**; rebuilt on `VIEW_Payment2MBMJul08`) | `/payment/to-member-auto` | `/api/payment/to-member` (source `auto`) | 12 * |
+| Payment > PV Update (Manual) | `FrmPaymentManual` (**source missing**; rebuilt on `VIEW_Payment2HOS_Manual` / `VIEW_Payment2MBM_Manual`, the rows of `Payment2HOS` and `Payment2MBM`) | `/payment/pv-update` | `/api/payment/pv-update` | 12 * |
 | Payment > Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **another door** to Invoice > Original Invoice Update, `/invoice/original-update` | `/api/invoice/original-update` | 22 (that screen's) |
 | Payment > To Member > Chq. Reissue | `frmPaymentMBMReissue` (source missing) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` | `/api/finance/suspend-active` | 12 (that screen's) |
 | Payment > To Member > Chq. Cancellation | `FrmPaymentMBMReverse` (**source missing**) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` (Stop with status C) | `/api/finance/suspend-active` | 12 (that screen's) |
@@ -159,6 +160,15 @@ Both list only the claims with no `Payment2MBM` row. The criteria are payor, mem
 
 - **Assumption for the Payment users to confirm:** a cheque cancellation is the C row of Suspend / Active, and nothing has to go to the two reverse tables. If the users did record cancellations there, the form needs to be rebuilt on them.
 
+## PV Update (Manual) (rebuilt: no source)
+
+`FrmPaymentManual` is missing; the views named for it, `VIEW_Payment2HOS_Manual` and `VIEW_Payment2MBM_Manual`, read the PV rows already written to hospitals (`Payment2HOS`) and to members (`Payment2MBM`). The screen finds a PV (To Hospital or To Member; by PV number, a case on it, or the PV date), shows its rows, and saves the corrected details on **every row of the PV** in one transaction (`genisis.PvUpdate_Find`, `_Rows`, `_Save`, in `sql/main/740_payment_pv_update.sql`).
+
+- What can be changed: the cheque number and date, the payment mode (ONLINE writes the cheque date as ddMMyyyy for the cheque number and `PVChequeStatus` Y, as the payment screens do), the payee's bank and account, the remark and, on a member PV only, the payee. The last-update date and user are set.
+- What is not changed: the amounts, the PV number and date, the status and the accounting period. The adjustment columns (bank charges, gain / loss, discount, difference) are 0 on every row of both tables, so they are not offered. A hospital PV's payee is the hospital's and is not edited.
+- Refused: a PV posted to SUN (`PVSunHOSNo` / `PVSUNNo` set: 0 hospital rows and 5 member rows today), a member PV with a stopped cheque (status C or E: change it through Finance > Suspend / Active), and the VOID rows of Pay2MBM.
+- **Assumptions for the Payment users to confirm:** that the manual update corrects the cheque and payee details of a whole PV rather than one claim; that a posted PV must not change; that the payee of a hospital PV is never changed here; and that position 12 is the right access.
+
 ## What is not built, and why
 
-The form of **Payment > PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.
+Every Required Payment item now has a screen. The forms of To Hospital, Pay2MBM, Pay2MBM(Auto), Payor, Others, Payment Tracking and PV Update (Manual) are not in the source tree (`medixhis1.vbp` lists them, and the folder has none), so they are rebuilt on the tables, views and procedures they used and on the rows they wrote. The rules found that way are listed in each section as assumptions; the Payment users should confirm them before the screens are used for real payments. `FrmPaymentSubAmtPaid` (listed in the project, no menu item) is not built.

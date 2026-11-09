@@ -1,6 +1,6 @@
 # Payment screens
 
-Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items five are built; two more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
+Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items six are built; two more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|
@@ -9,6 +9,7 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 | Payment > Enquiry > Payment To Member | `FrmEnquiryPayMember` | `/payment/enquiry-member` | `/api/payment/enquiry-member` | 12 * |
 | Payment > Payment Tracking | `FrmPaymentTracking` (**source missing**; rebuilt on the `PaymentTracking` procedure it called) | `/payment/tracking` | `/api/payment/tracking` | 12 * |
 | Payment > To Hospital | `FrmPaymentHospital` (**source missing**; rebuilt on `VIEW_Payment2HOSNew` and the rows of `Payment2HOS`) | `/payment/to-hospital` | `/api/payment/to-hospital` | 12 * |
+| Payment > Payor | `FrmPaymentPayor` (**source missing**; rebuilt on `VIEW_Payment_Payor` and the rows of `Payment2PAY`) | `/payment/to-payor` | `/api/payment/to-payor` | 12 * |
 | Payment > Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **another door** to Invoice > Original Invoice Update, `/invoice/original-update` | `/api/invoice/original-update` | 22 (that screen's) |
 | Payment > To Member > Chq. Reissue | `frmPaymentMBMReissue` (source missing) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` | `/api/finance/suspend-active` | 12 (that screen's) |
 
@@ -77,6 +78,29 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
   - `PaymentToHospitalTests.cs`: the words against fixed amounts and against every hospital voucher on the database, the validator, cheque numbering, the grouping and refusals with a fake repository, and, on the database, the search and a PV numbered and written (rolled back).
   - `paymentToHospitalRules.test.ts`.
 
+## Payor (rebuilt: no source)
+
+`sql/main/710_payment_to_payor.sql`, `Payment/ToPayor/PaymentToPayor.cs`, `pages/payment/PaymentToPayorPage.tsx`. `FrmPaymentPayor` is missing. It read `VIEW_Payment_Payor`: the reversed claims, whose `CLMTotalApproved` is below 0. It left 552 rows in `Payment2PAY`, all from 2007 to 2009; the form has not been used since. The screen lists the reversed claims not yet paid back, and **Generate PV** pays back the claims ticked by cheque. The criteria are payor, case number, bordx number and close date.
+
+- **The vouchers, as the data has them:**
+  - One PV per payor and PV prefix, one row per claim.
+  - `PVPAYto` is the payor code (the first two letters of the case number).
+  - `PVPAYChequeAmt` is the PV total on every row (552 of 552); `PAYPaidAmt` is the claim's amount.
+  - `PVPAYDate` and `PVPAYChequeDate` are both the PV date, and the accounting period is its month and year.
+  - `PVPayPAYStatus` is F, `PVStatus` is A and `PVBankCharges` is 0. The gain/loss, discount, difference, excess and Medix payment are left empty, as on every row.
+  - Every row has a cheque number: the first one is typed, and each later PV takes the next number.
+  - The PV number comes from `genisis.Payment_NextPv` (see To Hospital). The 2007-2009 rows carry the older five-digit numbers (CB58259).
+  - There are no words: `Payment2PAY` has no wording columns.
+- **All or nothing:** a claim that is paid back meanwhile, not reversed, of a payor with no prefix, or with nothing to pay back stops the run.
+- **Assumptions for the Payment users to confirm:**
+  1. The amount paid back is the reversed amount (-`CLMTotalApproved`). The claims of the rows written are not in this copy of HISWorkSheet, so this cannot be checked.
+  2. Payment is by cheque only. The table has no payment mode, and every row has a cheque.
+  3. There is one PV per payor.
+  4. Access position 12.
+- **Tests:**
+  - `PaymentToPayorTests.cs`: the validator, the grouping, cheque numbering and refusals with a fake repository, and, on the database, the search and a PV written (rolled back).
+  - `paymentToPayorRules.test.ts`.
+
 ## What is not built, and why
 
-The forms of **Payment > To Member > Pay2MBM(Auto), Pay2MBM, Chq. Cancellation, Payor, Others and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.
+The forms of **Payment > To Member > Pay2MBM(Auto), Pay2MBM, Chq. Cancellation, Others and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.

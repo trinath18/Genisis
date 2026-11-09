@@ -155,7 +155,7 @@ public record PaymentToHospitalDone(List<PaymentVoucher> Vouchers);
 public static class PaymentCheques
 {
     /// <summary>True for a cheque number that ends with digits.</summary>
-    public static bool IsValid(string? chequeNo) => chequeNo is { Length: > 0 and <= 40 } c && char.IsAsciiDigit(c.Trim()[^1]);
+    public static bool IsValid(string? chequeNo) => chequeNo?.Trim() is { Length: > 0 and <= 40 } c && char.IsAsciiDigit(c[^1]);
 
     /// <summary>The next cheque's number (MBB026496 → MBB026497).</summary>
     public static string Next(string chequeNo)

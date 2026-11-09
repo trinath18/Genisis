@@ -69,6 +69,17 @@ public class GenerateInvoiceRulesTests
     }
 
     [Fact]
+    public void The_endorsement_range_needs_a_payor_and_both_endorsement_dates_in_order()
+    {
+        var validator = new McoInvoiceFilterValidator();
+        Assert.Equal("Please Enter Payor!", validator.FirstError(new McoInvoiceFilter { Criteria = "endorsement" }));
+        Assert.Equal("Please Enter Endorsement Date From!", validator.FirstError(new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS" }));
+        Assert.Equal("Please Enter Endorsement Date To!", validator.FirstError(new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS", BordxFrom = new DateTime(2021, 8, 5) }));
+        Assert.Equal("Date From cannot be later than Date To.", validator.FirstError(new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS", BordxFrom = new DateTime(2021, 8, 6), BordxTo = new DateTime(2021, 8, 5) }));
+        Assert.Null(validator.FirstError(new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS", BordxFrom = new DateTime(2021, 8, 5), BordxTo = new DateTime(2021, 8, 5) }));
+    }
+
+    [Fact]
     public void Print_and_preview_need_a_report_type_and_a_listing_version()
     {
         var validator = new McoInvoicePrintRequestValidator();
@@ -168,6 +179,29 @@ public class GenerateInvoiceDatabaseTests
         var byInvoice = await Repository.SearchAsync(session, new McoInvoiceFilter { Criteria = "invoice", InvoiceNo = billed });
         Assert.NotEmpty(byInvoice);
         Assert.All(byInvoice, r => Assert.Equal(billed, r.InvoiceNo));
+    }
+
+    [Fact]
+    public async Task The_endorsement_range_gives_the_unbilled_members_endorsed_in_it_with_their_covered_persons()
+    {
+        if (TestDb.MainDb is null) return;
+        await SqlScripts.EnsureDeployedAsync(TestDb.MainDb);
+        await using var session = await TestDb.Sessions().OpenAsync();
+        var day = await session.Connection.QueryFirstOrDefaultAsync<DateTime?>(
+            "SELECT TOP (1) t.MBMENDtBordxDate FROM dbo.MBMTwo t JOIN dbo.MBM m ON m.MBMNumber = t.MBMNumber JOIN dbo.MBMOthers o ON o.MBMNumber = t.MBMNumber WHERE m.PAYCode = 'BS' AND t.MBMENDtBordxDate IS NOT NULL AND ISNULL(o.MBMInvoiceNo, '') = '' AND m.MBMStatus <> 'D' ORDER BY t.MBMENDtBordxDate DESC",
+            transaction: session.Transaction);
+        if (day is null) return;
+        var filter = new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS", BordxFrom = day.Value.Date, BordxTo = day.Value.Date };
+        var rows = await Repository.SearchAsync(session, filter);
+        Assert.NotEmpty(rows);
+        Assert.All(rows, r => Assert.True(string.IsNullOrEmpty(r.InvoiceNo) && r.PayorCode == "BS"));
+        var members = rows.Select(r => r.MemberNo).Distinct().ToList();
+        Assert.Equal(members.Count, await Count(session, "SELECT COUNT(*) FROM dbo.MBMTwo WHERE MBMNumber IN @members AND MBMENDtBordxDate >= @day AND MBMENDtBordxDate < DATEADD(day, 1, @day)", new { members, day = day.Value.Date }));
+        Assert.Contains(rows, r => r.IsPrincipal);
+
+        var bordx = await Repository.SearchAsync(session, new McoInvoiceFilter { Criteria = "range", Payor = "BS", BordxFrom = day.Value.Date, BordxTo = day.Value.Date });
+        Assert.All(bordx, r => Assert.Equal(day.Value.Date, r.BordxDate?.Date));
+        Assert.Empty(await Repository.SearchAsync(session, new McoInvoiceFilter { Criteria = "endorsement", Payor = "BS", BordxFrom = new DateTime(2099, 1, 1), BordxTo = new DateTime(2099, 1, 2) }));
     }
 
     [Fact]

@@ -1,10 +1,11 @@
 # Contribution Billing screens
 
-Menu path: **Contribution Billing** (legacy `mdiMain.frm`): Generate Invoice, Generate Invoice (Endorsement), MCO Reinstatement, Refund Listing and Receipt MCO/Others (the last is the Finance > Invoice Receipt (Outstanding) screen, already built). The sidebar has a Contribution Billing module (rail icon, `/contribution-billing`); the screens still to migrate are shown disabled.
+Menu path: **Contribution Billing** (legacy `mdiMain.frm`): Generate Invoice, Generate Invoice (Endorsement), MCO Reinstatement, Refund Listing and Receipt MCO/Others (the last is the Finance > Invoice Receipt (Outstanding) screen, already built). The sidebar has a Contribution Billing module (rail icon, `/contribution-billing`); every visible item has a screen. The desktop's hidden items (MCO Correction, Date Correction, Invoice Manual Upd, Receipt MCO/Others (Manual), Foreign Workers, MCO Invoice (ASCII)) are not Required and are not built.
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|
 | Contribution Billing > Generate Invoice | `frmMCOFeesListingNew` ("Member MCO Fees") | `/contribution-billing/generate-invoice` | `/api/contribution-billing/generate-invoice` | 8 (handler `mnuMCOInvoice`) |
+| Contribution Billing > Generate Invoice (Endorsement) | `frmMCOFeesListingEndt` (**source missing**; rebuilt as Generate Invoice by endorsement bordx date) | `/contribution-billing/generate-invoice-endorsement` | `/api/contribution-billing/generate-invoice` (criteria `endorsement`) | 8 (handler `FeeListingEndt`) |
 | Contribution Billing > MCO Reinstatement | `frmMCOInvoiceReinstatement` ("MCO Reinstatement Invoice") | `/contribution-billing/mco-reinstatement` | `/api/contribution-billing/mco-reinstatement` | 8 * |
 | Contribution Billing > Refund Listing | `frmMCORefundListing2` ("MCO Refund Listing") | `/contribution-billing/refund-listing` | `/api/contribution-billing/refund-listing` | 21 |
 
@@ -20,6 +21,16 @@ Reads and writes (`sql/main/580_contribution_generate_invoice.sql`, `Contributio
 - **The files:** the **invoice** (the payor or broker's name, address, contact, telephone and fax, the invoice number and date, one line per group, insurance code, plan and adult / child with the principals, members, basic MCO and MCO fee, and the totals) and the **fee listing** (one line per member and covered person, with the premium in the premium version, and the totals) are CSV files; the desktop printed six Crystal reports (`MCOInvoice`, `MCOInvoice_Dept`, `MCOListing_WithoutPremium`, `_Dept`, `MCOListing_Premium`, `_Dept`) that are not in the source, so their layouts are not reproduced and the invoice lines are grouped as stated. The copy into `MCOInvoicePluto` the Crystal reports read is not needed.
 - **Data:** payor WK, bordx 2021-04-30 batch 2 (12 members, billed through the broker) is the test batch; invoice S34161 (AN, 5 members) the billed one. Batch AH 2021-07-30 / 1 has 3,185 members with no invoice.
 - **Tests:** `GenerateInvoiceTests.cs` (validators, the print flow and its refusals against a fake repository; the search, the payor and broker, the group companies and the stamping in a rolled-back session, checked with checksums); `generateInvoiceRules.test.ts` (14 of the 20 in the folder); `e2e/contribution-generate-invoice.mjs` (39 checks).
+
+## Generate Invoice (Endorsement) (rebuilt: no source)
+
+`mdiMain.frm` opens `frmMCOFeesListingEndt` (`FeeListingEndt_Click`, position 8, the one Generate Invoice checks), and the form is not in the source tree; there is no procedure or view of its own either. The screen is rebuilt as **Generate Invoice with one more MCO Criteria, Endorsement Range** (`McoInvoice_Search @endtFrom, @endtTo`; the same page with `endorsement`, the same API, invoice numbers, payor / broker, stamping, invoice and fee listing):
+
+- **Who is billed:** the members of the payor with **no invoice yet** whose endorsement bordx date (`MBMTwo.MBMENDtBordxDate`) is in the range, with their covered persons with no invoice, from `VIEW_MCO_LISTING_All2`. This is how the desktop's other endorsement invoice chose them (`SP_MCOASCII_Endorsmnt`, the hidden Zurich MCO Invoice (ASCII): unbilled members, `MBMEndtBordxDate` from / to). Invoice Number finds a billed endorsement invoice again (Preview reprints it).
+- **No endorsement batch:** `MBM.MBMENDtBatchNo` is empty on all 136,608 endorsed members, so there is no Bordereaux Batch criteria on this screen.
+- **Data:** BS, endorsement bordx 2021-08-05 (7 members, RM 210 of MCO fees) is a test range; 5,647 of the endorsed members are billed already and are left out.
+- **Assumptions for the Contribution Billing users to confirm:** that the endorsement invoice bills the member's whole MCO fee as it stands (`MBMMCOFee`, as Generate Invoice does) and not a difference between the old and the new plan; that every unbilled covered person of an endorsed member is billed with it, whatever its own bordx date (17% of them have another date); and that the invoice takes the same number series as Generate Invoice.
+- **Tests:** `GenerateInvoiceTests.cs` (the endorsement checks, and the search against the database: every row unbilled, of the payor, of a member endorsed in the range); `generateInvoiceRules.test.ts` (the checks and the query).
 
 ## MCO Reinstatement
 

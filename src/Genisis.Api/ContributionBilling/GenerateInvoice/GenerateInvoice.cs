@@ -97,7 +97,7 @@ public record McoInvoiceDocument(string ReportType, string ListingVersion, bool 
 /// <summary>The criteria of the search (and of Print and Preview).</summary>
 public class McoInvoiceFilter
 {
-    /// <summary>"MCO Criteria": batch (Bordereaux Batch), range (Bordereaux Range) or invoice (Invoice Number).</summary>
+    /// <summary>"MCO Criteria": batch (Bordereaux Batch), range (Bordereaux Range), endorsement (Endorsement Range: the dates are the endorsement bordx dates) or invoice (Invoice Number).</summary>
     public string? Criteria { get; set; }
 
     /// <summary>Payor code (or "CODE - Name").</summary>
@@ -109,10 +109,10 @@ public class McoInvoiceFilter
     /// <summary>Batch number (batch).</summary>
     public string? BatchNo { get; set; }
 
-    /// <summary>Bordx date from (range).</summary>
+    /// <summary>Bordx date from (range), or endorsement bordx date from (endorsement).</summary>
     public DateTime? BordxFrom { get; set; }
 
-    /// <summary>Bordx date to (range).</summary>
+    /// <summary>Bordx date to (range), or endorsement bordx date to (endorsement).</summary>
     public DateTime? BordxTo { get; set; }
 
     /// <summary>Invoice number (invoice).</summary>
@@ -148,7 +148,7 @@ public sealed class McoInvoiceFilterValidator : RequestValidator<McoInvoiceFilte
     public McoInvoiceFilterValidator()
     {
         RuleFor(f => f.Criteria).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Please Enter MCO Criteria!");
-        RuleFor(f => f.Criteria).Must(c => c is "batch" or "range" or "invoice").WithMessage("Select Bordereaux Batch, Bordereaux Range or Invoice Number.");
+        RuleFor(f => f.Criteria).Must(c => c is "batch" or "range" or "endorsement" or "invoice").WithMessage("Select Bordereaux Batch, Bordereaux Range, Endorsement Range or Invoice Number.");
         RuleFor(f => f.GroupBy).Must(g => g is "payor" or "department" or "group").WithMessage("Select By Payor, By Department or By Group Company.");
         RuleFor(f => f).Must(f => f.Criteria == "invoice" || !string.IsNullOrWhiteSpace(McoRules.PayorCode(f.Payor))).WithMessage("Please Enter Payor!");
         RuleFor(f => f).Must(f => f.Criteria != "batch" || f.BordxDate is not null).WithMessage("Please Enter Bordereaux Date!");
@@ -156,6 +156,9 @@ public sealed class McoInvoiceFilterValidator : RequestValidator<McoInvoiceFilte
         RuleFor(f => f).Must(f => f.Criteria != "batch" || McoRules.Batch(f.BatchNo) is not null).WithMessage("Batch No must be a number.");
         RuleFor(f => f).Must(f => f.Criteria != "range" || f.BordxFrom is not null).WithMessage("Please Enter Bordereaux Date From!");
         RuleFor(f => f).Must(f => f.Criteria != "range" || f.BordxTo is not null).WithMessage("Please Enter Bordereaux Date To!");
+        RuleFor(f => f).Must(f => f.Criteria != "endorsement" || f.BordxFrom is not null).WithMessage("Please Enter Endorsement Date From!");
+        RuleFor(f => f).Must(f => f.Criteria != "endorsement" || f.BordxTo is not null).WithMessage("Please Enter Endorsement Date To!");
+        RuleFor(f => f).Must(f => f.Criteria is not ("range" or "endorsement") || f.BordxFrom is null || f.BordxTo is null || f.BordxFrom <= f.BordxTo).WithMessage("Date From cannot be later than Date To.");
         RuleFor(f => f).Must(f => f.Criteria != "invoice" || !string.IsNullOrWhiteSpace(f.InvoiceNo)).WithMessage("Please Enter Invoice No!");
         RuleFor(f => f).Must(f => f.GroupBy != "group" || f.Criteria == "invoice" || !string.IsNullOrWhiteSpace(f.GroupCompany)).WithMessage("Please Enter Group Company!");
     }
@@ -206,7 +209,8 @@ public sealed class McoInvoiceRepository : IMcoInvoiceRepository
         {
             payor = invoice ? null : McoRules.PayorCode(f.Payor), bordxDate = f.Criteria == "batch" ? f.BordxDate?.Date : null, batch = f.Criteria == "batch" && int.TryParse(McoRules.Batch(f.BatchNo), out var b) ? b : (int?)null,
             bordxFrom = f.Criteria == "range" ? f.BordxFrom?.Date : null, bordxTo = f.Criteria == "range" ? f.BordxTo?.Date : null, invoiceNo = invoice ? Text(f.InvoiceNo) : null,
-            groupCompany = f.GroupBy == "group" && !invoice ? Text(f.GroupCompany) : null, max = WorksheetLimits.FetchRows,
+            groupCompany = f.GroupBy == "group" && !invoice ? Text(f.GroupCompany) : null, endtFrom = f.Criteria == "endorsement" ? f.BordxFrom?.Date : null,
+            endtTo = f.Criteria == "endorsement" ? f.BordxTo?.Date : null, max = WorksheetLimits.FetchRows,
         }, session.Transaction);
     }
 

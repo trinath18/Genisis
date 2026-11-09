@@ -10034,9 +10034,12 @@ GO
 -- taken under an update lock). The wording "unbilled" below is the desktop's: no invoice number yet.
 
 -- MCOListing: the members of the batch (a bordx date and batch number) or range (bordx dates) of a payor that have no invoice yet, or of an invoice (billed). @groupCompany keeps one group company.
+-- @endtFrom / @endtTo (Generate Invoice (Endorsement), whose form frmMCOFeesListingEndt is not in the source tree): the members of the payor with no invoice yet whose endorsement bordx date
+-- (MBMTwo.MBMENDtBordxDate) is in the range, with their covered persons, as the desktop's other endorsement invoice (SP_MCOASCII_Endorsmnt, the Zurich ASCII) chose them. MBM.MBMENDtBatchNo is empty on
+-- every endorsed member, so there is no endorsement batch.
 CREATE OR ALTER PROCEDURE genisis.McoInvoice_Search
     @payor nvarchar(4) = NULL, @bordxDate datetime = NULL, @batch int = NULL, @bordxFrom datetime = NULL, @bordxTo datetime = NULL, @invoiceNo nvarchar(40) = NULL,
-    @groupCompany nvarchar(300) = NULL, @max int = 5001
+    @groupCompany nvarchar(300) = NULL, @endtFrom datetime = NULL, @endtTo datetime = NULL, @max int = 5001
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -10044,10 +10047,12 @@ BEGIN
         RTRIM(HLTCode) AS HealthType, MBMBatchNo AS BatchNo, RTRIM(MBMName) AS MemberName, RTRIM(MBMCName) AS CoveredName, RTRIM(MBMGroupCompany) AS GroupCompany, RTRIM(MBMDepartment) AS Department,
         RTRIM(MBMInvoiceNo) AS InvoiceNo, MBMInvoiceDate AS InvoiceDate, RTRIM(PLNCode) AS PlanCode, RTRIM(INSCode) AS InsCode, MBMPayorEffDate AS EffDate, MBMPayorExpDate AS ExpDate, RTRIM(Type) AS AdultChild,
         MBMBasicMCO AS BasicMco, MBMMCOFee AS McoFee, MBMPremium AS Premium, RTRIM(MBMIcBcPp) AS IcNo
-    FROM dbo.VIEW_MCO_LISTING_All2
+    FROM dbo.VIEW_MCO_LISTING_All2 v
     WHERE ((@invoiceNo IS NOT NULL AND MBMInvoiceNo = @invoiceNo)
         OR (@invoiceNo IS NULL AND @bordxDate IS NOT NULL AND MBMBordxDate = @bordxDate AND MBMBatchNo = @batch AND PAYCode = @payor AND (MBMInvoiceNo IS NULL OR MBMInvoiceNo = N''))
-        OR (@invoiceNo IS NULL AND @bordxDate IS NULL AND MBMBordxDate >= @bordxFrom AND MBMBordxDate <= @bordxTo AND PAYCode = @payor AND (MBMInvoiceNo IS NULL OR MBMInvoiceNo = N'')))
+        OR (@invoiceNo IS NULL AND @bordxDate IS NULL AND @endtFrom IS NULL AND MBMBordxDate >= @bordxFrom AND MBMBordxDate <= @bordxTo AND PAYCode = @payor AND (MBMInvoiceNo IS NULL OR MBMInvoiceNo = N''))
+        OR (@invoiceNo IS NULL AND @endtFrom IS NOT NULL AND PAYCode = @payor AND (MBMInvoiceNo IS NULL OR MBMInvoiceNo = N'')
+            AND EXISTS (SELECT 1 FROM dbo.MBMTwo t WHERE t.MBMNumber = v.MBMNumber AND t.MBMENDtBordxDate >= @endtFrom AND t.MBMENDtBordxDate < DATEADD(day, 1, @endtTo))))
       AND (@groupCompany IS NULL OR MBMGroupCompany = @groupCompany)
     ORDER BY MemberNo, CoverId
     OPTION (RECOMPILE);

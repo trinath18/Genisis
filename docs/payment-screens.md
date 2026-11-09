@@ -1,6 +1,6 @@
 # Payment screens
 
-Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items nine are built; two more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
+Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Required items nine are built; three more are another door to a built screen; the rest have no form in the source tree (see [remaining-work.md](remaining-work.md)). None of the Payment menu items has a click handler in `mdiMain.frm`, so each form was matched by name and caption, and the access position is a decision (12, the one the desktop checks for Finance > Suspend / Active, the one payment screen it does check).
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|
@@ -15,6 +15,7 @@ Menu path: **Payment** (legacy `mdiMain.frm`, `mnuPaymentModule`). Of its Requir
 | Payment > To Member > Pay2MBM(Auto) | `frmPayMemberJul08` (**source missing**; rebuilt on `VIEW_Payment2MBMJul08`) | `/payment/to-member-auto` | `/api/payment/to-member` (source `auto`) | 12 * |
 | Payment > Update Invoice | `frmUpdateInvoice` ("Update Invoice") | **another door** to Invoice > Original Invoice Update, `/invoice/original-update` | `/api/invoice/original-update` | 22 (that screen's) |
 | Payment > To Member > Chq. Reissue | `frmPaymentMBMReissue` (source missing) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` | `/api/finance/suspend-active` | 12 (that screen's) |
+| Payment > To Member > Chq. Cancellation | `FrmPaymentMBMReverse` (**source missing**) | **another door** to Finance > Suspend / Active, `/finance/suspend-active` (Stop with status C) | `/api/finance/suspend-active` | 12 (that screen's) |
 
 ## Contra Allocation
 
@@ -152,6 +153,12 @@ Both list only the claims with no `Payment2MBM` row. The criteria are payor, mem
   - `PaymentToMemberTests.cs`: validators, payee changes, cheque numbering, refusals and Void with a fake repository, and, on the database, both lists and a PV and a VOID written (rolled back).
   - `paymentToMemberRules.test.ts`.
 
+## To Member > Chq. Cancellation (another door)
+
+`FrmPaymentMBMReverse` is missing. Its own tables, `Payment2MBMReverse` and `PaymentMBMReverse`, have no row, and no view, procedure or form in the source reads them. The cheques cancelled in the data are rows of `Payment2MBM`: the same PV number, the negative amount, the original cheque, status C (cancelled) or E (expired), 26 rows. Finance > Suspend / Active writes exactly these rows ("Stop", status C or E), and SUN posting (`frmPostingPay2MBM`) reads them. So the menu item opens that screen, as Chq. Reissue does, and no second writer of the same rule is added.
+
+- **Assumption for the Payment users to confirm:** a cheque cancellation is the C row of Suspend / Active, and nothing has to go to the two reverse tables. If the users did record cancellations there, the form needs to be rebuilt on them.
+
 ## What is not built, and why
 
-The forms of **Payment > To Member > Chq. Cancellation and PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.
+The form of **Payment > PV Update (Manual)** are not in the source tree: `medixhis1.vbp` (the older project file) lists `FrmPaymentHospital`, `FrmPaymentPayor`, `FrmPaymentOthers`, `FrmPaymentManual`, `FrmPaymentTracking`, `FrmPaymentSubAmtPaid`, `FrmPayMember`, `frmPayMemberJul08`, `FrmPaymentMBMReverse` and `frmPaymentMBMReissue`, and none of the ten is in the folder. They write payment vouchers, cheques and the accounts they feed. They can only be rebuilt from the `HISPayment` tables with the Payment users, as the Finance screens were; guessing the PV numbering, the cheque and the gain / loss rules would write wrong accounting data. The sidebar shows them disabled.

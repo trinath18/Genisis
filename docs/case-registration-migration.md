@@ -81,7 +81,22 @@ components/Modal.tsx,                CaseRegistrationModels.cs          genisis.
 
 ## Tests
 
-182 tests pass (`dotnet test` with `GENISIS_TEST_*` env vars). The editor was later extracted into `useCaseEditor.tsx` + `CaseSections.tsx` and is shared with Case Adjustment (`docs/case-adjustment-migration.md`). Case registration coverage: validator rules with desktop messages, member-load checks order, repudiation rules, transactional save asserting every written table (rolls back), OPCS/investigation search proc.
+182 tests passed when this was written (the whole API suite is 808 now; `dotnet test` with `GENISIS_TEST_*` env vars). The editor was later extracted into `useCaseEditor.tsx` + `CaseSections.tsx` and is shared with Case Adjustment (`docs/case-adjustment-migration.md`). Case registration coverage: validator rules with desktop messages, member-load checks order, repudiation rules, transactional save asserting every written table (rolls back), OPCS/investigation search proc.
+
+### Browser suite
+
+`GenisisUI/e2e/case-registration.mjs` (31 checks) drives the real screen against the ZZ test member `ZZHA0000518*01`:
+
+* the page, an unknown member (`No record found!`), the member's load (the expired-membership alert, status Open and locked, claimability AA, patients 00, 01 and 02);
+* what an expired membership does: Register stays disabled while the admission and discharge date checks (the "chk" boxes) are on, and enables once both are off, which is the desktop's back-dating route;
+* the save messages in the desktop's order: Hospital, Admission Date, ICD Code (cashless is the default), Patient's Age, Week/Month/Year;
+* the confirmations: a complete form asks "Are you sure", No registers nothing, Yes registers the case and shows its number and the expired-membership letter;
+* the saved case read back through the API (member, patient, status, claimability, admission date, stay type, reimbursement, hospital);
+* the same patient and admission date again asks "Patient has not been discharged, do you want to continue" (the same-day admission rule).
+
+It writes one real case, so `e2e/cleanup.sql` removes it: every case opened by `E2E` on the ZZ payor, with its rows in the nine case tables and the case cross reference, and the ZZ counter put back to the highest ZZ case left. The suite starts by checking that no case of an earlier run is left. The list of tables was not assumed: the server's own update counters before and after a registration name the same ten tables and the counter, a scan of all 60 tables with a `CASNumber` column in the four databases found rows for the new case in exactly those ten and none after the cleanup, the member's available limit did not move, and the suite ran twice in a row from a clean start.
+
+**Found by the suite, and fixed:** the validation toasts stack down from the top right over the **Register** button for a few seconds, so a click soon after a message landed on a toast (the click log showed `DIV.toast` as the target) and sent nothing; the second click worked. The same thing hid the Preview button of the new Invoice accounting screens. The toast stack no longer takes clicks (`pointer-events: none` in `index.css`, with the dismiss button still clickable), so a click goes through to the button under a message; the suite now fails if a Register click is ignored (it was 3 before the change, 0 after).
 
 ## Remaining (deferred)
 

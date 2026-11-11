@@ -4,6 +4,7 @@ using Genisis.Api.Finance.ReceiptEnquiry;
 using Genisis.Api.Finance.ReverseReceipt;
 using Genisis.Api.Finance.SuspendActive;
 using Genisis.Api.Finance.SunPosting;
+using Genisis.Api.Finance.SunPostingHosp;
 
 namespace Genisis.Api.Finance;
 
@@ -20,6 +21,8 @@ public static class FinanceServiceCollectionExtensions
 
         services.AddSingleton<ISunPostingRepository, SunPostingRepository>();
         services.AddScoped<SunPostingService>();
+        services.AddSingleton<ISunPostingHospRepository, SunPostingHospRepository>();
+        services.AddScoped<SunPostingHospService>();
 
         services.AddSingleton<IReceiptEnquiryRepository, ReceiptEnquiryRepository>();
         services.AddScoped<ReceiptEnquiryService>();

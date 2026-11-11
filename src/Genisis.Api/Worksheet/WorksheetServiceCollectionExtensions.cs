@@ -30,9 +30,12 @@ public static class WorksheetServiceCollectionExtensions
         services.AddSingleton<IBalanceLimitRepository, BalanceLimitRepository>();
         services.AddScoped<BalanceLimitService>();
         services.AddSingleton<IStayDaysRepository, StayDaysRepository>();
-        services.AddScoped<WorksheetCalculator>();
+        services.AddScoped<IWorksheetCalculator, WorksheetCalculator>();
         services.AddSingleton<ICalculationRepository, CalculationRepository>();
+        services.AddSingleton<IRegistrationRepository, RegistrationRepository>();
         services.AddScoped<CalculationService>();
+        services.AddSingleton<IRegistrationReadRepository, RegistrationReadRepository>();
+        services.AddScoped<RegistrationService>();
 
         services.AddSingleton<IAdjustmentRepository, AdjustmentRepository>();
         services.AddScoped<WorksheetAdjustmentService>();

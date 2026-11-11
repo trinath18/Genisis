@@ -1,0 +1,108 @@
+// Extract mdiMain.frm VB.Menu blocks into CSV + Excel (SpreadsheetML) with
+// each item's access position / time gate / target form.
+//
+// Usage: node tools/extract-menus.js [folder of mdiMain.frm] [output folder]
+//   The folder defaults to the VB6_SOURCE environment variable, then to the VB6 source of record on D:; the output folder to the current folder
+//   (nothing is written into the VB6 source). docs/menu-mapping.md is built from the rows plus the business's Required column.
+const fs = require('fs')
+const path = require('path')
+
+const source = process.argv[2] ?? process.env.VB6_SOURCE ?? 'D:/Team Awesome/VB Code-20261009T221049Z-1-001/VB Code'
+const outDir = process.argv[3] ?? process.cwd()
+const file = path.join(source, 'mdiMain.frm')
+const lines = fs.readFileSync(file, 'latin1').split(/\r?\n/)
+
+// ---- 1. Parse the Begin VB.Menu tree ----
+const items = []
+const stack = []
+let cur = null
+const propRe = /^\s{3,}(\w+)\s*=\s*(.*?)\s*$/
+
+for (const line of lines) {
+  const begin = /^\s*Begin VB\.Menu (\w+)/.exec(line)
+  if (begin) {
+    cur = { name: begin[1], caption: '', index: '', visible: true, enabled: true, shortcut: '', checked: false, depth: stack.length, parents: [...stack] }
+    stack.push(begin[1])
+    items.push(cur)
+    continue
+  }
+  if (cur) {
+    const p = propRe.exec(line)
+    if (p) {
+      const [, k, v] = p
+      if (k === 'Caption') cur.caption = v.replace(/^"|"$/g, '')
+      else if (k === 'Index') cur.index = v.replace(/^"|"$/g, '')
+      else if (k === 'Visible') cur.visible = !/^0\s/.test(v)
+      else if (k === 'Enabled') cur.enabled = !/^0\s/.test(v)
+      else if (k === 'Checked') cur.checked = !/^0\s/.test(v)
+      else if (k === 'Shortcut') cur.shortcut = v.replace(/^"|"$/g, '')
+      continue
+    }
+    if (/^\s*End\s*$/.test(line)) { stack.pop(); cur = items.findLast?.(i => i.name === stack[stack.length - 1]) ?? null }
+  }
+}
+
+// ---- 2. Parse Click handlers for gates + target form ----
+const codeStart = lines.findIndex(l => /^Attribute |^Private Sub|^Public Sub|^Private Function/.test(l) && !/Begin|End$/.test(l))
+const code = lines.join('\n')
+const handlers = {}
+const subRe = /Private Sub (\w+)_Click\(\)([\s\S]*?)End Sub/g
+let m
+while ((m = subRe.exec(code))) {
+  const [, name, body] = m
+  const acc = /CheckAccess\((\d+)\)/.exec(body)
+  const time = /CheckTime\("([^"]+)"\)/.exec(body)
+  const shows = [...body.matchAll(/(\w+)\.Show\b/g)].map(x => x[1]).filter(x => !/^Me$/.test(x))
+  const comment = /CheckAccess\(\d+\) = True Then\s*'([^\n]+)/.exec(body)
+  handlers[name.toLowerCase()] = {
+    access: acc ? acc[1] : '',
+    time: time ? time[1] : '',
+    shows: [...new Set(shows)].join('; '),
+    note: comment ? comment[1].trim() : '',
+  }
+}
+
+// ---- 3. Build rows ----
+const clean = c => c.replace(/&&/g, '\u0000').replace(/&/g, '').replace(/\u0000/g, '&').trim()
+const rows = items.map(i => {
+  const h = handlers[i.name.toLowerCase()] || {}
+  const isSep = i.caption === '-'
+  return {
+    level: i.depth + 1,
+    path: [...i.parents.map(p => clean(items.find(x => x.name === p)?.caption ?? p)), clean(i.caption)].join(' > '),
+    top: i.depth ? '' : clean(i.caption),
+    caption: clean(i.caption),
+    name: i.name,
+    index: i.index,
+    visible: isSep ? '' : (i.visible ? 'Y' : 'N'),
+    enabled: isSep ? '' : (i.enabled ? 'Y' : 'N'),
+    shortcut: i.shortcut,
+    access: h.access ?? '',
+    time: h.time ?? '',
+    form: h.shows ?? '',
+    note: h.note ?? '',
+    separator: isSep ? 'Y' : '',
+  }
+})
+
+// ---- 4. CSV ----
+const cols = [['Level', 'level'], ['Top Menu', 'top'], ['Full Path', 'path'], ['Caption', 'caption'], ['Menu Name', 'name'], ['Index', 'index'], ['Visible', 'visible'], ['Enabled', 'enabled'], ['Shortcut', 'shortcut'], ['Access Pos', 'access'], ['Time Gate', 'time'], ['Opens Form', 'form'], ['Handler Note', 'note'], ['Separator', 'separator']]
+const esc = v => { v = String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v }
+const csv = [cols.map(c => c[0]).join(','), ...rows.map(r => cols.map(c => esc(r[c[1]])).join(','))].join('\r\n')
+fs.writeFileSync(path.join(outDir, 'VB6-MenuItems.csv'), csv)
+
+// ---- 5. SpreadsheetML (.xls — opens in Excel) ----
+const x = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const cell = v => `<Cell><Data ss:Type="String">${x(v)}</Data></Cell>`
+const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#D9E1F2" ss:Pattern="Solid"/></Style>
+<Style ss:ID="sep"><Font ss:Color="#808080"/></Style><Style ss:ID="hid"><Font ss:Color="#C00000"/></Style></Styles>
+<Worksheet ss:Name="mdiMain Menus"><Table>
+${cols.map(() => '<Column ss:AutoFitWidth="1"/>').join('')}
+<Row>${cols.map(c => `<Cell ss:StyleID="h"><Data ss:Type="String">${c[0]}</Data></Cell>`).join('')}</Row>
+${rows.map(r => `<Row>${cols.map(c => `<Cell ss:StyleID="${r.separator ? 'sep' : r.visible === 'N' ? 'hid' : ''}"><Data ss:Type="String">${x(r[c[1]])}</Data></Cell>`).join('')}</Row>`).join('\n')}
+</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions></Worksheet></Workbook>`
+fs.writeFileSync(path.join(outDir, 'VB6-MenuItems.xls'), xml)
+
+console.log(`items: ${rows.length}, with-handler: ${rows.filter(r => r.form || r.access).length}, separators: ${rows.filter(r => r.separator).length}, hidden: ${rows.filter(r => r.visible === 'N').length}`)

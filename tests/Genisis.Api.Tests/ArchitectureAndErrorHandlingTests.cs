@@ -24,7 +24,7 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         typeof(PayorsController), typeof(PanelHospitalsController), typeof(CaseNonDisclosureController), typeof(CasePayClaimController),
         typeof(CaseMmaController), typeof(CaseAuditReviewController), typeof(CaseTransferController), typeof(CaseListingController),
         typeof(ClaimAsciiController), typeof(CaseAsciiController),
-        typeof(WorksheetLookupsController), typeof(WorksheetTrackingController), typeof(WorksheetSendToAccountsController), typeof(WorksheetSendToArController), typeof(WorksheetEnquiryController),
+        typeof(WorksheetLookupsController), typeof(WorksheetTrackingController), typeof(WorksheetSendToAccountsController), typeof(ClaimBordxDeliveryController), typeof(ClaimBordxReviseController), typeof(ClaimBordxReturnCaseController), typeof(ClaimBordxStorageController), typeof(ClaimBordxStorageDocumentController), typeof(ClaimBordxControlController), typeof(ClaimBordxOutstandingController), typeof(ClaimBordxRecoveryController), typeof(ClaimBordxStorageEntryController), typeof(ClaimBordxUpdateController), typeof(ClaimBordxPrintController), typeof(ClaimBordxPaymentAdviceController), typeof(ClaimBordxHospitalReportController), typeof(ReceiptTrackingController), typeof(ReceiptMemberController), typeof(ReceiptPayorController), typeof(PostingInvoiceHospitalController), typeof(AuthorizeDcuReportController), typeof(MaintenanceCompanyInfoController), typeof(ReceiptOthersController), typeof(PaymentContraAllocationController), typeof(PaymentEnquiryHospitalController), typeof(PaymentEnquiryMemberController), typeof(PaymentTrackingController), typeof(PaymentToHospitalController), typeof(PaymentToPayorController), typeof(PaymentOthersController), typeof(PaymentToMemberController), typeof(PaymentPvUpdateController), typeof(MaintenancePanelHospitalsController), typeof(ContributionRefundListingController), typeof(ContributionMcoReinstatementController), typeof(ContributionGenerateInvoiceController), typeof(MaintenanceMemberDatesController), typeof(MaintenanceSuspensionController), typeof(WorksheetSendToArController), typeof(WorksheetEnquiryController),
         typeof(AccountTransactionController), typeof(SecurityDepartmentsController), typeof(SecurityUsersController), typeof(SecurityPermissionsController), typeof(MmaEntryController),
         typeof(FinanceSunPostingController), typeof(FinanceReceiptEnquiryController), typeof(FinanceInvoiceReceiptController), typeof(FinanceReverseReceiptController), typeof(FinanceSuspendActiveController), typeof(FinanceElectronicBankingController),
     ];
@@ -33,15 +33,16 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
     [
         "Genisis.Api.Case.Ascii", "Genisis.Api.Case.AuditReview", "Genisis.Api.Case.Listing", "Genisis.Api.Case.Lookups", "Genisis.Api.Case.Mma",
         "Genisis.Api.Case.NonDisclosure", "Genisis.Api.Case.PanelHospitals", "Genisis.Api.Case.PayClaim", "Genisis.Api.Case.Transfer",
-        "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
-        "Genisis.Api.Maintenance.AccountTransaction", "Genisis.Api.Maintenance.Security", "Genisis.Api.Maintenance.MmaEntry",
+        "Genisis.Api.Invoice", "Genisis.Api.ClaimBordx.Delivery", "Genisis.Api.ClaimBordx.Revise", "Genisis.Api.ClaimBordx.ReturnCase", "Genisis.Api.ClaimBordx.Storage", "Genisis.Api.ClaimBordx.Control", "Genisis.Api.ClaimBordx.Recovery", "Genisis.Api.ClaimBordx.Update", "Genisis.Api.ClaimBordx.Print", "Genisis.Api.ClaimBordx.PaymentAdvice", "Genisis.Api.Receipt.Tracking", "Genisis.Api.ContributionBilling.RefundListing", "Genisis.Api.ContributionBilling.McoReinstatement", "Genisis.Api.ContributionBilling.GenerateInvoice", "Genisis.Api.Receipt.Member", "Genisis.Api.Receipt.Payor", "Genisis.Api.Finance.SunPostingHosp", "Genisis.Api.Authorize.Dcu", "Genisis.Api.Receipt.Others", "Genisis.Api.Payment.ContraAllocation", "Genisis.Api.Payment.EnquiryHospital", "Genisis.Api.Payment.EnquiryMember", "Genisis.Api.Maintenance.CompanyInfo", "Genisis.Api.Maintenance.PanelHospitals", "Genisis.Api.Worksheet.Calculation", "Genisis.Api.Worksheet.Lookups", "Genisis.Api.Worksheet.SendToAccounts", "Genisis.Api.Worksheet.SendToAr", "Genisis.Api.Worksheet.Tracking", "Genisis.Api.Worksheet.Enquiry", "Genisis.Api.Worksheet.Engine", "Genisis.Api.Worksheet.Adjustment",
+        "Genisis.Api.Maintenance.AccountTransaction", "Genisis.Api.Maintenance.Security", "Genisis.Api.Maintenance.MemberDates", "Genisis.Api.Maintenance.Suspension", "Genisis.Api.Maintenance.MmaEntry",
         "Genisis.Api.Finance.SunPosting", "Genisis.Api.Finance.ReceiptEnquiry", "Genisis.Api.Finance.InvoiceReceipt", "Genisis.Api.Finance.ReverseReceipt", "Genisis.Api.Finance.SuspendActive", "Genisis.Api.Finance.ElectronicBanking",
     ];
 
     private static bool IsScreenNamespace(string? ns) =>
         ns is not null && (ns.StartsWith("Genisis.Api.Case", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Worksheet", StringComparison.Ordinal)
-            || ns.StartsWith("Genisis.Api.Maintenance", StringComparison.Ordinal)
-            || ns.StartsWith("Genisis.Api.Finance", StringComparison.Ordinal));
+            || ns.StartsWith("Genisis.Api.Invoice", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Maintenance", StringComparison.Ordinal)
+            || ns.StartsWith("Genisis.Api.Finance", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.ClaimBordx", StringComparison.Ordinal)
+            || ns.StartsWith("Genisis.Api.Receipt", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Authorize", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.Payment", StringComparison.Ordinal) || ns.StartsWith("Genisis.Api.ContributionBilling", StringComparison.Ordinal));
 
     private static string ApiSourceRoot()
     {
@@ -81,7 +82,8 @@ public partial class ArchitectureTests(ApiFactory factory) : IClassFixture<ApiFa
         Assert.True(services.Count >= 15, "expected the services of the Case and Worksheet screens");
         foreach (var service in services)
             foreach (var parameter in service.GetConstructors().Single().GetParameters().Select(p => p.ParameterType))
-                Assert.True(parameter.IsInterface || parameter.Name.EndsWith("Service", StringComparison.Ordinal), $"{service.Name} takes the concrete {parameter.Name}");
+                // an interface, an abstract type (the clock, TimeProvider) or another screen service
+                Assert.True(parameter.IsInterface || parameter.IsAbstract || parameter.Name.EndsWith("Service", StringComparison.Ordinal), $"{service.Name} takes the concrete {parameter.Name}");
     }
 
     [Fact]

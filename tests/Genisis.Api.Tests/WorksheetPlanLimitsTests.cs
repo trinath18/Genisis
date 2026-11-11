@@ -10,6 +10,58 @@ public class WorksheetPlanLimitsRulesTests
     private static PlanBenefit B(string code, string? limit = null, string? days = null, string? claimable = null) => new() { Code = code, Limit = limit, Days = days, Claimable = claimable };
 
     [Fact]
+    public void Payor_TKs_non_panel_hospital_has_a_full_room_and_board_limit_whatever_the_plans_rate()
+    {
+        var plan = new[] { B("101", "0", "120", "250"), B("103", "FULL") };
+        var amounts = new HashSet<int> { 1 };
+        Assert.Equal("FULL", PlanLimitRules.Derive(plan, 3, 0, amounts, "TK", "NP")[1]);
+        Assert.Equal("FULL", PlanLimitRules.Derive(plan, 3, 0, amounts, " tk ", " np ")[1]);
+        Assert.Equal("750.00", PlanLimitRules.Derive(plan, 3, 0, amounts, "TK", "ISLAM")[1]);
+        Assert.Equal("750.00", PlanLimitRules.Derive(plan, 3, 0, amounts, "XL", "NP")[1]);
+        Assert.Equal("750.00", PlanLimitRules.Derive(plan, 3, 0, amounts)[1]);
+        Assert.False(PlanLimitRules.Derive(plan, 3, 0, new HashSet<int>(), "TK", "NP").TryGetValue(1, out var none) && none == "FULL");
+    }
+
+    [Fact]
+    public void A_full_room_and_board_makes_its_service_tax_full_and_a_full_icu_its_tax()
+    {
+        var tk = PlanLimitRules.Derive([B("101", "0", "120", "250")], 3, 0, new HashSet<int> { 1 }, "TK", "NP");
+        Assert.Equal(("FULL", "FULL"), (tk[1], tk[27]));
+        var icu = PlanLimitRules.Derive([B("102", "FULL", "20", "FULL")], 0, 2, new HashSet<int> { 2 });
+        Assert.False(icu.ContainsKey(28) && icu[28] != "FULL");
+        Assert.Equal("45.00", PlanLimitRules.Derive([B("101", "0", "120", "250")], 3, 0, new HashSet<int> { 1 })[27]);
+    }
+
+    [Fact]
+    public void The_convention_rows_are_reported_so_the_calculation_can_say_where_it_is_not_the_plan()
+    {
+        var withoutRow = new[] { B("103", "FULL") };
+        Assert.Equal([10, 7], PlanLimitRules.ConventionSlots(withoutRow, new HashSet<int> { 10, 7, 24 }, "XL", "ISLAM"));
+        Assert.Equal([1], PlanLimitRules.ConventionSlots([B("101", "0", "120", "250")], new HashSet<int> { 1 }, "TK", "NP"));
+        Assert.Empty(PlanLimitRules.ConventionSlots(withoutRow, new HashSet<int> { 10 }, "AY", "NP"));
+        Assert.Empty(PlanLimitRules.ConventionSlots([B("301", "80.00")], new HashSet<int> { 10 }, "TK", null));
+        Assert.Empty(PlanLimitRules.ConventionSlots(withoutRow, null, "TK", "NP"));
+    }
+
+    [Fact]
+    public void A_payors_convention_fills_a_benefit_the_plan_has_no_row_for_and_only_then()
+    {
+        var withoutRow = new[] { B("103", "FULL") };
+        var amounts = new HashSet<int> { 10, 7, 24, 23 };
+        var xl = PlanLimitRules.Derive(withoutRow, 0, 0, amounts, "XL", "ISLAM");
+        Assert.Equal(("FULL", "FULL"), (xl[10], xl[7]));
+        Assert.False(xl.ContainsKey(24) || xl.ContainsKey(23));
+        Assert.Equal("FULL", PlanLimitRules.Derive(withoutRow, 0, 0, amounts, "TK", null)[10]);
+        Assert.Equal("FULL", PlanLimitRules.Derive(withoutRow, 0, 0, amounts, "AX", null)[24]);
+        Assert.Equal("FULL", PlanLimitRules.Derive(withoutRow, 0, 0, amounts, "SE", null)[23]);
+        Assert.False(PlanLimitRules.Derive(withoutRow, 0, 0, amounts, "AY", null).ContainsKey(10));
+        // the plan's own row wins, and with no benefit rows at all or no amount in the row nothing is filled in
+        Assert.Equal("80.00", PlanLimitRules.Derive([B("301", "80.00")], 0, 0, amounts, "TK", null)[10]);
+        Assert.False(PlanLimitRules.Derive([], 0, 0, amounts, "TK", null).ContainsKey(10));
+        Assert.False(PlanLimitRules.Derive(withoutRow, 0, 0, new HashSet<int>(), "TK", null).ContainsKey(10));
+    }
+
+    [Fact]
     public void A_plain_benefit_gives_the_plans_FULL_or_amount_to_its_row()
     {
         var limits = PlanLimitRules.Derive([B("103", "FULL"), B("302", " 120.00 "), B("402", "FULL"), B("999", "FULL")], 0, 0);

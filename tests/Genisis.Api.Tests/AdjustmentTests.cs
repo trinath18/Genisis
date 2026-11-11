@@ -166,6 +166,8 @@ public class AdjustmentTests
         Assert.Equal(new DateTime(2021, 9, 1), cancelled.CancelDate);
         Assert.Equal("C", await conn.ExecuteScalarAsync<string>("SELECT RTRIM(MBMCStatus) FROM dbo.MBMCoveredPersons WHERE MBMCNumber = @number AND MBMCCoverID = @id",
             new { number, id = child.CoverId }, tx));
+        Assert.Equal(child.CoverId, await conn.ExecuteScalarAsync<string>("SELECT TOP 1 RTRIM(MBMCoverID) FROM dbo.MBMAmendHistory WHERE MBMNumber = @number AND MBMAmendEdtType = 'K' ORDER BY MBMAmendID DESC",
+            new { number }, tx));
         Assert.Equal("A", (await AdjustmentService.LoadAsync(conn, tx, number))!.Member.Status);
 
         var delete = Request(afterAdd, "T");

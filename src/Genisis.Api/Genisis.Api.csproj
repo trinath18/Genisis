@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Authorize/Dcu/DcuReportCatalog.json" LogicalName="Genisis.Api.Authorize.Dcu.DcuReportCatalog.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Genisis.Api.Tests" />
   </ItemGroup>
 

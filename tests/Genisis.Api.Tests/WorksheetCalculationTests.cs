@@ -11,6 +11,18 @@ public class WorksheetCalculationRulesTests
     private static CalculationLine Line(string benefit, decimal actual, string? limit) => new() { Benefit = benefit, Actual = actual, Limit = limit };
 
     [Fact]
+    public void A_limit_that_follows_a_payors_convention_is_said_not_to_be_the_plans()
+    {
+        var lines = new List<CalculationLine> { new() { Slot = 1, Benefit = "Room & Board", Actual = 500, Limit = "FULL" }, new() { Slot = 3, Benefit = "Hospital Supplies", Actual = 90, Limit = "FULL" } };
+        var notes = CalculationRules.Notes(lines, planHasRows: true, conventionSlots: [1]);
+        var note = Assert.Single(notes);
+        Assert.Contains("Room & Board", note);
+        Assert.DoesNotContain("Hospital Supplies", note);
+        Assert.Contains("not from the plan", note);
+        Assert.Empty(CalculationRules.Notes(lines, planHasRows: true, conventionSlots: []));
+    }
+
+    [Fact]
     public void A_plan_without_rows_says_so_and_nothing_else()
     {
         var notes = CalculationRules.Notes([Line("Room & Board", 100, null)], planHasRows: false);

@@ -110,17 +110,32 @@ public sealed class CalculationRepository : ICalculationRepository
 /// <summary>Rules of what the calculation screen tells the user about its figures.</summary>
 public static class CalculationRules
 {
+    /// <summary>The 29 rows of a calculated worksheet with the captions of the benefits and, when there are any, the limits saved with the version.</summary>
+    public static List<CalculationLine> Lines(WorksheetEvaluation grid, IReadOnlyDictionary<int, RowCaption> captions, IReadOnlyDictionary<int, string?> savedLimits) => grid.Lines.Select(l =>
+    {
+        captions.TryGetValue(l.Slot, out var caption);
+        savedLimits.TryGetValue(l.Slot, out var savedLimit);
+        return new CalculationLine
+        {
+            Slot = l.Slot, Category = caption?.Category, Benefit = caption?.Benefit ?? $"Row {l.Slot}", Limit = l.Limit, SavedLimit = savedLimit,
+            Actual = l.Actual, Approved = l.Approved, ToHospital = l.ToHospital, ToMember = l.ToMember,
+        };
+    }).ToList();
+
     /// <summary>
     /// The notes that say where a calculation cannot be trusted: no limit from the plan for a row that has an amount (the row is then shown as not covered, which can be wrong), and
     /// a plan that has no benefit rows at all.
     /// </summary>
-    public static List<string> Notes(IReadOnlyList<CalculationLine> lines, bool planHasRows)
+    public static List<string> Notes(IReadOnlyList<CalculationLine> lines, bool planHasRows, IReadOnlyCollection<int>? conventionSlots = null)
     {
         var notes = new List<string>();
         if (!planHasRows) notes.Add("The plan has no benefit rows in the database, so no limits could be taken from it; every row is shown as not covered.");
         var missing = lines.Where(l => l.Actual != 0 && string.IsNullOrWhiteSpace(l.Limit)).Select(l => l.Benefit).ToList();
         if (planHasRows && missing.Count > 0)
             notes.Add($"The plan gives no limit for: {string.Join(", ", missing)}. They are shown as not covered; the desktop may allow them, so check them before relying on the totals.");
+        var convention = lines.Where((l) => conventionSlots?.Contains(l.Slot) == true).Select((l) => l.Benefit).ToList();
+        if (convention.Count > 0)
+            notes.Add($"The limit of {string.Join(", ", convention)} is not from the plan: it follows the payor's usual treatment as the saved worksheets show it (inferred, not read from the desktop's code). Check it before relying on the totals.");
         return notes;
     }
 }
@@ -129,7 +144,7 @@ public static class CalculationRules
 /// Worksheet Registration, calculation step: works a worksheet out from its invoices and the patient's plan and shows it beside what the desktop saved. It writes nothing; saving a new
 /// worksheet needs invoice entry and the save procedures, which are not migrated (see worksheet-screens.md).
 /// </summary>
-public class CalculationService(IDbSessions sessions, ICalculationRepository repository, IWorksheetEngineRepository engine, WorksheetCalculator calculator)
+public class CalculationService(IDbSessions sessions, ICalculationRepository repository, IWorksheetEngineRepository engine, IWorksheetCalculator calculator)
 {
     private const string NotFound = "Record not found!";
 
@@ -149,18 +164,9 @@ public class CalculationService(IDbSessions sessions, ICalculationRepository rep
         var saved = await repository.SavedAsync(session, cas, chosen);
         var calculation = await calculator.CalculateAsync(cas, chosen, saved?.TotalApproved ?? 0m) ?? throw new NotFoundException(NotFound);
         var captions = (await repository.CaptionsAsync(session)).ToDictionary(c => c.Slot);
-        var savedLimits = (await engine.LimitsAsync(session, cas, chosen)).ToDictionary(l => l.Slot, l => l.LimitText);
+        var savedLimits = (await engine.LimitsAsync(session, cas, chosen)).ToDictionary(l => l.Slot, l => (string?)l.LimitText);
 
-        var lines = calculation.Grid.Lines.Select(l =>
-        {
-            captions.TryGetValue(l.Slot, out var caption);
-            savedLimits.TryGetValue(l.Slot, out var savedLimit);
-            return new CalculationLine
-            {
-                Slot = l.Slot, Category = caption?.Category, Benefit = caption?.Benefit ?? $"Row {l.Slot}", Limit = l.Limit, SavedLimit = savedLimit,
-                Actual = l.Actual, Approved = l.Approved, ToHospital = l.ToHospital, ToMember = l.ToMember,
-            };
-        }).ToList();
+        var lines = CalculationRules.Lines(calculation.Grid, captions, savedLimits);
         var final = calculation.Final;
         return new CalculationResult
         {
@@ -169,7 +175,7 @@ public class CalculationService(IDbSessions sessions, ICalculationRepository rep
             Lines = lines,
             Calculated = new CalculationSummary(final.SumApproved, final.CoPayment, final.LimitExceeded, final.TotalApproved, calculation.PreviousBalance),
             Saved = saved is null ? null : new CalculationSummary(0m, saved.CoPayment, saved.LimitExceeded, saved.TotalApproved, saved.PreviousBalance),
-            Notes = CalculationRules.Notes(lines, calculation.PlanHasRows),
+            Notes = CalculationRules.Notes(lines, calculation.PlanHasRows, calculation.ConventionSlots),
         };
     }
 }

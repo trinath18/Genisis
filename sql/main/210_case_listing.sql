@@ -94,18 +94,18 @@ BEGIN
 END
 GO
 
--- UpdateRecord: mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
+-- UpdateRecord (also frmPayAdviceHosp's, which passes @payAdvice, the payment advice number the claim gets): mark one worksheet as bordxed (claim, invoice, case pending flags) and append the "BORDX DONE" line to the
 -- case remarks. The remark goes into the first remarks page that has room, following the desktop's page order
 -- (CASRemarks.CASORemarks, CASORemarksTwo, CASRemarksTwo.CASORemarks, CASORemarksTwo, CASRemarkThree.CASRemarks, CASRemarksFive);
 -- the lengths decide the page exactly as UpdateRecord did.
 CREATE OR ALTER PROCEDURE genisis.CaseListing_Apply
-    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15)
+    @cas nvarchar(30), @version int, @bordxNo nvarchar(40), @userCode nvarchar(15), @payAdvice nvarchar(10) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @today datetime = CAST(CAST(GETDATE() AS date) AS datetime);
 
-    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N'
+    UPDATE genisis.WS_Claim SET BordxRefNo = @bordxNo, CLMBordxDate = @today, ClaimBordxStatus = 1, CLMPending = 'N', CLMPayAdvice = ISNULL(@payAdvice, CLMPayAdvice)
     WHERE CASNumber = @cas AND ClaimVersion = @version;
     UPDATE genisis.WS_ClaimInvoice SET INVBordxRefNo = @bordxNo, INVBordxed = 1
     WHERE CASNumber = @cas AND INVWSversion = CAST(@version AS nvarchar(4));

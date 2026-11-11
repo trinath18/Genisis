@@ -12,10 +12,10 @@ BEGIN
              WHEN a.SuppLimitStatus = N'C' THEN (SELECT TOP (1) c.MBMCAvailableLimit FROM dbo.MBMCoveredPersons c WHERE c.MBMCNumber = v.MBMNumber AND c.MBMCCoverID = v.MBMPatientCovID)
              ELSE m.MBMAvailableLimit END AS Balance,
         RTRIM(a.SuppLimitStatus) AS LimitType
-    FROM dbo.VIEW_Claim_MBM_Case_worksheetAdjustment v
+    FROM genisis.WorksheetCase(@cas) v
     JOIN dbo.MBM m ON m.MBMNumber = v.MBMNumber
     OUTER APPLY (SELECT TOP (1) al.SuppLimitStatus FROM dbo.AnnualLimit al
                  WHERE al.PLNCode = RTRIM(v.PLNCode) AND al.INSCode = RTRIM(v.INSCode) AND al.AnnualEffDate <= v.CASDateAdmitted ORDER BY al.AnnualEffDate DESC) a
-    WHERE v.CASNumber = @cas AND v.ClaimVersion = @version AND v.MBMNumber IS NOT NULL;
+    WHERE v.MBMNumber IS NOT NULL;
 END
 GO

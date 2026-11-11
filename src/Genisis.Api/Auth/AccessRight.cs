@@ -26,6 +26,36 @@ public static class AccessRight
     /// <summary>Maintenance > Account Transaction (MnuAccountTrans_Click) checks position 1 too.</summary>
     public const int AccountTransaction = 1;
 
+    /// <summary>Maintenance > Member (MaintenanceOthers) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int MemberMaintenance = 1;
+
+    /// <summary>Maintenance > Company Info (mnuComInfo) has no click handler and is disabled in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int CompanyInfo = 1;
+
+    /// <summary>Maintenance > Panel Hospital Maintenance (HOSPanelMaintenance) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int PanelHospitalMaintenance = 1;
+
+    /// <summary>Contribution Billing > Refund Listing (mnuMCORefundListing, CheckAccess(21)).</summary>
+    public const int ContributionRefundListing = 21;
+
+    /// <summary>Claim Bordx > Print Bordx (mnuPrintBordx, CheckAccess(17)).</summary>
+    public const int ClaimBordxPrint = 17;
+
+    /// <summary>Contribution Billing > MCO Reinstatement (no click handler in the desktop): gated like Generate Invoice, the other screen that makes MCO invoices, position 8 (a decision).</summary>
+    public const int ContributionInvoicing = 8;
+
+    /// <summary>Receipt > Receipt Tracking (mnuReceiptTracking) has no click handler in the desktop; it is gated like Finance > Receipt Enquiry, the other screen that reads receipts, position 9 (a decision).</summary>
+    public const int ReceiptTracking = 9;
+
+    /// <summary>Receipt > From Member (mnuReceiptMember) has no click handler in the desktop; it is gated like Receipt Tracking and Finance > Receipt Enquiry, position 9 (a decision).</summary>
+    public const int ReceiptMember = 9;
+
+    /// <summary>Receipt > Payor (mnuReceiptPayor) has no click handler in the desktop; it is gated like Receipt From Member, position 9 (a decision).</summary>
+    public const int ReceiptPayor = 9;
+
+    /// <summary>Maintenance > Suspension: Suspension_Click checks position 27.</summary>
+    public const int Suspension = 27;
+
     /// <summary>Maintenance > Security > Department: the matrix's own Department right (ACS 111), not the desktop's CheckAccess(2), which is Membership > Adjustment.</summary>
     public const int SecurityDepartment = 111;
 
@@ -67,10 +97,31 @@ public static class AccessRight
     // Send to A/C and Send to A/R have no click handler and are hidden in the desktop: gated like Tracking, the closest sibling.
     // Keep in step with GenisisUI/src/auth/access.ts.
     public const int WorksheetRegistration = 22;
+
+    /// <summary>Invoice > Invoice Processing (<c>mniInvoiceProcess_Click</c>: <c>CheckAccess(22)</c>, "Invoice Entry"); the desktop uses the same position as the Worksheet Registration scan code.</summary>
+    public const int InvoiceProcessing = 22;
+
+    /// <summary>Invoice > Original Invoice Update (<c>mniOriginalInvUpd</c>) has no click handler in the desktop and is hidden: it edits invoices, so it is gated like Invoice Processing.</summary>
+    public const int InvoiceOriginalUpdate = 22;
+
+    /// <summary>Invoice > Invoice Tracking (<c>mnuInvTrack_Click</c>: <c>CheckAccess(27)</c>).</summary>
+    public const int InvoiceTracking = 27;
+
+    /// <summary>Invoice > Invoice HOS Accounting (<c>mnuInvHOSAcc</c>) has no click handler in the desktop and is hidden: gated like Invoice Tracking, the other reporting item of the menu.</summary>
+    public const int InvoiceHospitalAccounting = 27;
+
+    /// <summary>Invoice > Invoice MBM Accounting (<c>mnuInvMBMAcc</c>) has no click handler in the desktop and is hidden: gated like Invoice Tracking.</summary>
+    public const int InvoiceMemberAccounting = 27;
     public const int WorksheetAdjustment = 23;
     public const int WorksheetTracking = 24;
     public const int WorksheetEnquiry = 13;
     public const int WorksheetSendToAccounts = 24;
+
+    /// <summary>
+    /// Claim Bordx screens: position 15, the one Claim Bordx > Worksheet > Insert Worksheet checks (mnuGenerateBordx_Click; Print Bordx checks 17). The Bor Delivery, Monitoring, Approval and Storage items
+    /// have no click handler in the desktop, so a position is a decision: they are gated like the first item of the menu.
+    /// </summary>
+    public const int ClaimBordx = 15;
     public const int WorksheetSendToAr = 24;
 
     // Finance menu (mdiMain.frm): Invoice Receipt, Short Payment Receipt and Reverse Receipt check 9 (Invoice_Click, mnuInvRecAdj_Click,
@@ -85,6 +136,42 @@ public static class AccessRight
     public const int FinanceSuspendActive = 12;
     public const int FinanceElectronicBanking = 10;
     public const int FinanceSunPosting = 13;
+
+    /// <summary>Posting > Invoice > Hospital (mnuPostInvHosp) has no click handler in the desktop; it is gated like Finance > SUN Posting (position 13), the same family of forms (a decision).</summary>
+    public const int PostingInvoiceHospital = 13;
+
+    /// <summary>Authorize Claims > DCU Tracking > Claim Report (mnuReport1) has no click handler in the desktop; it is gated like Claim Tracking, the other claim report (CheckAccess(16)): a decision.</summary>
+    public const int AuthorizeDcuReport = 16;
+
+    /// <summary>Receipt > Others (mnuOthers) has no click handler in the desktop; it is gated like Receipt Tracking and the other Receipt screens, position 9 (a decision).</summary>
+    public const int ReceiptOthers = 9;
+
+    /// <summary>Payment > Contra Allocation (ContraAllocation) has no click handler in the desktop; the Payment screens are gated like Finance > Suspend / Active, the one payment screen the desktop checks (position 12): a decision.</summary>
+    public const int PaymentContraAllocation = 12;
+
+    /// <summary>Payment > Enquiry > Payment To Hospital and To Member (PaymentToHospital, PaymentToMember) have no click handler in the desktop; like the other Payment screens they are gated at position 12 (a decision).</summary>
+    public const int PaymentEnquiry = 12;
+
+    /// <summary>
+    /// Payment > To Hospital, To Member (Pay2MBM(Auto), Pay2MBM, Chq. Cancellation), Payor, Others, Payment Tracking and PV Update (Manual): none has a click handler in the desktop and
+    /// their forms are not in the source tree; like the other Payment screens they are gated at position 12 (a decision for the business to confirm).
+    /// </summary>
+    public const int PaymentTracking = 12;
+
+    /// <summary>Payment > To Hospital (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentToHospital = 12;
+
+    /// <summary>Payment > To Member > Pay2MBM(Auto), Pay2MBM and Chq. Cancellation (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentToMember = 12;
+
+    /// <summary>Payment > Payor (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentPayor = 12;
+
+    /// <summary>Payment > Others (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentOthers = 12;
+
+    /// <summary>Payment > PV Update (Manual) (see <see cref="PaymentTracking"/>).</summary>
+    public const int PaymentPvUpdate = 12;
 
     public static bool Has(string? access, int position) =>
         access is not null && access.Length >= position && access[position - 1] == '1';

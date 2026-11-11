@@ -10,7 +10,8 @@ DECLARE @WorksheetDb sysname = N'HISWorkSheet';
 -- The clinical (CIS) and payment databases are optional: the screens that read them need them, their synonyms are skipped when absent.
 DECLARE @PaymentDb sysname = N'HISPayment';
 -- The archive database (the desktop's mediconnectA) is optional too: only Membership > Deletion writes to it.
-DECLARE @ArchiveDb sysname = N'HISDMArchive';
+-- It is HISDMArchive on one server and HISDBArchive on another: the first that exists is used.
+DECLARE @ArchiveDb sysname = CASE WHEN DB_ID(N'HISDMArchive') IS NOT NULL THEN N'HISDMArchive' ELSE N'HISDBArchive' END;
 
 DECLARE @major int = ISNULL(CAST(SERVERPROPERTY('ProductMajorVersion') AS int), 0);
 DECLARE @build int = ISNULL(CAST(SERVERPROPERTY('ProductBuild') AS int), 0);
@@ -54,8 +55,8 @@ FROM (VALUES
     (N'Maint_Case_RegInsertCASRef', N'Case_RegInsertCASRef'), (N'Maint_Case_RegInsertCASRef1', N'Case_RegInsertCASRef1'), (N'Maint_CASLG', N'CASLG'),
     (N'Maint_LGSeq', N'LGSeq'), (N'Maint_tblRecord', N'tblRecord'), (N'Maint_Case_AdjInsertCASRef', N'Case_AdjInsertCASRef'),
     (N'Maint_Case_AdjUpdateCASRef', N'Case_AdjUpdateCASRef'), (N'Maint_Case_AdjInsertCASLG_2011', N'Case_AdjInsertCASLG_2011'), (N'Maint_Case_AdjUpdateCASLG', N'Case_AdjUpdateCASLG'),
-    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'),
-    (N'Maint_USR', N'USR'), (N'Maint_GRP', N'GRP'), (N'Maint_AccPeriod', N'AccPeriod'), (N'Maint_TimeMain', N'TimeMain')) v (s, t);
+    (N'Maint_SearchPendingReason', N'SearchPendingReason'), (N'Maint_HosPanelCode', N'HosPanelCode'), (N'Maint_BankAccounts', N'BankAccounts'), (N'Maint_InvRecMode', N'InvRecMode'), (N'Maint_HOSRoomType', N'HOSRoomType'),
+    (N'Maint_USR', N'USR'), (N'Maint_GRP', N'GRP'), (N'Maint_AccPeriod', N'AccPeriod'), (N'Maint_TimeMain', N'TimeMain'), (N'Maint_DPT', N'DPT')) v (s, t);
 SELECT @sql += N'IF OBJECT_ID(N''genisis.' + s + N''', N''SN'') IS NOT NULL DROP SYNONYM genisis.' + s + N';
 CREATE SYNONYM genisis.' + s + N' FOR ' + QUOTENAME(@CisDb) + N'.dbo.' + t + N';
 '
@@ -82,15 +83,43 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimActual', @WorksheetDb, N'ClaimActual'), (N'WS_ClaimHos', @WorksheetDb, N'ClaimHos'), (N'WS_ClaimMember', @WorksheetDb, N'ClaimMember'),
     (N'WS_DRSeq', @WorksheetDb, N'DRSeq'), (N'WS_ExcessLetter', @WorksheetDb, N'CAS_Excess'),
     (N'WS_ClaimLimit', @WorksheetDb, N'ClaimLimit'), (N'WS_ClaimOthers', @WorksheetDb, N'ClaimOthers'), (N'WS_CASInvoice', @WorksheetDb, N'View_CAS_Invoice'),
-    (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
+    (N'WS_BordxWSArchive', @WorksheetDb, N'BordxWSArchive'), (N'WS_Carton', @WorksheetDb, N'Carton'), (N'WS_Storage', @WorksheetDb, N'Storage'), (N'WS_StorageClaim', @WorksheetDb, N'VIEW_Storage_CLM'), (N'WS_StorageDocument', @WorksheetDb, N'StorageDocument'), (N'WS_BordxControlS', @WorksheetDb, N'VIEW_Bordx_ControlS2'), (N'WS_BordxControlN', @WorksheetDb, N'VIEW_Bordx_ControlN2'), (N'WS_OutstandingBordx', @WorksheetDb, N'VIEW_OS_Bordx'), (N'WS_ClaimReport', @WorksheetDb, N'VIEW_NEWCLMReport'), (N'WS_ClaimReportCas', @WorksheetDb, N'VIEW_CLMReportCas'), (N'WS_StoragePVDoc', @WorksheetDb, N'VIEW_Storage_PVDoc'), (N'WS_StorageRecDoc', @WorksheetDb, N'VIEW_Storage_RecDoc'), (N'WS_BordxSEQ', @WorksheetDb, N'Claim_BordxSEQ2013'), (N'WS_CLMAsciiSEQ', @WorksheetDb, N'CLMAsciiSEQ'),
     (N'WS_PendingBordx', @WorksheetDb, N'VIEW_WS_PendingBordx2'), (N'WS_PendingBordxIB', @WorksheetDb, N'VIEW_WS_PendingBordxIB'),
     (N'WS_CLMReport', @WorksheetDb, N'View_CLMReport5_New'), (N'WS_CLMReportCas', @WorksheetDb, N'VIEW_CLMReportCasNew'),
+    (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
+    (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
+    (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- Invoice HOS / MBM Accounting and Invoice Tracking: their views and the daily batch counters
+    (N'WS_HOSInvoice', @WorksheetDb, N'VIEW_HOSInvoice'), (N'WS_MBMInvoice1', @WorksheetDb, N'VIEW_MBMInvoice1'), (N'WS_InvoiceTracking', @WorksheetDb, N'VIEW_Invoice_Tracking'),
+    (N'WS_INVACHSEQ', @WorksheetDb, N'INVACHSEQ'), (N'WS_INVACMSEQ', @WorksheetDb, N'INVACMSEQ'),
+    -- Invoice Processing writes through the legacy parameterized procedures of the worksheet database
+    (N'WS_Insert_ClaimInvoice_2013', @WorksheetDb, N'Insert_ClaimInvoice_2013'), (N'WS_Insert_ClaimInvoice_WODIR', @WorksheetDb, N'Insert_ClaimInvoice_WODIR'),
+    (N'WS_Insert_ClaimInvoice_WOFolDate', @WorksheetDb, N'Insert_ClaimInvoice_WOFolDate'), (N'WS_Insert_ClaimInvoice_WO2013', @WorksheetDb, N'Insert_ClaimInvoice_WO2013'),
+    (N'WS_Update_ClaimInvoice2013', @WorksheetDb, N'Update_ClaimInvoice2013'), (N'WS_Update_ClaimInvoice_WODIR2013', @WorksheetDb, N'Update_ClaimInvoice_WODIR2013'),
+    (N'WS_Update_ClaimInvoice_WOFolDate2013', @WorksheetDb, N'Update_ClaimInvoice_WOFolDate2013'), (N'WS_Update_ClaimInvoice_WO2013', @WorksheetDb, N'Update_ClaimInvoice_WO2013'),
+    (N'WS_Insert_ClaimInvActual2010', @WorksheetDb, N'Insert_ClaimInvActual2010'), (N'WS_Update_ClaimInvActual2010', @WorksheetDb, N'Update_ClaimInvActual2010'),
+    (N'WS_Insert_ClaimInvActualGST', @WorksheetDb, N'Insert_ClaimInvActualGST'), (N'WS_Update_ClaimInvActualGST', @WorksheetDb, N'Update_ClaimInvActualGST'),
+    (N'WS_Insert_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Insert_ClaimInvoiceActOthers_New_2019'), (N'WS_Update_ClaimInvoiceActOthers_New_2019', @WorksheetDb, N'Update_ClaimInvoiceActOthers_New_2019'),
+    (N'WS_Insert_ClaimInvoiceNotCov08', @WorksheetDb, N'Insert_ClaimInvoiceNotCov08'), (N'WS_Update_ClaimInvoiceNotCov08', @WorksheetDb, N'Update_ClaimInvoiceNotCov08'),
+    -- Worksheet Registration writes the rows of a version through the desktop's own parameterised procedures
+    (N'WS_Insert_WS_Claim_2012', @WorksheetDb, N'Insert_WS_Claim_2012'), (N'WS_Insert_WS_ClaimOthers_Jul08', @WorksheetDb, N'Insert_WS_ClaimOthers_Jul08'),
+    (N'WS_Insert_WS_ClaimLimit', @WorksheetDb, N'Insert_WS_ClaimLimit'), (N'WS_Insert_WS_ClaimActual', @WorksheetDb, N'Insert_WS_ClaimActual'),
+    (N'WS_SameLimit', @WorksheetDb, N'ClaimSameLimit'), (N'WS_ExcessSequence', @WorksheetDb, N'EXC_SEQ'), (N'WS_ClaimPayMBMStatus', @WorksheetDb, N'ClaimPayMBMStatus'), (N'WS_ClaimActualGST', @WorksheetDb, N'ClaimActualGST'), (N'WS_Insert_WS_ClaimActualGST', @WorksheetDb, N'Insert_WS_ClaimActualGST'), (N'WS_Insert_WS_ClaimApprove', @WorksheetDb, N'Insert_WS_ClaimApprove'),
+    (N'WS_Insert_WS_ClaimHOS', @WorksheetDb, N'Insert_WS_ClaimHOS'), (N'WS_Insert_WS_ClaimMBM', @WorksheetDb, N'Insert_WS_ClaimMBM'),
     (N'WS_SUNPosting', @WorksheetDb, N'SUNPosting'), (N'WS_SunPostBatch', @WorksheetDb, N'SunPostBatch'),
     (N'WS_SunPostingMbmInv', @WorksheetDb, N'VIEW_SUN_Posting_MBMInv'),
     (N'Pay_Payment2MBM', @PaymentDb, N'Payment2MBM'), (N'Pay_PVNSeq2013', @PaymentDb, N'PVNSeq2013'),
     (N'Pay_PVMedicaSeq2013', @PaymentDb, N'PVMedicaSeq2013'), (N'Pay_PVMedicaMXSeq', @PaymentDb, N'PVMedicaMXSeq'),
-    (N'Pay_ReceiptSummary', @PaymentDb, N'ReceiptSummary'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
-    (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS')) v (s, d, t)
+    (N'Pay_ReceiptSummary', @PaymentDb, N'ReceiptSummary'), (N'Pay_TrackMember', @PaymentDb, N'VIEW_ReceiptfrMBMTracking'), (N'Pay_TrackMember2', @PaymentDb, N'VIEW_ReceiptfrMBMTracking2'),
+    (N'Pay_TrackPayor', @PaymentDb, N'VIEW_ReceiptfrPayorTracking'), (N'Pay_TrackPayor2', @PaymentDb, N'VIEW_ReceiptfrPayorTracking2'), (N'Pay_TrackMnrb', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking'),
+    (N'Pay_TrackMnrb2', @PaymentDb, N'VIEW_ReceiptfrMNRBTracking2'), (N'Pay_ReceiptfrPAY', @PaymentDb, N'ReceiptfrPAY'), (N'Pay_ReceiptfrMNRB', @PaymentDb, N'ReceiptfrMNRB'), (N'Pay_ReceiptfrHOS', @PaymentDb, N'ReceiptFrHOS'), (N'Pay_ViewPaymentHospEnq', @PaymentDb, N'View_PaymentHosp_Enq'), (N'Pay_ViewReceipt', @PaymentDb, N'VIEW_Receipt'), (N'Pay_ReceiptfrMBM', @PaymentDb, N'ReceiptFrMBM'), (N'Pay_ContraAllocation', @PaymentDb, N'ContraAllocation'), (N'Pay_ViewReceiptfrMBM', @PaymentDb, N'VIEW_ReceiptFrMBM'), (N'Pay_ViewReceiptfrMBMRec2', @PaymentDb, N'View_ReceiptFrMBMRec2'), (N'Pay_ViewReceiptfrPayorRec', @PaymentDb, N'View_ReceiptFrPayorRec'), (N'WS_PendingBordxAll', @WorksheetDb, N'VIEW_WS_PendingBordx'), (N'WS_PaymentAdviceHos', @WorksheetDb, N'View_Payment_AdviceHOS'), (N'WS_SunPostingHospInv', @WorksheetDb, N'VIEW_SUN_Posting_HospInv'), (N'WS_ClmReportDcu', @WorksheetDb, N'VIEW_CLMReportDCU'), (N'WS_ClmReportDcu2', @WorksheetDb, N'VIEW_CLMReportDCU2'), (N'WS_ClmReportClaimDcu2', @WorksheetDb, N'VIEW_CLMReportClaimDCU2'), (N'WS_ClmReportCasDcu', @WorksheetDb, N'VIEW_CLMReportCasDCU'), (N'WS_ReceiptPayBordx', @WorksheetDb, N'VIEW_WksReceiptPayBordx'), (N'WS_ReceiptPayWs', @WorksheetDb, N'VIEW_WKSReceiptPAY'), (N'WS_PaymentAdviceMbm', @WorksheetDb, N'View_Paymt_AdviceMBM'), (N'WS_MasRecovery', @WorksheetDb, N'View_MAS_MBMRecovery'), (N'WS_MasRptOthers', @WorksheetDb, N'View_MAS_Rpt_Others'), (N'WS_MasRptMasWing', @WorksheetDb, N'View_MAS_Rpt_MASWing'), (N'WS_MasRptMasWingDet', @WorksheetDb, N'View_MAS_Rpt_MASWing_Det'), (N'WS_MasPaymentAdvice', @WorksheetDb, N'View_MAS_PaymentAdvice'), (N'WS_PrintBordx', @WorksheetDb, N'View_PrintBordx'), (N'WS_PrintClaimBordx', @WorksheetDb, N'VIEW_PrintClaimBordx_06'), (N'Pay_RecSeq', @PaymentDb, N'RecSeq'),
+    (N'Pay_Payment2HOS', @PaymentDb, N'Payment2HOS'),
+    -- the Payment screens rebuilt without their source (690_ and later)
+    (N'Pay_TrackHospital', @PaymentDb, N'VIEW_PaymentHos_Tracking'), (N'Pay_TrackPaymentMember', @PaymentDb, N'VIEW_Payment_Tracking'),
+    (N'Pay_Payment2PAY', @PaymentDb, N'Payment2PAY'), (N'Pay_PaymentOthers', @PaymentDb, N'PaymentOthers'), (N'Pay_PVAccNo', @PaymentDb, N'PVAccNo'),
+    (N'Pay_ChequeType', @PaymentDb, N'ChequeType'), (N'Pay_PaymentMBMReverse', @PaymentDb, N'PaymentMBMReverse'),
+    (N'Pay_Payment2HOSNew', @PaymentDb, N'VIEW_Payment2HOSNew'), (N'Pay_ViewPaymentPayor', @PaymentDb, N'VIEW_Payment_Payor'),
+    (N'Pay_ViewPayment2MBMNew', @PaymentDb, N'VIEW_Payment2MBMNew'), (N'Pay_ViewPayment2MBMAuto', @PaymentDb, N'VIEW_Payment2MBMJul08')) v (s, d, t)
 WHERE DB_ID(d) IS NOT NULL;
 EXEC (@sql);
 PRINT N'genisis schema and synonyms ready (maintenance database: ' + @MaintenanceDb + N', clinical database: ' + CASE WHEN DB_ID(@CisDb) IS NULL THEN N'none' ELSE @CisDb END

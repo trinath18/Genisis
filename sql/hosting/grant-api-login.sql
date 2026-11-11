@@ -109,6 +109,32 @@ BEGIN
     SET @s = N'';
 END
 SET @s += N'GRANT EXECUTE ON OBJECT::dbo.CaseEnquiryNotes TO ' + @q + N';';
+-- Invoice Processing: the legacy parameterized procedures its save calls through the genisis.WS_* synonyms
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WODIR TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WOFolDate TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoice_WO2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WODIR2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WOFolDate2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoice_WO2013 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvActual2010 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvActual2010 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceActOthers_New_2019 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceActOthers_New_2019 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_ClaimInvoiceNotCov08 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Update_ClaimInvoiceNotCov08 TO ' + @q + N';';
+-- Worksheet Registration: the legacy parameterized procedures its save calls through the genisis.WS_Insert_WS_* synonyms
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_Claim_2012 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimOthers_Jul08 TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimLimit TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimActual TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimActualGST TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimApprove TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimHOS TO ' + @q + N';';
+SET @s += N'GRANT EXECUTE ON OBJECT::dbo.Insert_WS_ClaimMBM TO ' + @q + N';';
 EXEC (@s);
 GO
 
@@ -158,5 +184,36 @@ BEGIN
     EXEC (@s);
 END';
     EXEC (@uploadSql);
+END
+GO
+
+-- ===== Archive database (Membership > Deletion; optional: skipped when it does not exist)
+-- HISDMArchive on one server, HISDBArchive on another (the first that exists, as 000_setup.sql chooses). Read and write: Deletion archives the removed membership through the genisis.Arch_*
+-- synonyms. A restore of the archive database replaces its users, so run this again after one.
+-- Also after a restore: the clustered primary keys of MBMArchive and MBMCoveredPersonsArchive can arrive disabled (the backup carries them that way), which makes those tables unreadable;
+-- rebuild them: ALTER INDEX PK_MBMArchive ON <archive>.dbo.MBMArchive REBUILD; ALTER INDEX PK_MBMCoveredPersonsArchive ON <archive>.dbo.MBMCoveredPersonsArchive REBUILD;
+GO
+DECLARE @archiveDb sysname = CASE WHEN DB_ID(N'HISDMArchive') IS NOT NULL THEN N'HISDMArchive' WHEN DB_ID(N'HISDBArchive') IS NOT NULL THEN N'HISDBArchive' END;
+IF @archiveDb IS NOT NULL
+BEGIN
+    DECLARE @archiveSql nvarchar(max) = N'USE ' + QUOTENAME(@archiveDb) + N';
+DECLARE @login sysname = N''apiuser'', @q sysname, @s nvarchar(max) = N'''';
+SET @q = QUOTENAME(@login);
+IF USER_ID(@login) IS NULL
+BEGIN
+    SET @s = N''CREATE USER '' + @q + N'' FOR LOGIN '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datareader'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datareader ADD MEMBER '' + @q;
+    EXEC (@s);
+END
+IF IS_ROLEMEMBER(N''db_datawriter'', @login) = 0
+BEGIN
+    SET @s = N''ALTER ROLE db_datawriter ADD MEMBER '' + @q;
+    EXEC (@s);
+END';
+    EXEC (@archiveSql);
 END
 GO

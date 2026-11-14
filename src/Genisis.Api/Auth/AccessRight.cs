@@ -35,6 +35,9 @@ public static class AccessRight
     /// <summary>Maintenance > Panel Hospital Maintenance (HOSPanelMaintenance) has no click handler in the desktop; it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
     public const int PanelHospitalMaintenance = 1;
 
+    /// <summary>Maintenance > Surgical Schedule (mnuSurgicalOperation) has no click handler and no form in the desktop; rebuilt, it is gated like its siblings in the Maintenance menu, position 1 (a decision).</summary>
+    public const int SurgicalSchedule = 1;
+
     /// <summary>Contribution Billing > Refund Listing (mnuMCORefundListing, CheckAccess(21)).</summary>
     public const int ContributionRefundListing = 21;
 

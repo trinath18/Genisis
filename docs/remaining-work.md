@@ -2,7 +2,7 @@
 
 Source: the **Required** column of `VB6-MenuItems.xlsx` (113 rows marked `Y`: 108 screens and 5 parent menus) against the web routes that exist. Written 2026-10-29, after the Claim Bordx delivery screens ([claim-bordx-screens.md](claim-bordx-screens.md)).
 
-**92 of the 108 are built, 16 are not.** Twelve of the 16 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Posting > Member, Payment > Update Invoice, Payment > To Member > Chq. Reissue and Chq. Cancellation), which leaves 4 screens that are not built. **None of the 4 can be built from what is in the source tree**: they have no form to build from (Close Connection, Claim Pass to A/C, Surgical Schedule, and Bordx Send Date, whose only form has no code); each needs the business (below). The seven Payment screens whose forms are missing were rebuilt from the `HISPayment` data on the `payment-module` branch, with their assumptions listed for the Payment users ([payment-screens.md](payment-screens.md)); Generate Invoice (Endorsement) was rebuilt the same way on the `contribution-billing` branch ([contribution-billing-screens.md](contribution-billing-screens.md)).
+**94 of the 108 are built, 14 are not, and no screen is left to build.** The 14 are menu parents (Worksheet, Payment Advice, Bor Delivery, Monitoring, Posting > Invoice, Security, Payment > To Member) or are covered by a screen under another menu path (Logout, Close Connection, Claim Pass to A/C, Posting > Member, Payment > Update Invoice, Payment > To Member > Chq. Reissue and Chq. Cancellation). The last four were settled on the `missing-forms` branch (2026-11-14), after the source folder was compared with `vbcode.zip` (the zip has no form the folder lacks; the folder adds only the local build set-up): Bordx Send Date is `frmUploadApproval` (built), Surgical Schedule was rebuilt on `PLNSurgOperation` (no form exists), Claim Pass to A/C opens Worksheet > Send to A/C, and Close Connection is the Log out button. The business should confirm these (below). The seven Payment screens whose forms are missing were rebuilt from the `HISPayment` data on the `payment-module` branch, with their assumptions listed for the Payment users ([payment-screens.md](payment-screens.md)); Generate Invoice (Endorsement) was rebuilt the same way on the `contribution-billing` branch ([contribution-billing-screens.md](contribution-billing-screens.md)).
 
 ## What the inventory found
 
@@ -19,7 +19,7 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | Item | Form | Status |
 |---|---|---|
 | Logout | `frmLogin` (handler) | **Covered**: the top bar's Log out button ends the session and returns to the login page |
-| Close Connection | no form (`CloseConnection` handler only closes the connection) | No web meaning (the API holds no connection for a user); business to confirm it can be dropped |
+| Close Connection | no form (`CloseConnection_Click` closes the connections, writes the Logout line of the login log and unloads every form, as Logout does) | **Covered** by the top bar's Log out button (the API holds no connection for a user) |
 
 ### Contribution Billing (none left; Generate Invoice, Generate Invoice (Endorsement), Refund Listing and MCO Reinstatement are built: [contribution-billing-screens.md](contribution-billing-screens.md); Receipt MCO/Others is covered)
 
@@ -28,19 +28,19 @@ Size is the form's line count (comments and blank lines included). "Handler" = t
 | Generate Invoice (Endorsement) | `frmMCOFeesListingEndt` (handler, position 8) | **source missing** | **Rebuilt**: Generate Invoice by endorsement bordx date |
 | Receipt MCO/Others | `FrmRecMCO` (handler, position 19) | | **Covered**: the Finance > Invoice Receipt (Outstanding) screen is this form |
 
-### Authorize Claims (1 left; DCU Tracking > Claim Report is built: [authorize-screens.md](authorize-screens.md))
+### Authorize Claims (1 left, covered; DCU Tracking > Claim Report is built: [authorize-screens.md](authorize-screens.md))
 
 | Item | Form | Size | Notes |
 |---|---|---:|---|
-| Claim Pass to A/C | no match found by name | | business to name the form |
+| Claim Pass to A/C | no form has its name and `mnuClaimPass2AC` has no handler; `FrmWksSendToAC` ("Claims Send To A/C") is the form that passes claims to accounts | | **Covered**: the sidebar item opens Worksheet > Send to A/C (access position 24); business to confirm |
 
-### Claim Bordx (5 left; 17 built)
+### Claim Bordx (4 left, all parent menus; 18 built)
 
 Group parents with no screen of their own: Worksheet, Payment Advice, Bor Delivery, Monitoring.
 
 | Item | Form (by name unless noted) | Size | Notes |
 |---|---|---:|---|
-| Bor Delivery > Bordx Send Date | **ambiguous**: `frmUploadBordxSentDate` has no code; `FrmBordxDelivery` ("Set Bordx Delivery/Account Date", 1,370) is an older all-in-one form that also sets the MNRB steps with other columns (`BordxPAYFrStatus`, `BordxPAYRecDate`) | | business to say which |
+| Bor Delivery > Bordx Send Date | `frmUploadApproval` ("Upload Send/Approval/Return", 1,278): `frmUploadBordxSentDate` is a copy of it with the code removed; `FrmBordxDelivery` is the older all-in-one form of the delivery steps, not this item | 1,278 | **Built** ([claim-bordx-screens.md](claim-bordx-screens.md)) |
 
 ### Payment (none left to build: [payment-screens.md](payment-screens.md); the top menu is a parent)
 
@@ -66,11 +66,11 @@ Of the ten forms the desktop's Payment menu opens, **none of eight is in the sou
 |---|---|---:|---|
 | Invoice (parent), Invoice > Member | `frmPostingInvoiceMBM` | 1,851 | **Covered**: Finance > SUN Posting is this form (handlers `mnuInvoicePositve` and `mnuSUNPosting`); the Posting menu entry is another door to it |
 
-### Maintenance (2 left; Member, Suspension, Company Info and Panel Hospital Maintenance are built: [maintenance-screens.md](maintenance-screens.md))
+### Maintenance (1 left, a parent menu; Member, Suspension, Company Info, Panel Hospital Maintenance and Surgical Schedule are built: [maintenance-screens.md](maintenance-screens.md))
 
 | Item | Form | Notes |
 |---|---|---|
-| Surgical Schedule | no match found by name (`mnuSurgicalOperation`; `frmMMASchedule` "MMA Schedule of Fees" is Account Transaction) | business to name the form |
+| Surgical Schedule | no form in the folder or the zip (`mnuSurgicalOperation`; `frmMMASchedule` "MMA Schedule of Fees" is Account Transaction); its table is `PLNSurgOperation`, the plan's schedule Case Registration lists | **Rebuilt** on that table (assumptions in [maintenance-screens.md](maintenance-screens.md)) |
 | Security (parent) | | covered by its three children (Department, Role Management, User Permission) |
 
 ## Gaps inside screens that are built
@@ -82,9 +82,9 @@ Of the ten forms the desktop's Payment menu opens, **none of eight is in the sou
 
 ## Needs the business
 
-1. Which form each remaining item opens: Bordx Send Date (`frmUploadBordxSentDate`, "Upload Bordx Sent Date", has the controls of an upload from a file and no code at all; `FrmBordxDelivery` is the older all-in-one form), Claim Pass to A/C, Surgical Schedule; and whether the older `frmPanelHospMaintenance` (payor, plan and hospital) is still used.
+1. The forms chosen for the items without a handler: Bordx Send Date is `frmUploadApproval` (`frmUploadBordxSentDate` is its copy without code), Claim Pass to A/C is Worksheet > Send to A/C (`FrmWksSendToAC`), and Surgical Schedule is rebuilt on `PLNSurgOperation` with the assumptions in [maintenance-screens.md](maintenance-screens.md); and whether the older `frmPanelHospMaintenance` (payor, plan and hospital) is still used.
 2. The Payment users to confirm the assumptions of the seven rebuilt Payment screens ([payment-screens.md](payment-screens.md)); the Contribution Billing users to confirm those of Generate Invoice (Endorsement) ([contribution-billing-screens.md](contribution-billing-screens.md)).
 3. Positions: 15 for the Claim Bordx items without a click handler, 12 for the Payment screens, 16 for the DCU report, 9 for Receipt Others, 1 for Company Info and Panel Hospital Maintenance (all decisions: none has a click handler).
-4. Whether Close Connection can be dropped.
+4. That Close Connection can be the Log out button.
 5. How a lifetime plan's annual limit should change, and the debit / credit note numbering rule.
 6. The real `Company` table (not in the development databases): check Company Info against it.

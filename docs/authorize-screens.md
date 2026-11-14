@@ -1,6 +1,6 @@
 # Authorize Claims screens
 
-Menu path: **Authorize Claims** (legacy `mdiMain.frm`, top menu `mnuAuthotizeClaims`): DCU Tracking > Claim Report (`mnuReport1`), DCU Tracking > Claim Report (Jup.) (`mnuReport2`) and Claim Pass to A/C (`mnuClaimPass2AC`). The business marked DCU Tracking > Claim Report Required; Claim Pass to A/C is Required and has no form (see [remaining-work.md](remaining-work.md)). The sidebar lists them under **Claims**.
+Menu path: **Authorize Claims** (legacy `mdiMain.frm`, top menu `mnuAuthotizeClaims`): DCU Tracking > Claim Report (`mnuReport1`), DCU Tracking > Claim Report (Jup.) (`mnuReport2`) and Claim Pass to A/C (`mnuClaimPass2AC`). The business marked DCU Tracking > Claim Report Required; Claim Pass to A/C is Required; no form has its name and its menu item has no handler, so the sidebar item opens Worksheet > Send to A/C, the screen of `FrmWksSendToAC` ("Claims Send To A/C"), the form that passes claims to accounts (access position 24; the business to confirm, see [remaining-work.md](remaining-work.md)). The sidebar lists them under **Claims**.
 
 | Menu path | Legacy form | Web route | API | Access position |
 |---|---|---|---|---:|

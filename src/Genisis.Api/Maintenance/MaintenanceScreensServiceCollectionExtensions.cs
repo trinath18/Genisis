@@ -5,6 +5,7 @@ using Genisis.Api.Maintenance.MmaEntry;
 using Genisis.Api.Maintenance.PanelHospitals;
 using Genisis.Api.Maintenance.Security;
 using Genisis.Api.Maintenance.Suspension;
+using Genisis.Api.Maintenance.SurgicalSchedule;
 
 namespace Genisis.Api.Maintenance;
 
@@ -24,6 +25,8 @@ public static class MaintenanceScreensServiceCollectionExtensions
         services.AddScoped<MmaEntryService>();
         services.AddSingleton<IPanelHospitalMaintenanceRepository, PanelHospitalMaintenanceRepository>();
         services.AddScoped<PanelHospitalMaintenanceService>();
+        services.AddSingleton<ISurgicalScheduleRepository, SurgicalScheduleRepository>();
+        services.AddScoped<SurgicalScheduleService>();
         services.AddSingleton<ICompanyInfoRepository, CompanyInfoRepository>();
         services.AddScoped<CompanyInfoService>();
         services.AddSingleton<IMemberDatesRepository, MemberDatesRepository>();

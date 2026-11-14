@@ -5,6 +5,7 @@ using Genisis.Api.ClaimBordx.PaymentAdvice;
 using Genisis.Api.ClaimBordx.Print;
 using Genisis.Api.ClaimBordx.Recovery;
 using Genisis.Api.ClaimBordx.Revise;
+using Genisis.Api.ClaimBordx.SendDate;
 using Genisis.Api.ClaimBordx.Storage;
 using Genisis.Api.ClaimBordx.Update;
 
@@ -42,6 +43,8 @@ public static class ClaimBordxServiceCollectionExtensions
         services.AddScoped<OutstandingBordxService>();
         services.AddSingleton<IPrintRecoveryRepository, PrintRecoveryRepository>();
         services.AddScoped<PrintRecoveryService>();
+        services.AddSingleton<IBordxSendDateRepository, BordxSendDateRepository>();
+        services.AddScoped<BordxSendDateService>();
         return services;
     }
 }

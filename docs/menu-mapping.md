@@ -27,19 +27,19 @@ How to read the status column
 | Invoice | 9 | 5 | 5 | 0 | 8 |
 | Worksheet | 9 | 6 | 6 | 0 | 5 |
 | Authorize Claims | 18 | 2 | 1 | 1 | 14 |
-| Claim Bordx | 34 | 23 | 17 | 5 | 21 |
+| Claim Bordx | 34 | 23 | 18 | 4 | 21 |
 | Finance | 11 | 5 | 4 | 0 | 2 |
 | Reports | 4 | 0 | 0 | 0 | 0 |
 | Statistic | 2 | 0 | 0 | 0 | 1 |
 | Payment | 27 | 15 | 10 | 4 | 4 |
 | Receipt | 6 | 5 | 4 | 0 | 1 |
 | Posting | 4 | 3 | 1 | 2 | 1 |
-| Maintenance | 24 | 16 | 14 | 2 | 13 |
+| Maintenance | 24 | 16 | 15 | 1 | 13 |
 | View | 2 | 0 | 0 | 0 | 1 |
 | Window | 4 | 0 | 0 | 0 | 0 |
-| **Total** | **236** | **113** | **92** | **16** | **134** |
+| **Total** | **236** | **113** | **94** | **14** | **134** |
 
-"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 92 and 16. A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
+"Required (Y)" counts the five parent menus the business marked (File, Claim Bordx, Finance, Payment, Receipt); "built" and "not built" count the 108 items below them, 94 and 14 (the 14 are parent menus or are covered by a screen under another path; recounted 2026-11-14). A built item has a web route and an API and is tested; "built" does not mean every detail of its form is ported (the gaps are in [remaining-work.md](remaining-work.md)). The figures were recounted on 2026-10-29 from the Required column of `VB6-MenuItems.xlsx` against the web routes, because the table before it still counted Membership and Maintenance as not built after the work from `main` was merged.
 
 (Separators are not counted. A top menu is itself an item; the "Required" flag on it means its sub-items are in scope.)
 
@@ -82,6 +82,7 @@ How to read the status column
 | Finance > Electronic Banking | `mnuElectronicBank` | frmFileExportBankESP (source missing; configurable file layout) | `/finance/electronic-banking` | 10 | `/api/finance/electronic-banking` |
 | Authorize Claims > DCU Tracking > Claim Report | `mnuReport1` | FrmDCUReport1 (no click handler; chosen by name; `mnuReport2` "Claim Report (Jup.)" is FrmDCUReport2, the same form, not Required) | `/authorize/dcu-report` | 16 * | `/api/authorize/dcu-report` |
 | Maintenance > Company Info | `mnuComInfo` | FrmMaintenanceComInfo (no click handler, disabled in the desktop; chosen by name) | `/maintenance/company-info` | 1 * | `/api/maintenance/company-info` |
+| Maintenance > Surgical Schedule | `mnuSurgicalOperation` | none (rebuilt on PLNSurgOperation, see [maintenance-screens.md](maintenance-screens.md)) | `/maintenance/surgical-schedule` | 1 * | `/api/maintenance/surgical-schedule` |
 | Maintenance > Panel Hospital Maintenance | `HOSPanelMaintenance` | FrmMaintenancePanelHos (no click handler; two forms carry the caption, see [maintenance-screens.md](maintenance-screens.md)) | `/maintenance/panel-hospitals` | 1 * | `/api/maintenance/panel-hospitals` |
 | Receipt > Others | `mnuOthers` | FrmReceiptHOS (no click handler; chosen by caption) | `/receipt/others` | 9 * | `/api/receipt/others` |
 | Payment > Contra Allocation | `ContraAllocation` | frmContraAllocation (no click handler; chosen by name) | `/payment/contra-allocation` | 12 * | `/api/payment/contra-allocation` |
@@ -119,6 +120,7 @@ How to read the status column
 | Claim Bordx > Bor Delivery > Send to Payor | `mnuToPayor` | FrmSendtoPayor (no click handler) | `/claim-bordx/send-to-payor` | 15 * | `/api/claim-bordx/delivery/to-payor` |
 | Claim Bordx > Bor Delivery > Returned From Payor | `RetfrPay` | FrmReturnPayor (no click handler; chosen by name) | `/claim-bordx/returned-from-payor` | 15 * | `/api/claim-bordx/delivery/from-payor` |
 | Claim Bordx > Bor Delivery > Send to A/C | `mnuSentAC` | FrmSendtoAC (no click handler) | `/claim-bordx/send-to-accounts` | 15 * | `/api/claim-bordx/delivery/to-accounts` |
+| Claim Bordx > Bor Delivery > Bordx Send Date | `mnuBordxSendDate` | frmUploadApproval (no click handler; frmUploadBordxSentDate is a copy of it without code) | `/claim-bordx/bordx-send-date` | 15 * | `/api/claim-bordx/send-date/{send,approval,return}` |
 | Claim Bordx > Bordx Approval | `mnuApproval` | FrmBordxApproval (no click handler) | `/claim-bordx/approval` | 15 * | `/api/claim-bordx/delivery/approval` |
 | Maintenance > Member | `MaintenanceOthers` | frmMaintenanceMembers (no click handler; chosen by name) | `/maintenance/member` | 1 * | `/api/maintenance/member-dates` |
 | Maintenance > Suspension | `Suspension` | frmSuspensionDetail | `/maintenance/suspension` | 27 | `/api/maintenance/suspension` |
@@ -218,7 +220,7 @@ How to read the status column
 | 12 | Claim Bordx > Upload Approval/Sent Date | `mnuUploadApproval` |  |  | Not required (hidden in the original) |  |
 | 13 | Claim Bordx > Update Bordx | `UpdateBordx` |  | frmUpdateWS2Bordx | Migrated (hidden in the original) | /claim-bordx/update-bordx |
 | 14 | Claim Bordx > Bor Delivery | `mnuBordxDelivery` |  |  | **Required, not built** (hidden in the original) |  |
-| 15 | Claim Bordx > Bor Delivery > Bordx Send Date | `mnuBordxSendDate` |  |  | **Required, not built** |  |
+| 15 | Claim Bordx > Bor Delivery > Bordx Send Date | `mnuBordxSendDate` |  | frmUploadApproval | Migrated | /claim-bordx/bordx-send-date |
 | 16 | Claim Bordx > Bor Delivery > Send to Payor | `mnuToPayor` |  | FrmSendtoPayor | Migrated (hidden in the original) | /claim-bordx/send-to-payor |
 | 17 | Claim Bordx > Bor Delivery > Returned From Payor | `RetfrPay` |  | FrmReturnPayor | Migrated (hidden in the original) | /claim-bordx/returned-from-payor |
 | 18 | Claim Bordx > Bor Delivery > Returned Fr Payor(Not App) | `mnuFrPayorCase` |  | FrmReturnPayorCase | Migrated (hidden in the original) | /claim-bordx/returned-not-approved |
@@ -243,15 +245,15 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 ## Backlog — items marked Required that are not built yet
 
-24 items (recounted 2026-10-30). Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
+14 items (recounted 2026-11-14), none of them a screen left to build. Which form each opens, how big it is, which have no source and which need a decision from the business are in [remaining-work.md](remaining-work.md).
 
-**File** (2): Logout (covered by the top bar's Log out button); Close Connection
+**File** (2, both covered by the top bar's Log out button): Logout; Close Connection
 
 **Contribution Billing** (0): Generate Invoice, Generate Invoice (Endorsement) (rebuilt: its form is missing), MCO Reinstatement and Refund Listing are built ([contribution-billing-screens.md](contribution-billing-screens.md)) (Receipt MCO/Others is the Finance > Invoice Receipt (Outstanding) form, built)
 
-**Authorize Claims** (1): Claim Pass to A/C. DCU Tracking > Claim Report is built ([authorize-screens.md](authorize-screens.md)).
+**Authorize Claims** (1, covered): Claim Pass to A/C opens Worksheet > Send to A/C (FrmWksSendToAC, "Claims Send To A/C"). DCU Tracking > Claim Report is built ([authorize-screens.md](authorize-screens.md)).
 
-**Claim Bordx** (5, four of them parent menus): Worksheet; Payment Advice; Bor Delivery; Bor Delivery > Bordx Send Date; Monitoring; Storage > Claim files
+**Claim Bordx** (4, all parent menus): Worksheet; Payment Advice; Bor Delivery; Monitoring; Storage > Claim files. Bor Delivery > Bordx Send Date is built (frmUploadApproval, [claim-bordx-screens.md](claim-bordx-screens.md))
 
 **Payment** (4, none of them a screen to build: To Member is a parent menu; Update Invoice, Chq. Reissue and Chq. Cancellation open built screens under another path. The other ten are built, seven of them rebuilt without their source: [payment-screens.md](payment-screens.md); was 11): To Member; Update Invoice; To Member > Chq. Reissue; To Member > Chq. Cancellation
 
@@ -259,7 +261,7 @@ The Bor Delivery, Monitoring, Approval and Storage controls have no click handle
 
 **Posting** (2): Invoice (a parent menu); Invoice > Member (Finance > SUN Posting is this form, built). Invoice > Hospital is built ([posting-screens.md](posting-screens.md)).
 
-**Maintenance** (2): Surgical Schedule; Security (its three children are built). Panel Hospital Maintenance and Company Info are built too. Member and Suspension are built ([maintenance-screens.md](maintenance-screens.md)).
+**Maintenance** (1): Security (its three children are built). Surgical Schedule (rebuilt on PLNSurgOperation), Panel Hospital Maintenance and Company Info are built too. Member and Suspension are built ([maintenance-screens.md](maintenance-screens.md)).
 
 ## Notes
 

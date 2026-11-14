@@ -6,6 +6,7 @@ Menu path: **Maintenance** (legacy `mdiMain.frm`, top menu `MaintenanceTables`).
 |---|---|---|---|---:|
 | Maintenance > Member | `frmMaintenanceMembers` ("Members Maintenance", tab "Valid Date Range") | `/maintenance/member` | `/api/maintenance/member-dates` | 1 * |
 | Maintenance > Suspension | `frmSuspensionDetail` ("Suspension Detail") | `/maintenance/suspension` | `/api/maintenance/suspension` | 27 |
+| Maintenance > Surgical Schedule | none (rebuilt on `PLNSurgOperation`, below) | `/maintenance/surgical-schedule` | `/api/maintenance/surgical-schedule` | 1 * |
 
 \* `MaintenanceOthers` (Member) has no click handler in `mdiMain.frm`; it is gated like the other Maintenance items, position 1 (a decision, recorded in `AccessRight.cs`). Suspension is `Suspension_Click`, position 27.
 
@@ -55,6 +56,12 @@ Two tabs. **Suspension Category** keeps `dbo.SuspensionCat` (01 MEMBERSHIP, 02 A
 | SQL | `sql/main/430_maintenance_member_dates.sql`, `440_maintenance_suspension.sql` (and `sql/genisis-main.sql`); they use `dbo.MBMValidDateRange`, `dbo.SuspensionCat`, `dbo.SuspensionDetail`, `dbo.PAY` of the main database |
 | API | `Genisis.Api/Maintenance/MemberDates/MemberDates.cs`, `Maintenance/Suspension/Suspension.cs`, `Maintenance/MaintenanceScreensServiceCollectionExtensions.cs`, `Controllers/MaintenanceMemberDatesController.cs`, `MaintenanceSuspensionController.cs`, `Auth/AccessRight.cs` |
 | UI | `GenisisUI/src/features/maintenance/memberDates/` and `suspension/` (rules, rules tests, `pages/*Screen.tsx`), the routes in `App.tsx`, the Maintenance section of `components/AppLayout.tsx`, `auth/access.ts` |
+
+## Maintenance > Surgical Schedule (rebuilt: no form)
+
+`mnuSurgicalOperation` has no click handler, and no form for it is in the source folder or in `vbcode.zip` (no form has "surgical" in its name or caption; `frmMMASchedule` is Account Transaction). The table the item names is `dbo.PLNSurgOperation` (payor, plan, surgical main category, sub category, percentage), which Case Registration lists on its "Surgical Schedule" tab and which nothing in the desktop writes. The screen is rebuilt on it (`sql/main/760_maintenance_surgical_schedule.sql`, `Maintenance/SurgicalSchedule/SurgicalSchedule.cs`, `Controllers/MaintenanceSurgicalScheduleController.cs`; UI `pages/maintenance/SurgicalSchedulePage.tsx` and `surgicalScheduleRules.ts`): choose a payor and type a plan code, then add, change or delete the rows of the plan's schedule.
+
+Assumptions for the business to confirm: the categories are free text (no list of surgical categories exists in the databases); the percentage is a whole number from 0 to 100; one row per main and sub category of a plan; access position 1, like the other Maintenance items without a handler. The table has no rows in the development databases.
 
 ## Maintenance > Company Info
 

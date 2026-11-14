@@ -22,6 +22,7 @@ Menu path: **Claim Bordx** (legacy `mdiMain.frm`, top menu `mnuFinance`'s siblin
 | Claim Bordx > Bor Delivery > Returned From Payor | `FrmReturnPayor` ("Bordx Delivery") | `/claim-bordx/returned-from-payor` | `/api/claim-bordx/delivery/from-payor` | Migrated (form chosen by name, see "Assumptions") |
 | Claim Bordx > Bor Delivery > Returned Fr Payor (Not App) | `FrmReturnPayorCase` ("Bordx Delivery") | `/claim-bordx/returned-not-approved` | `/api/claim-bordx/return-case` | Migrated (below) |
 | Claim Bordx > Bor Delivery > Send to A/C | `FrmSendtoAC` ("Bordx Sent to A/C") | `/claim-bordx/send-to-accounts` | `/api/claim-bordx/delivery/to-accounts` | Migrated |
+| Claim Bordx > Bor Delivery > Bordx Send Date | `frmUploadApproval` ("Upload Send/Approval/Return") | `/claim-bordx/bordx-send-date` | `/api/claim-bordx/send-date/{send,approval,return}` | Migrated (below) |
 | Claim Bordx > Bordx Approval | `FrmBordxApproval` | `/claim-bordx/approval` | `/api/claim-bordx/delivery/approval` | Migrated |
 
 The other Claim Bordx items are listed in the sidebar, disabled, until they are built (see [remaining-work.md](remaining-work.md)).
@@ -217,6 +218,20 @@ Puts the accounts department's documents into cartons (`sql/main/460_claim_bordx
 - **Differences:** the desktop saved document by document, so a duplicate stopped only itself and the others were saved; the web saves all or none. The "Carton Status" column of the desktop list actually held the document type; it is headed Doc Type. Print File exports the list to CSV.
 - **Data:** none of the 6,756 payment vouchers in the view is stored (the 5,013 stored numbers match no voucher in the payment tables, so the desktop view never shows them); the stored-row flows are checked in rolled-back database tests and with a fake stored row in the browser.
 - **Tests:** `StorageDocumentTests.cs` compares every search with direct counts and stores, finds, changes and refuses documents in a rolled-back session; `e2e/claim-bordx-storage-document.mjs` (35 checks).
+
+## Bor Delivery > Bordx Send Date (frmUploadApproval)
+
+`mnuBordxSendDate` has no click handler. `frmUploadBordxSentDate`, the form whose name matches, is a copy of `frmUploadApproval` with the code removed (the same list and buttons); `frmUploadApproval` ("Upload Send/Approval/Return", 1,278 lines) is the working form, and the screen ports it. The source folder and `vbcode.zip` hold the same forms.
+
+Each upload reads the first sheet of an Excel file from row 2 until column A is empty. It is verified first (the desktop's Verify buttons; the upload button works only after a clean verification of the same file and upload type) and is written in one transaction (`sql/main/750_claim_bordx_send_date.sql`, `ClaimBordx/SendDate/BordxSendDate.cs`, `Controllers/ClaimBordxSendDateController.cs`; UI `pages/claimBordx/BordxSendDatePage.tsx` and `bordxSendDateRules.ts`):
+
+| Upload | Columns | Checks | Writes |
+|---|---|---|---|
+| Send Date (`UpdateSent`) | B bordx, C amount, T send date | bordx of 8 or 10 characters starting N or S, amount a number, a date | the bordx's sent date, status and user |
+| App Date | A bordx, H approval code, I approval date, J amount | bordx, a code of 12 characters, a date, amount | every claim of the bordx: `CLMPayorAppCode`, `CLMPayorAppDate`, `CLMPayorAppStatus` 'Y' |
+| Return Date (`UpdateReturnPayor`) | B bordx, C amount, R, S, T return date | bordx, amount, a date | every claim of the bordx: `BordxPAYRecDocDate`, `CLMAppStatus` 'A'; the remark "Received Returned Bordx - <bordx> on <date>" (`genisis.Case_AppendRemark`) |
+
+Differences from the desktop, for the Claims users to confirm: a bordx number that does not exist is an error of the verification (the desktop's update found no row and said nothing); the return remark is written on every case of the bordx (the desktop wrote it on the first case it read only).
 
 ## What `CLMAppStatus` means (to confirm with the business)
 

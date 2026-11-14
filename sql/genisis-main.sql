@@ -472,7 +472,8 @@ GO
 -- ===== main/040_membership.sql =====
 -- Membership > Enquiry (read-only). SearchMBMCovPersonsProc, SearchCas and SearchCasHistory are existing procedures and are called as they are.
 
--- @by: number | name | ic | policy. @prefix is an escaped LIKE prefix ending in %.
+-- @by: number | name | ic | policy. @prefix is an escaped LIKE prefix ending in %. MBMOthers and MBMTwo are outer joins: about 38% of the members have no MBMOthers row and about 26% no
+-- MBMTwo row, and the desktop's Go (SearchMBMCovPersonsProc) finds them all.
 CREATE OR ALTER PROCEDURE genisis.Membership_Search
     @max int, @by nvarchar(4000), @q nvarchar(4000), @prefix nvarchar(4000)
 AS
@@ -484,8 +485,8 @@ BEGIN
                 THEN 'A' ELSE m.MBMStatus END AS MBMStatus,
            t.MBMRegUser, o.MBMGroupCompany, m.HSCLNInd
     FROM dbo.MBM m
-    INNER JOIN dbo.MBMOthers o ON m.MBMNumber = o.MBMNumber
-    INNER JOIN dbo.MBMTwo t ON m.MBMNumber = t.MBMNumber
+    LEFT JOIN dbo.MBMOthers o ON m.MBMNumber = o.MBMNumber
+    LEFT JOIN dbo.MBMTwo t ON m.MBMNumber = t.MBMNumber
     WHERE (@by = N'number' AND m.MBMNumber LIKE @prefix)
        OR (@by = N'name' AND m.MBMName LIKE @prefix)
        OR (@by = N'ic' AND (m.MBMIcBcPp = @q OR REPLACE(m.MBMIcBcPp, '-', '') = REPLACE(@q, '-', '')))
@@ -496,6 +497,19 @@ END
 GO
 
 -- Result sets: plan, annual limit in force on @effDate, clinic, benefit limits.
+-- The desktop's Pre and Next (frmNewMBMEnquiry cmdPrev_Click / CmdNext_Click): the membership number just before or after @mbmNumber in dbo.MBM, none at either end.
+CREATE OR ALTER PROCEDURE genisis.Membership_Adjacent
+    @mbmNumber nvarchar(4000), @next bit
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @next = 1
+        SELECT TOP (1) MBMNumber FROM dbo.MBM WHERE MBMNumber > @mbmNumber ORDER BY MBMNumber;
+    ELSE
+        SELECT TOP (1) MBMNumber FROM dbo.MBM WHERE MBMNumber < @mbmNumber ORDER BY MBMNumber DESC;
+END
+GO
+
 CREATE OR ALTER PROCEDURE genisis.Membership_Details
     @mbmNumber nvarchar(4000), @plnCode nvarchar(4000), @insCode nvarchar(4000), @hltCode nvarchar(4000), @effDate datetime
 AS
@@ -546,7 +560,7 @@ BEGIN
            x.MBMBordxDate, p.ProductName
     FROM genisis.Maint_MBMCrossReference x
     INNER JOIN dbo.MBM m ON x.MBMNumber = m.MBMNumber
-    INNER JOIN dbo.MBMTwo t ON x.MBMNumber = t.MBMNumber
+    LEFT JOIN dbo.MBMTwo t ON x.MBMNumber = t.MBMNumber
     LEFT JOIN dbo.PLN p ON p.PLNCode = x.PLNCode
     WHERE REPLACE(x.MBMIcBcPp, '-', '') = REPLACE(@ic, '-', '')
     ORDER BY x.MBMPayorEffDate DESC;

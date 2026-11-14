@@ -33,6 +33,23 @@ public class MembershipController(DbConnections db, IEnquiryTabsService tabs) : 
         return Ok(ToDictionaries(rows));
     }
 
+    /// <summary>The desktop's Pre and Next: the membership number just before or after <paramref name="from"/> (dbo.MBM order). 404 at either end, with the desktop's message.</summary>
+    [HttpGet("adjacent")]
+    public async Task<IActionResult> Adjacent([FromQuery] string? from, [FromQuery] string direction = "next")
+    {
+        from = (from ?? "").Trim();
+        if (from.Length == 0) return BadRequest(new { message = "Please Enter Membership No" });
+        direction = direction.ToLowerInvariant();
+        if (direction is not ("next" or "previous"))
+            return BadRequest(new { message = "direction must be next or previous." });
+
+        await using var conn = db.MainDb();
+        var number = await conn.ProcScalarAsync<string>("genisis.Membership_Adjacent", new { mbmNumber = from, next = direction == "next" });
+        if (number is null)
+            return NotFound(new { message = direction == "next" ? "Last Record Reached!" : "First Record Reached!" });
+        return Ok(new { mbmNumber = number.Trim() });
+    }
+
     [HttpGet("{mbmNumber}")]
     public async Task<IActionResult> Get(string mbmNumber)
     {

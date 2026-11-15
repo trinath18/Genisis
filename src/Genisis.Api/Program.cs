@@ -19,6 +19,24 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Per-developer overrides for a local machine (folders, connection strings): appsettings.Local.json next to appsettings.json.
+// Git-ignored, optional and read only in Development. It sits right after appsettings.{Environment}.json, so environment
+// variables and command-line arguments still win over it. Copy appsettings.Local.example.json to start one.
+if (builder.Environment.IsDevelopment())
+{
+    var sources = builder.Configuration.Sources;
+    var lastJson = sources.Select((source, index) => (source, index))
+        .LastOrDefault(s => s.source is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource { Path: not null } json
+            && json.Path.StartsWith("appsettings", StringComparison.OrdinalIgnoreCase)).index;
+    sources.Insert(lastJson + 1, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+    {
+        FileProvider = builder.Environment.ContentRootFileProvider,
+        Path = "appsettings.Local.json",
+        Optional = true,
+        ReloadOnChange = true,
+    });
+}
+
 // Centralized logging: console + rolling files, configured in the "Serilog" section of appsettings.json.
 builder.Host.UseSerilog((context, services, logging) => logging.ReadFrom.Configuration(context.Configuration).Enrich.FromLogContext());
 

@@ -64,6 +64,10 @@ Stop the API before `dotnet build` / `dotnet test`: a running `Genisis.Api.exe` 
 | `Cors:Origins` | allowed browser origins (the Vite dev server) |
 | `Serilog` | log levels and sinks (console + `logs/genisis-.log`, 30 days) |
 
+Machine-only overrides go in `src/Genisis.Api/appsettings.Local.json` (copy `appsettings.Local.example.json`; git-ignored,
+read only in Development, never published). It is applied after `appsettings.Development.json`, so environment variables and
+command-line arguments still win over it.
+
 Log in with a desktop user (`HISMaintenance.dbo.USR`, same password algorithm as `frmLogin.frm`). Menu rights are the `USR.USRAccess` flags: position *n* = `CheckAccess(n)`.
 
 ## 3. Everyday commands

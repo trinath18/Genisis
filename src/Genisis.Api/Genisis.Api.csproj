@@ -24,6 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- a developer's machine-only overrides (git-ignored) never go into a publish -->
+    <Content Update="appsettings.Local.json;appsettings.Local.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Genisis.Api.Tests" />
   </ItemGroup>
 

@@ -15,7 +15,9 @@ dotnet run --launch-profile http
 
 Swagger opens at http://localhost:5000/swagger. Connection strings default to `localhost` with Windows authentication
 (`appsettings.json`). To override without editing the file, set environment variables, e.g.
-`ConnectionStrings__MainDb` and `ConnectionStrings__Maintenance`.
+`ConnectionStrings__MainDb` and `ConnectionStrings__Maintenance`. For settings that differ only on your machine (folders,
+connection strings), copy `src/Genisis.Api/appsettings.Local.example.json` to `appsettings.Local.json` next to it: it is git-ignored,
+read only in Development, never published, and environment variables still override it.
 
 Set `Auth:JwtKey` (32+ characters) to keep users logged in across restarts; when empty a random key is generated at startup.
 

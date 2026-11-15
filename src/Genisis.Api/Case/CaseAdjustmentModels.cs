@@ -11,6 +11,9 @@ public class CaseAdjustmentRequest : CaseRegistrationRequest
     public DateTime? DocReceivedDate { get; set; }
     /// <summary>cboPendingReason: stored on the maintenance tblRecord.DocRemark.</summary>
     public string? PendingReason { get; set; }
+    /// <summary>txtPrincipalExc on the desktop's "Audit Review" tab: CASOthersTwo.CASAuditReview, line breaks saved as "~".
+    /// Null leaves the saved note as it is.</summary>
+    public string? AuditReview { get; set; }
 }
 
 /// <summary>frmGLMenu: the Generate Guarantee Letter dialog plus the case form it was opened from.</summary>
@@ -88,6 +91,9 @@ public static class CaseGLRules
 /// <summary>cmdUpdate1_Click's required-field checks, in the desktop order and with its messages.</summary>
 public static class CaseAdjustmentValidator
 {
+    /// <summary>The desktop text box's MaxLength.</summary>
+    public const int AuditReviewMaxLength = 5000;
+
     public static string? Validate(CaseAdjustmentRequest r)
     {
         static bool Blank(string? s) => string.IsNullOrWhiteSpace(s);
@@ -104,6 +110,8 @@ public static class CaseAdjustmentValidator
         if (Blank(r.AgeUnit)) return "Please Select Day/Year";
         if (!Blank(r.LgTime) && !TimeOnly.TryParseExact(r.LgTime!.Trim(), "HH:mm", out _)) return "Invalid Time Format!";
         if (r.Remarks.Any(x => x?.Contains('~') == true)) return "You are not allowed to use the ~ symbol in the remarks";
+        if (r.AuditReview?.Contains('~') == true) return "You are not allowed to use the ~ symbol in the audit review";
+        if (r.AuditReview?.Length > AuditReviewMaxLength) return $"The audit review can be at most {AuditReviewMaxLength} characters";
         return null;
     }
 

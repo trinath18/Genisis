@@ -157,7 +157,10 @@ public class WorksheetRegistrationDatabaseTests(ITestOutputHelper output)
             ORDER BY ABS(CHECKSUM(c.CASNumber))
             """, transaction: session.Transaction)).ToList();
         foreach (var (cas, hospital) in pool)
-            if (await new RegistrationRepository().CheckMemberBalanceAsync(session, new WorksheetVersionRows(new() { ["CasNumber"] = cas, ["claimversion"] = 9999, ["CLMFinalApprove"] = 100m }, [], [], [], [], [], [], [], [])) is { Unsupported: false, Reason: null })
+            // A placeholder hospital needs the hospital name typed on the invoice, which this test does not give.
+            if (!Genisis.Api.Case.CaseRegistrationService.IsNamedHospital(await session.Connection.ExecuteScalarAsync<string?>(
+                    "SELECT TOP (1) HOSName FROM dbo.HOS WHERE HOSCode = @hospital", new { hospital }, session.Transaction))
+                && await new RegistrationRepository().CheckMemberBalanceAsync(session, new WorksheetVersionRows(new() { ["CasNumber"] = cas, ["claimversion"] = 9999, ["CLMFinalApprove"] = 100m }, [], [], [], [], [], [], [], [])) is { Unsupported: false, Reason: null })
                 return (cas, hospital);
         throw new InvalidOperationException("no case the save can do in the pool");
     }

@@ -227,7 +227,10 @@ public class CaseAdjustmentService(DbConnections db, CaseRegistrationService reg
 
         var doctors = Enumerable.Range(0, 5).Select(i => S(At(r.AttendingDoctors, i))).ToList();
         var anaes = Enumerable.Range(0, 3).Select(i => S(At(r.AnaesDoctors, i))).ToList();
-        await Exec(conn, tx, state.HasOthers2 ? "dbo.Case_AdjUpdateCASOthers2" : "dbo.Case_AdjInsertCASOthers2", new
+        // The desktop saves these through Case_Adj*CASOthers_2015 with the Audit Review note last, and sends the unused date / time
+        // columns as empty strings, which SQL Server stores as 1900-01-01.
+        var noDate = new DateTime(1900, 1, 1);
+        var others2 = new DynamicParameters(new
         {
             CasNumber = cas,
             CASAttendDoctor1 = doctors[0], CASAttendDoctor2 = doctors[1], CASAttendDoctor3 = doctors[2], CASAttendDoctor4 = doctors[3], CASAttendDoctor5 = doctors[4],
@@ -237,10 +240,19 @@ public class CaseAdjustmentService(DbConnections db, CaseRegistrationService reg
             CASTotalProc = Count(Enumerable.Range(0, 5).Select(i => Proc(r.SurgicalProcedures, i).Procedure)),
             CASAdmissionReason = S(r.Reason), ReferedBy = S(r.ReferredBy),
             CASFirstDocDate = r.FirstDocDate?.Date, CASSubSeqDocDate = r.SubsequentDocDate?.Date, CASIntExtTO = First(r.IntExtTakeOver, 1),
-            CASDOATime = (DateTime?)null, CASDODTime = (DateTime?)null, CASDOALGTime = (DateTime?)null, CASDODLGTime = (DateTime?)null,
-            CASDOAComment = (DateTime?)null, CASDODComment = (DateTime?)null, CASComplaintDate = (DateTime?)null,
+            CASDOATime = noDate, CASDODTime = noDate, CASDOALGTime = noDate, CASDODLGTime = noDate,
+            CASDOAComment = noDate, CASDODComment = noDate, CASComplaintDate = noDate,
             CASComplaintIssue = "", CASComplainant = "", CASCompAction = "", CASHosName = S(r.HospitalName),
         });
+        if (r.AuditReview is { } auditReview)
+        {
+            others2.Add("CASAuditReview", AuditReviewToStore(auditReview));
+            await Exec(conn, tx, state.HasOthers2 ? "dbo.Case_AdjUpdateCASOthers_2015" : "dbo.Case_AdjInsertCASOthers_2015", others2);
+        }
+        else
+        {
+            await Exec(conn, tx, state.HasOthers2 ? "dbo.Case_AdjUpdateCASOthers2" : "dbo.Case_AdjInsertCASOthers2", others2);
+        }
 
         if (S(r.HospitalCode).Length > 0)
             await Exec(conn, tx, "dbo.Case_AdjUpdateHOS", new { CASNumber = cas, CASHOSCode = S(r.HospitalCode) });
@@ -260,6 +272,9 @@ public class CaseAdjustmentService(DbConnections db, CaseRegistrationService reg
         }
         await Exec(conn, tx, "genisis.CaseAdj_SetProgress", new { cas, docRemark = S(r.PendingReason), setDocRemark = true });
     }
+
+    /// <summary>The desktop keeps the note's line breaks as "~" (Replace(txtPrincipalExc, vbNewLine, "~")).</summary>
+    internal static string AuditReviewToStore(string text) => text.Replace("\r\n", "~").Replace("\n", "~").Replace("\r", "~");
 
     private static (string, string) Split1900(string text) => text.Length <= 1900 ? (text, "") : (text[..1900], text[1900..]);
 

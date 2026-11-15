@@ -57,6 +57,8 @@ public class CaseAdjustmentRulesTests
     [InlineData("age", "Please Enter Patient's Age")]
     [InlineData("unit", "Please Select Day/Year")]
     [InlineData("tilde", "You are not allowed to use the ~ symbol in the remarks")]
+    [InlineData("auditTilde", "You are not allowed to use the ~ symbol in the audit review")]
+    [InlineData("auditLength", "The audit review can be at most 5000 characters")]
     public void Update_checks_follow_the_desktop_order(string missing, string message)
     {
         var r = Valid();
@@ -72,6 +74,8 @@ public class CaseAdjustmentRulesTests
             case "age": r.PatientAge = ""; r.AgeUnit = null; break;
             case "unit": r.AgeUnit = ""; break;
             case "tilde": r.Remarks = ["a~b"]; break;
+            case "auditTilde": r.AuditReview = "a~b"; break;
+            case "auditLength": r.AuditReview = new string('x', 5001); break;
         }
         Assert.Equal(message, CaseAdjustmentValidator.Validate(r));
     }
@@ -263,6 +267,20 @@ public class CaseAdjustmentDatabaseTests
         Assert.Equal("RC1", await conn.ExecuteScalarAsync<string>("SELECT RTRIM(CASREPCode1) FROM dbo.CASRepudiation WHERE CASNumber = @caseNumber", new { caseNumber }, tx));
         Assert.Equal("D01", await conn.ExecuteScalarAsync<string>("SELECT RTRIM(CASDocument) FROM dbo.CASRepudiation WHERE CASNumber = @caseNumber", new { caseNumber }, tx));
         Assert.Equal("LINK1", await conn.ExecuteScalarAsync<string>($"SELECT RTRIM(LINKCASNo) FROM {maintenanceDb}.dbo.CASCrossReference WHERE CASNumber = @caseNumber", new { caseNumber }, tx));
+        // The desktop's unused date / time columns of CASOthersTwo are saved as 1900-01-01, as its empty strings were.
+        Assert.Equal(new DateTime(1900, 1, 1), await conn.ExecuteScalarAsync<DateTime>("SELECT CASDOATime FROM dbo.CASOthersTwo WHERE CASNumber = @caseNumber", new { caseNumber }, tx));
+
+        // The Audit Review note: saved with its line breaks as "~"; a request without it leaves the saved note alone.
+        const string auditReviewSql = "SELECT CASAuditReview FROM dbo.CASOthersTwo WHERE CASNumber = @caseNumber";
+        r.AuditReview = "first line\r\nsecond line\nthird";
+        await CaseAdjustmentService.UpdateAsync(conn, tx, r, "GENISIS");
+        Assert.Equal("first line~second line~third", await conn.ExecuteScalarAsync<string>(auditReviewSql, new { caseNumber }, tx));
+        r.AuditReview = null;
+        await CaseAdjustmentService.UpdateAsync(conn, tx, r, "GENISIS");
+        Assert.Equal("first line~second line~third", await conn.ExecuteScalarAsync<string>(auditReviewSql, new { caseNumber }, tx));
+        r.AuditReview = "";
+        await CaseAdjustmentService.UpdateAsync(conn, tx, r, "GENISIS");
+        Assert.Null(await conn.ExecuteScalarAsync<string?>(auditReviewSql, new { caseNumber }, tx)); // the desktop's procedure stores an empty note as NULL
 
         var closed = CaseAdjustmentRulesTests.Valid();
         closed.CaseNumber = caseNumber;

@@ -89,6 +89,10 @@ FROM (VALUES (N'WS_Claim', @WorksheetDb, N'Claim'), (N'WS_ClaimInvoice', @Worksh
     (N'WS_ClaimInvoiceActual', @WorksheetDb, N'ClaimInvoiceActual'), (N'WS_ClaimInvoiceActualGST', @WorksheetDb, N'ClaimInvoiceActualGST'),
     (N'WS_ClaimInvoiceActualOthers', @WorksheetDb, N'ClaimInvoiceActualOthers'), (N'WS_ClaimInvoiceNotCover', @WorksheetDb, N'ClaimInvoiceNotCover'),
     (N'WS_ClaimInvoiceRemarks', @WorksheetDb, N'ClaimInvoiceRemarks'),
+    -- The balance views the case letters and Final LG read the last bordx amount from (the desktop read them on its worksheet connection)
+    (N'WS_ClaimGetLimitA', @WorksheetDb, N'View_Claim_GetLimit_TypeA'), (N'WS_ClaimGetPrinLimit', @WorksheetDb, N'View_Claim_GetPrinLimit'),
+    (N'WS_ClaimGetSuppLimitB', @WorksheetDb, N'View_Claim_GetSuppLimit_TypeB'), (N'WS_ClaimGetSuppLimitC', @WorksheetDb, N'View_Claim_GetSuppLimit_TypeC'),
+    (N'WS_ClaimGetLifetimeLimit', @WorksheetDb, N'View_Claim_GetLifetime_Limit'),
     -- Invoice HOS / MBM Accounting and Invoice Tracking: their views and the daily batch counters
     (N'WS_HOSInvoice', @WorksheetDb, N'VIEW_HOSInvoice'), (N'WS_MBMInvoice1', @WorksheetDb, N'VIEW_MBMInvoice1'), (N'WS_InvoiceTracking', @WorksheetDb, N'VIEW_Invoice_Tracking'),
     (N'WS_INVACHSEQ', @WorksheetDb, N'INVACHSEQ'), (N'WS_INVACMSEQ', @WorksheetDb, N'INVACMSEQ'),

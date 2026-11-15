@@ -78,22 +78,22 @@ public class CaseDocumentsService(DbConnections db, CaseRegistrationService regi
         {
             totalBordx = await LastBordxAsync(suppStatus switch
             {
-                "D" when adjustment => cov == "00" ? "dbo.View_Claim_GetPrinLimit WHERE MBMNUmber = @mbm"
-                                                   : "dbo.View_Claim_GetSuppLimit_TypeC WHERE MBMNUmber = @mbm",
-                "B" => cov == "00" ? "dbo.View_Claim_GetPrinLimit WHERE MBMNUmber = @mbm"
-                                   : "dbo.View_Claim_GetSuppLimit_TypeB WHERE MBMNUmber = @mbm",
-                "C" => cov == "00" ? "dbo.View_Claim_GetPrinLimit WHERE MBMNUmber = @mbm"
-                                   : "dbo.View_Claim_GetSuppLimit_TypeC WHERE MBMNUmber = @mbm AND MBMPatientCovID = @cov",
-                _ => "dbo.View_Claim_GetLimit_TypeA WHERE MBMNUmber = @mbm",
+                "D" when adjustment => cov == "00" ? "genisis.WS_ClaimGetPrinLimit WHERE MBMNUmber = @mbm"
+                                                   : "genisis.WS_ClaimGetSuppLimitC WHERE MBMNUmber = @mbm",
+                "B" => cov == "00" ? "genisis.WS_ClaimGetPrinLimit WHERE MBMNUmber = @mbm"
+                                   : "genisis.WS_ClaimGetSuppLimitB WHERE MBMNUmber = @mbm",
+                "C" => cov == "00" ? "genisis.WS_ClaimGetPrinLimit WHERE MBMNUmber = @mbm"
+                                   : "genisis.WS_ClaimGetSuppLimitC WHERE MBMNUmber = @mbm AND MBMPatientCovID = @cov",
+                _ => "genisis.WS_ClaimGetLimitA WHERE MBMNUmber = @mbm",
             }, mbm, cov, topMbm);
         }
         else
         {
-            totalLtBordx = await LastBordxAsync("dbo.View_Claim_GetLifetime_Limit WHERE MBMTopupNumber = @top AND MBMPatientCovID = @cov",
+            totalLtBordx = await LastBordxAsync("genisis.WS_ClaimGetLifetimeLimit WHERE MBMTopupNumber = @top AND MBMPatientCovID = @cov",
                 mbm, cov, topMbm);
             totalBordx = await LastBordxAsync(cov == "00"
-                    ? "dbo.View_Claim_GetPrinLimit WHERE MBMNUmber = @mbm"
-                    : "dbo.View_Claim_GetSuppLimit_TypeC WHERE MBMNUmber = @mbm AND MBMPatientCovID = @cov",
+                    ? "genisis.WS_ClaimGetPrinLimit WHERE MBMNUmber = @mbm"
+                    : "genisis.WS_ClaimGetSuppLimitC WHERE MBMNUmber = @mbm AND MBMPatientCovID = @cov",
                 mbm, cov, topMbm);
         }
 
